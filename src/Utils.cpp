@@ -1,11 +1,10 @@
 // clang-format off
+#include <algorithm>
 #include <cstdio>
 #include "../include/mmio.h"
 // clang-format on
-#include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <iostream>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -56,7 +55,7 @@ static COOMatrix read_mtx(const std::string& filename)
 	}
 
 	std::vector<COOElement> elements;
-	elements.reserve(nnz);
+	elements.reserve((size_t)nnz);
 
 	for (int i = 0; i < nnz; ++i) {
 		COOElement e;
@@ -70,30 +69,30 @@ static COOMatrix read_mtx(const std::string& filename)
 	}
 
 	fclose(f);
+	std::sort(elements.begin(), elements.end(), [](const auto& a, const auto& b) { return std::tie(a.row, a.col) < std::tie(b.row, b.col); });
 	return { rows, cols, nnz, std::move(elements) };
 }
 
-static void convert_and_write_bcsr(const std::string& filename)
+static void convert_csr(const COOMatrix& mtx)
 {
-	int rows = 0;
-	int cols = 0;
-	int nnz = 0;
+	int* row_ptr = (int*)malloc(((size_t)mtx.rows + 1) * sizeof(int));
+	int* col_idx = (int*)malloc((size_t)mtx.nnz * sizeof(int));
+	// TODO: template the val?
+	float* val = (float*)malloc((size_t)mtx.nnz * sizeof(float));
 
-	if (rows % BSR_BLOCK_SIZE != 0) {  // if the blocks don't fit perfectly
-									   // pad accordingly
+	for (size_t i = 0; i < mtx.elements.size(); ++i) {
+		const auto& e = mtx.elements[i];
+		row_ptr[e.row + 1]++;
+		col_idx[i] = e.col;
+		val[i] = e.val;
 	}
+	std::partial_sum(row_ptr, row_ptr + (mtx.rows + 1), row_ptr);
 
-	if (cols % BSR_BLOCK_SIZE != 0) {
-		// pad accordingly
-	}
+	free(row_ptr);
+	free(col_idx);
+	free(val);
 
-	// Convert here
-	// Write to binary
-	std::ofstream out(filename, std::ios::binary);
-	out.write(reinterpret_cast<const char*>(&rows), sizeof(int32_t));
-	out.write(reinterpret_cast<const char*>(&cols), sizeof(int32_t));
-	out.write(reinterpret_cast<const char*>(&block_rows), sizeof(int32_t));
-	out.write(reinterpret_cast<const char*>(&block_cols), sizeof(int32_t));
+	return;
 }
 
 /*
@@ -104,13 +103,14 @@ static void convert_all()
 {
 	std::vector<std::string> file_paths;
 
-	auto project_dir = std::filesystem::current_path().parent_path();
+	auto project_dir = std::filesystem::current_path();
 	auto target_dir = project_dir / DATA_DIRECTORY;
 
 	for (const auto& filepath : std::filesystem::directory_iterator(target_dir)) {
 		if (filepath.is_regular_file() && filepath.path().extension().string() == ".mtx") {
-			convert_and_write_bcsr(filepath.path().string());
-			std::cout << filepath.path().string() << "\n";
+			const auto& filename = filepath.path().string();
+			COOMatrix   coo_matrix = read_mtx(filename);
+			convert_csr(coo_matrix);
 		}
 	}
 }
