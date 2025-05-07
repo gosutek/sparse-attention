@@ -18,40 +18,59 @@
 
 struct COOElement
 {
-	uint32_t row = 0;
-	uint32_t col = 0;
+	int row, col;
 
-	float val = 0.f;
+	float val;
 };
 
-static std::vector<COOElement> read_mtx(const std::string& filename, int rows, int cols, int nnz)
+struct COOMatrix
 {
-	FILE* f;
-	f = fopen(filename.c_str(), "r");
+	int rows = 0;
+	int cols = 0;
+	int nnz = 0;
 
-	if (f == NULL) {
-		throw std::runtime_error("Failed to open file");
-	}
+	std::vector<COOElement> elements;
+};
+
+static COOMatrix read_mtx(const std::string& filename)
+{
+	FILE* f = fopen(filename.c_str(), "r");
+	if (!f)
+		throw std::runtime_error("Failed to open file " + filename);
 
 	MM_typecode matcode;
 	if (mm_read_banner(f, &matcode) != 0) {
-		throw std::runtime_error("Matrix not sparse");
+		fclose(f);
+		throw std::runtime_error("Error reading mtx banner");
 	}
 
+	if (!mm_is_sparse(matcode)) {
+		fclose(f);
+		throw std::runtime_error("Matrix is not sparse");
+	}
+
+	int rows, cols, nnz;
 	if (mm_read_mtx_crd_size(f, &rows, &cols, &nnz) != 0) {
+		fclose(f);
 		throw std::runtime_error("Failed to read matrix size");
 	}
-	fclose(f);
-	std::vector<COOElement> coo_vec;
-	coo_vec.reserve(nnz);
+
+	std::vector<COOElement> elements;
+	elements.reserve(nnz);
+
 	for (int i = 0; i < nnz; ++i) {
-		COOElement coo_e;
-		fscanf(f, "%u %u %g\n", &coo_e.row, &coo_e.col, &coo_e.val);
-		coo_e.row--;
-		coo_e.col--;
-		coo_vec.push_back(coo_e);
+		COOElement e;
+		if (fscanf(f, "%d %d %f\n", &e.row, &e.col, &e.val) != 3) {
+			fclose(f);
+			throw std::runtime_error("Error reading element " + std::to_string(i));
+		}
+		e.row--;
+		e.col--;
+		elements.push_back(e);
 	}
-	return coo_vec;
+
+	fclose(f);
+	return { rows, cols, nnz, std::move(elements) };
 }
 
 static void convert_and_write_bcsr(const std::string& filename)
