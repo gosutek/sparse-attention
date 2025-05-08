@@ -1,19 +1,31 @@
-// clang-format off
 #include <algorithm>
-#include <cstdio>
+// clang-format off
+#include <iostream>
 #include "../include/mmio.h"
 // clang-format on
 #include <filesystem>
+#include <fstream>
 #include <numeric>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #define DATA_DIRECTORY "data/"
+#define ALIGNMENT 128
 
 #ifndef BSR_BLOCK_SIZE
 #	define BSR_BLOCK_SIZE 2
 #endif
+
+struct MatrixHeader
+{
+	int32_t rows;
+	int32_t cols;
+	int64_t nnz;
+	size_t  row_ptr_bytes;
+	size_t  col_idx_bytes;
+	size_t  val_bytes;
+};
 
 struct COOElement
 {
@@ -31,11 +43,21 @@ struct COOMatrix
 	std::vector<COOElement> elements;
 };
 
-static COOMatrix read_mtx(const std::string& filename)
+static void write_binary_aligned(std::ofstream& file, const void* data, size_t size, size_t alignment)
 {
-	FILE* f = fopen(filename.c_str(), "r");
+	file.write(reinterpret_cast<const char*>(data), (std::streamsize)size);
+
+	// TODO: Review arithmetic
+	size_t            padding = (alignment - (size % alignment)) % alignment;
+	std::vector<char> zeros(padding, 0);
+	file.write(zeros.data(), (std::streamsize)padding);
+}
+
+static COOMatrix read_mtx(const std::filesystem::path& filepath)
+{
+	FILE* f = fopen(filepath.c_str(), "r");
 	if (!f)
-		throw std::runtime_error("Failed to open file " + filename);
+		throw std::runtime_error("Failed to open file " + filepath.filename().string());
 
 	MM_typecode matcode;
 	if (mm_read_banner(f, &matcode) != 0) {
@@ -73,24 +95,42 @@ static COOMatrix read_mtx(const std::string& filename)
 	return { rows, cols, nnz, std::move(elements) };
 }
 
-static void convert_csr(const COOMatrix& mtx)
+/*
+ * Converts mtx from COO to CSR format
+ * Writes to filename.csr binary
+ */
+static void write_csr(const COOMatrix& mtx, const std::filesystem::path& filepath)
 {
-	int* row_ptr = (int*)malloc(((size_t)mtx.rows + 1) * sizeof(int));
-	int* col_idx = (int*)malloc((size_t)mtx.nnz * sizeof(int));
+	std::vector<int> row_ptr((size_t)mtx.rows + 1, 0);
+	std::vector<int> col_idx((size_t)mtx.nnz);
 	// TODO: template the val?
-	float* val = (float*)malloc((size_t)mtx.nnz * sizeof(float));
+	std::vector<float> val((size_t)mtx.nnz);
 
 	for (size_t i = 0; i < mtx.elements.size(); ++i) {
 		const auto& e = mtx.elements[i];
-		row_ptr[e.row + 1]++;
+		row_ptr[(size_t)e.row + 1]++;
 		col_idx[i] = e.col;
 		val[i] = e.val;
 	}
-	std::partial_sum(row_ptr, row_ptr + (mtx.rows + 1), row_ptr);
+	std::partial_sum(row_ptr.begin(), row_ptr.end(), row_ptr.data());
 
-	free(row_ptr);
-	free(col_idx);
-	free(val);
+	std::ofstream file(DATA_DIRECTORY + filepath.filename().replace_extension(".csr").string(), std::ios::binary | std::ios::trunc);
+
+	MatrixHeader header = {
+		mtx.rows,
+		mtx.cols,
+		mtx.nnz,
+		row_ptr.size() * sizeof(int),
+		col_idx.size() * sizeof(int),
+		val.size() * sizeof(int)
+	};
+	file.write(reinterpret_cast<const char*>(&header), sizeof(header));
+
+	write_binary_aligned(file, row_ptr.data(), header.row_ptr_bytes, ALIGNMENT);
+	write_binary_aligned(file, col_idx.data(), header.col_idx_bytes, ALIGNMENT);
+	write_binary_aligned(file, val.data(), header.val_bytes, ALIGNMENT);
+
+	file.close();
 
 	return;
 }
@@ -108,9 +148,8 @@ static void convert_all()
 
 	for (const auto& filepath : std::filesystem::directory_iterator(target_dir)) {
 		if (filepath.is_regular_file() && filepath.path().extension().string() == ".mtx") {
-			const auto& filename = filepath.path().string();
-			COOMatrix   coo_matrix = read_mtx(filename);
-			convert_csr(coo_matrix);
+			COOMatrix coo_matrix = read_mtx(filepath.path());
+			write_csr(coo_matrix, filepath.path());
 		}
 	}
 }
