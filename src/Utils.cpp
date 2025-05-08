@@ -36,9 +36,7 @@ struct COOElement
 
 struct COOMatrix
 {
-	int rows = 0;
-	int cols = 0;
-	int nnz = 0;
+	int rows, cols, nnz;
 
 	std::vector<COOElement> elements;
 };
@@ -135,6 +133,20 @@ static void write_csr(const COOMatrix& mtx, const std::filesystem::path& filepat
 	return;
 }
 
+// TODO: Implement CSR Conversion
+
+/*
+ * Checks if [path] has a .mtx extension 
+ * and
+ * if the same filename exists as a .csr
+ */
+static bool requires_conversion(const std::filesystem::path& path)
+{
+	// TODO: Add a check for .bsr when it's implemented
+	return path.extension().string() == ".mtx" &&
+	       !(std::filesystem::exists(path.parent_path() / path.filename().replace_extension(".csr")));
+}
+
 /*
  * Will iterate over all data/ *.mtx matrices
  * and convert them to .bcsr format
@@ -146,12 +158,20 @@ static void convert_all()
 	auto project_dir = std::filesystem::current_path();
 	auto target_dir = project_dir / DATA_DIRECTORY;
 
+	int count = 0;
+
 	for (const auto& filepath : std::filesystem::directory_iterator(target_dir)) {
-		if (filepath.is_regular_file() && filepath.path().extension().string() == ".mtx") {
+		if (filepath.is_regular_file() && requires_conversion(filepath.path())) {
+			std::cout << "Found " << filepath.path() << " ...Reading...";
 			COOMatrix coo_matrix = read_mtx(filepath.path());
+			std::cout << "Done...Writing to binary...";
 			write_csr(coo_matrix, filepath.path());
+			std::cout << "Done!\n";
+
+			count++;
 		}
 	}
+	std::cout << "Found " << count << " matrices needing conversion in total\n";
 }
 
 int main()
