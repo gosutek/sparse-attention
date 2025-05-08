@@ -1,14 +1,13 @@
 #include <algorithm>
-// clang-format off
-#include <iostream>
-#include "../include/mmio.h"
-// clang-format on
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <numeric>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "../include/mmio.h"
 
 #define DATA_DIRECTORY "data/"
 #define ALIGNMENT 128
@@ -112,6 +111,7 @@ static void write_csr(const COOMatrix& mtx, const std::filesystem::path& filepat
 	}
 	std::partial_sum(row_ptr.begin(), row_ptr.end(), row_ptr.data());
 
+	// NOTE: trunc flag should be redundant
 	std::ofstream file(DATA_DIRECTORY + filepath.filename().replace_extension(".csr").string(), std::ios::binary | std::ios::trunc);
 
 	MatrixHeader header = {
@@ -172,10 +172,4 @@ static void convert_all()
 		}
 	}
 	std::cout << "Found " << count << " matrices needing conversion in total\n";
-}
-
-int main()
-{
-	convert_all();
-	return 0;
 }
