@@ -122,8 +122,8 @@ static void write_csr(const COOMatrix& mtx, const std::filesystem::path& filepat
 		col_idx.size() * sizeof(int),
 		val.size() * sizeof(int)
 	};
-	file.write(reinterpret_cast<const char*>(&header), sizeof(header));
 
+	write_binary_aligned(file, &header, sizeof(header), ALIGNMENT);
 	write_binary_aligned(file, row_ptr.data(), header.row_ptr_bytes, ALIGNMENT);
 	write_binary_aligned(file, col_idx.data(), header.col_idx_bytes, ALIGNMENT);
 	write_binary_aligned(file, val.data(), header.val_bytes, ALIGNMENT);
@@ -151,7 +151,7 @@ static bool requires_conversion(const std::filesystem::path& path)
  * Will iterate over all data/ *.mtx matrices
  * and convert them to .bcsr format
  */
-static void convert_all()
+void convert_all()
 {
 	std::vector<std::string> file_paths;
 
