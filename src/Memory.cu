@@ -1,6 +1,7 @@
 #include <cstdio>
+#include <filesystem>
 
-#include "Utils.cpp"
+void convert_all();
 
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \
@@ -12,12 +13,30 @@
 		}                                                                                                \
 	} while (0)
 
-// TODO: Read binary file size
-// TODO: Decide on how to pass the input, filename
-
-int main()
+static void load_binary_to_host(const std::filesystem::path& filepath)
 {
 	void*  host_ptr = nullptr;
-	size_t size = 0;
-	CUDA_CHECK(cudaHostAlloc(&host_ptr, size, cudaHostAllocMapped));
+	size_t filesize = std::filesystem::file_size(filepath);
+
+	cudaMallocHost(&host_ptr, filesize);
+
+	// TODO: Add error handling
+	FILE* file = fopen(filepath.c_str(), "rb");
+	fread(host_ptr, 1, filesize, file);
+	fclose(file);
+
+	// WARNING: This should only happen once every
+	// matrix needed is loaded into device memory
+	// since its heavy
+	cudaFreeHost(host_ptr);
+}
+
+// TODO: Read binary file size
+// TODO: Decide on how to pass the input, filename
+//
+int main()
+{
+	convert_all();
+	load_binary_to_host("~/projects/sparse-attention/data/scircuit.csr");
+	return 0;
 }

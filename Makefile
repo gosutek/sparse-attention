@@ -24,13 +24,16 @@ endif
 all: $(BINARY)
 
 $(BINARY): $(OBJECTS)
-	$(CXX) $(OBJECTS) -o $@
+	$(NVCC) $(OBJECTS) -o $@
 
 $(BUILD)/mmio.c.o: src/mmio.c
 	$(CC) $< $(filter-out -Werror, $(CFLAGS)) -c -o $@
 
 $(BUILD)/%.cpp.o: src/%.cpp
 	$(CXX) $< $(CFLAGS) -c -o $@
+
+$(BUILD)/%.cu.o: src/%.cu
+	$(NVCC) $<  $(CUFLAGS) -c -o $@
 
 debug:
 	@echo "SOURCES=$(SOURCES)"
