@@ -2,6 +2,7 @@
 #include <filesystem>
 
 void convert_all();
+void print_matrix_specs(const std::filesystem::path& filepath);
 
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \
@@ -33,10 +34,16 @@ static void load_binary_to_host(const std::filesystem::path& filepath)
 
 // TODO: Read binary file size
 // TODO: Decide on how to pass the input, filename
-//
+// CSRMatrix Bytes
+// Header
+// Data
+// DenseMatrix Bytes
+// Header
+// Data
 int main()
 {
-	convert_all();
-	load_binary_to_host("~/projects/sparse-attention/data/scircuit.csr");
+	// convert_all();
+	// load_binary_to_host("~/projects/sparse-attention/data/scircuit.csr");
+	print_matrix_specs("/home/godot/projects/sparse-attention/data/amazon0505.mtx");
 	return 0;
 }

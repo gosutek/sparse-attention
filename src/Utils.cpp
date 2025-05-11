@@ -161,3 +161,33 @@ void conver(const std::filesystem::directory_iterator& target_dir)
 		}
 	}
 }
+
+void print_matrix_specs(const std::filesystem::path& filepath)
+{
+	FILE* f = fopen(filepath.c_str(), "r");
+	int   rows = 0;
+	int   cols = 0;
+	int   nnz = 0;
+
+	if (!f)
+		throw std::runtime_error("Failed to open file " + filepath.filename().string());
+
+	MM_typecode matcode;
+	if (mm_read_banner(f, &matcode) != 0) {
+		fclose(f);
+		throw std::runtime_error("Error reading mtx banner");
+	}
+
+	for (int i = 0; i < 4; ++i) {
+		std::cout << matcode[i];
+	}
+	std::cout << "\n";
+
+	if (mm_is_sparse(matcode)) {
+		mm_read_mtx_crd_size(f, &rows, &cols, &nnz);
+		std::cout << "Sparse with " << rows << " rows and " << cols << " cols and nnz " << nnz << "\n";
+	} else {
+		mm_read_mtx_array_size(f, &rows, &cols);
+		std::cout << "Dense with " << rows << " rows and " << cols << " cols.\n";
+	}
+}
