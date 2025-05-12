@@ -21,6 +21,8 @@ else
 	CUFLAGS+=-arch=$(CUARCH)
 endif
 
+CUFLAGS += -I/opt/cuda/targets/x86_64-linux/include/
+
 all: $(BINARY)
 
 $(BINARY): $(OBJECTS)
@@ -30,7 +32,7 @@ $(BUILD)/mmio.c.o: src/mmio.c
 	$(CC) $< $(filter-out -Werror, $(CFLAGS)) -c -o $@
 
 $(BUILD)/%.cpp.o: src/%.cpp
-	$(CXX) $< $(CFLAGS) -c -o $@
+	$(NVCC) $< $(CUFLAGS) -c -o $@
 
 $(BUILD)/%.cu.o: src/%.cu
 	$(NVCC) $<  $(CUFLAGS) -c -o $@
