@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "../include/mmio.h"
 #include "cuda_fp16.h"
+#include "mmio.h"
 // __float2half(const float a)
 // __float2half_rd(const float a) ~ round down
 // __float2half_rn(const float a) ~ round nearest

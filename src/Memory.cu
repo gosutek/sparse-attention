@@ -1,25 +1,9 @@
 #include <cstdio>
 #include <filesystem>
-#include <vector>
 
 #include "mma.h"
 
-struct MatrixHeader
-{
-	int32_t rows;
-	int32_t cols;
-	int64_t nnz;
-
-	size_t row_ptr_bytes;
-	size_t col_idx_bytes;
-	size_t val_bytes;
-	size_t dense_bytes;
-};
-
-// TODO: Make header file for Utils.cpp
-void               convert(const std::filesystem::directory_iterator& target_dir);
-void               print_matrix_specs(const std::filesystem::path& filepath);
-std::vector<float> generate_dense(size_t size);
+#include "Utils.h"
 
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \
