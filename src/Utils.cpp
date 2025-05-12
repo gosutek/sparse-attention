@@ -3,6 +3,8 @@
 #include <fstream>
 #include <iostream>
 #include <numeric>
+#include <ostream>
+#include <random>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -16,6 +18,7 @@
 #	define BSR_BLOCK_SIZE 2
 #endif
 
+// TODO: Review structs
 struct MatrixHeader
 {
 	int32_t rows;
@@ -24,6 +27,7 @@ struct MatrixHeader
 	size_t  row_ptr_bytes;
 	size_t  col_idx_bytes;
 	size_t  val_bytes;
+	size_t  dense_bytes;
 };
 
 struct COOElement
@@ -76,6 +80,8 @@ static COOMatrix read_mtx(const std::filesystem::path& filepath)
 	std::vector<COOElement> elements;
 	elements.reserve((size_t)nnz);
 
+	std::cout << "Reading COO..." << std::flush;
+
 	for (int i = 0; i < nnz; ++i) {
 		COOElement e;
 		if (fscanf(f, "%d %d %f\n", &e.row, &e.col, &e.val) != 3) {
@@ -86,10 +92,34 @@ static COOMatrix read_mtx(const std::filesystem::path& filepath)
 		e.col--;
 		elements.push_back(e);
 	}
+	std::cout << "Done!\n";
 
 	fclose(f);
 	std::sort(elements.begin(), elements.end(), [](const auto& a, const auto& b) { return std::tie(a.row, a.col) < std::tie(b.row, b.col); });
 	return { rows, cols, nnz, std::move(elements) };
+}
+
+/*
+ * Generates a dense matrix in column-major format
+ * of size rows * cols filled with random values
+ */
+// TODO: Made static after testing
+std::vector<float> generate_dense(size_t size)
+{
+	std::random_device                    rd;
+	std::minstd_rand                      rng(rd());
+	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+
+	std::vector<float> dense_values;
+	std::cout << "Generating Dense Matrix..." << std::flush;
+	dense_values.reserve(size);
+	for (size_t i = 0; i < size; ++i) {
+		dense_values.push_back(uni_real_dist(rng));
+	}
+	std::cout << "Done!" << std::endl;
+	;
+
+	return dense_values;
 }
 
 /*
@@ -103,16 +133,21 @@ static void write_csr(const COOMatrix& mtx, const std::filesystem::path& filepat
 	// TODO: template the val?
 	std::vector<float> val((size_t)mtx.nnz);
 
+	std::cout << "Populating row_ptr, col_idx, val..." << std::flush;
+
 	for (size_t i = 0; i < mtx.elements.size(); ++i) {
 		const auto& e = mtx.elements[i];
 		row_ptr[(size_t)e.row + 1]++;
 		col_idx[i] = e.col;
 		val[i] = e.val;
 	}
+	std::cout << "Done!\n";
 	std::partial_sum(row_ptr.begin(), row_ptr.end(), row_ptr.data());
 
+	std::vector<float> dense = generate_dense((size_t)(mtx.rows * mtx.cols));
+
 	// NOTE: trunc flag should be redundant
-	std::ofstream file(DATA_DIRECTORY + filepath.filename().replace_extension(".csr").string(), std::ios::binary | std::ios::trunc);
+	std::ofstream file(filepath.parent_path() / filepath.filename().replace_extension(".csr"), std::ios::binary | std::ios::trunc);
 
 	MatrixHeader header = {
 		mtx.rows,
@@ -120,20 +155,20 @@ static void write_csr(const COOMatrix& mtx, const std::filesystem::path& filepat
 		mtx.nnz,
 		row_ptr.size() * sizeof(int),
 		col_idx.size() * sizeof(int),
-		val.size() * sizeof(int)
+		val.size() * sizeof(int),
+		((size_t)(mtx.rows * mtx.cols)) * sizeof(float)
 	};
 
 	write_binary_aligned(file, &header, sizeof(header), ALIGNMENT);
 	write_binary_aligned(file, row_ptr.data(), header.row_ptr_bytes, ALIGNMENT);
 	write_binary_aligned(file, col_idx.data(), header.col_idx_bytes, ALIGNMENT);
 	write_binary_aligned(file, val.data(), header.val_bytes, ALIGNMENT);
+	write_binary_aligned(file, dense.data(), header.dense_bytes, ALIGNMENT);
 
 	file.close();
 
 	return;
 }
-
-// TODO: Implement CSR Conversion
 
 /*
  * Checks if [path] has a .mtx extension 
@@ -152,7 +187,7 @@ static bool requires_conversion(const std::filesystem::path& path)
  * Will iterate over all data/ *.mtx matrices
  * and convert them to .bcsr format
  */
-void conver(const std::filesystem::directory_iterator& target_dir)
+void convert(const std::filesystem::directory_iterator& target_dir)
 {
 	for (const auto& filepath : std::filesystem::directory_iterator(target_dir)) {
 		if (filepath.is_regular_file() && requires_conversion(filepath.path())) {
@@ -178,6 +213,7 @@ void print_matrix_specs(const std::filesystem::path& filepath)
 		throw std::runtime_error("Error reading mtx banner");
 	}
 
+	std::cout << filepath.filename() << "\n";
 	for (int i = 0; i < 4; ++i) {
 		std::cout << matcode[i];
 	}
@@ -186,6 +222,7 @@ void print_matrix_specs(const std::filesystem::path& filepath)
 	if (mm_is_sparse(matcode)) {
 		mm_read_mtx_crd_size(f, &rows, &cols, &nnz);
 		std::cout << "Sparse with " << rows << " rows and " << cols << " cols and nnz " << nnz << "\n";
+		std::cout << "Data type " << matcode[2] << "\n";
 	} else {
 		mm_read_mtx_array_size(f, &rows, &cols);
 		std::cout << "Dense with " << rows << " rows and " << cols << " cols.\n";

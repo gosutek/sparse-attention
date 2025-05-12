@@ -1,8 +1,11 @@
 #include <cstdio>
 #include <filesystem>
+#include <vector>
 
-void convert_all();
-void print_matrix_specs(const std::filesystem::path& filepath);
+// TODO: Make header file for Utils.cpp
+void               convert(const std::filesystem::directory_iterator& target_dir);
+void               print_matrix_specs(const std::filesystem::path& filepath);
+std::vector<float> generate_dense(size_t size);
 
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \
@@ -44,6 +47,9 @@ int main()
 {
 	// convert_all();
 	// load_binary_to_host("~/projects/sparse-attention/data/scircuit.csr");
-	print_matrix_specs("/home/godot/projects/sparse-attention/data/amazon0505.mtx");
+
+	print_matrix_specs("/home/godot/projects/sparse-attention/data/fv1/fv1.mtx");
+	convert(std::filesystem::directory_iterator("/home/godot/projects/sparse-attention/data/fv1"));
+
 	return 0;
 }
