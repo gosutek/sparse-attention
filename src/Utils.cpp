@@ -56,12 +56,12 @@ struct COOMatrix
 // TODO: Parallelize?
 static void write_binary_aligned(std::ofstream& file, const void* data, size_t size, size_t alignment)
 {
-	file.write(reinterpret_cast<const char*>(data), (std::streamsize)size);
+	file.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
 
 	// TODO: Review arithmetic
 	size_t            padding = (alignment - (size % alignment)) % alignment;
 	std::vector<char> zeros(padding, 0);
-	file.write(zeros.data(), (std::streamsize)padding);
+	file.write(zeros.data(), static_cast<std::streamsize>(padding));
 }
 
 static COOMatrix read_mtx(const std::filesystem::path& filepath)
@@ -88,7 +88,7 @@ static COOMatrix read_mtx(const std::filesystem::path& filepath)
 	}
 
 	std::vector<COOElement> elements;
-	elements.reserve((size_t)nnz);
+	elements.reserve(static_cast<size_t>(nnz));
 
 	std::cout << "Reading COO..." << std::flush;
 
@@ -140,23 +140,23 @@ std::vector<__half> generate_dense(size_t size)
  */
 static void write_csr(const COOMatrix& mtx, const std::filesystem::path& filepath)
 {
-	std::vector<int> row_ptr((size_t)mtx.rows + 1, 0);
-	std::vector<int> col_idx((size_t)mtx.nnz);
+	std::vector<int> row_ptr(static_cast<size_t>(mtx.rows) + 1, 0);
+	std::vector<int> col_idx(static_cast<size_t>(mtx.nnz));
 	// TODO: template the val?
-	std::vector<__half> val((size_t)mtx.nnz);
+	std::vector<__half> val(static_cast<size_t>(mtx.nnz));
 
 	std::cout << "Populating row_ptr, col_idx, val..." << std::flush;
 
 	for (size_t i = 0; i < mtx.elements.size(); ++i) {
 		const auto& e = mtx.elements[i];
-		row_ptr[(size_t)e.row + 1]++;
+		row_ptr[static_cast<size_t>(e.row) + 1]++;
 		col_idx[i] = e.col;
 		val[i] = __float2half_rn(e.val);
 	}
 	std::cout << "Done!\n";
 	std::partial_sum(row_ptr.begin(), row_ptr.end(), row_ptr.data());
 
-	std::vector<__half> dense = generate_dense((size_t)(mtx.rows * mtx.cols));
+	std::vector<__half> dense = generate_dense(static_cast<size_t>(mtx.rows * mtx.cols));
 
 	// NOTE: trunc flag should be redundant
 	std::ofstream file(filepath.parent_path() / filepath.filename().replace_extension(".csr"), std::ios::binary | std::ios::trunc);
@@ -168,7 +168,7 @@ static void write_csr(const COOMatrix& mtx, const std::filesystem::path& filepat
 		row_ptr.size() * sizeof(int),
 		col_idx.size() * sizeof(int),
 		val.size() * sizeof(int),
-		((size_t)(mtx.rows * mtx.cols)) * sizeof(__half)
+		(static_cast<size_t>(mtx.rows * mtx.cols)) * sizeof(__half)
 	};
 
 	write_binary_aligned(file, &header, sizeof(header), ALIGNMENT);
