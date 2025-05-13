@@ -48,4 +48,5 @@ void convert(const std::filesystem::directory_iterator& target_dir, void (*conve
 
 // TODO: Write description
 void print_matrix_specs(const std::filesystem::path& filepath);
+void write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath);
 void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath);

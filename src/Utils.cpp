@@ -7,6 +7,7 @@
 #include <random>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "cuda_fp16.h"
@@ -21,6 +22,15 @@
 
 #define DATA_DIRECTORY "data/"
 #define ALIGNMENT 128
+#define ROW_PANEL_SIZE 64
+
+// bogus
+#define TM 32
+#define TK 16
+#define brick_m 16
+#define brick_k 4
+#define M 1000
+#define NUM_BLKS 16
 
 #ifndef BSR_BLOCK_SIZE
 #	define BSR_BLOCK_SIZE 2
@@ -52,6 +62,29 @@ struct COOMatrix
 
 	std::vector<COOElement> elements;
 };
+
+struct Block
+{
+	float*   nnz_array;
+	uint64_t patterns[TM / brick_m][TK / brick_k];  // why is this in [][] format?
+	uint     colPtr[TK / brick_k + 1];
+	uint     rows[TM / brick_m * TK / brick_k];
+};
+
+struct HRPB
+{
+	void* packedBlocks;
+	uint  blockedRowPtr[M / TK + 1];
+	uint  activeCols[NUM_BLKS * TK];
+	uint  sizePtr[NUM_BLKS + 1];
+};
+
+static bool custom_sort(const COOElement& a, const COOElement& b)
+{
+	const auto row_panel_idx_a = a.row / ROW_PANEL_SIZE;
+	const auto row_panel_idx_b = b.row / ROW_PANEL_SIZE;
+	return std::tie(row_panel_idx_a, a.row, a.col) < std::tie(row_panel_idx_b, b.row, b.col);
+}
 
 // TODO: Parallelize?
 static void write_binary_aligned(std::ofstream& file, const void* data, size_t size, size_t alignment)
@@ -133,6 +166,20 @@ static std::vector<__half> generate_dense(size_t size)
 	return dense_values;
 }
 
+// TODO: Figure out how to make static
+void write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
+{
+	std::sort(mtx.elements.begin(), mtx.elements.end(), &custom_sort);
+	for (size_t i = 0; i < 100; ++i) {
+		printf("(%d, %d) ~ %f\n", mtx.elements[i].row, mtx.elements[i].col, mtx.elements[i].val);
+	}
+	std::vector<int> active_col_idx;
+	// // For one row panel
+	// for (size_t i = 0; mtx.elements[i].row < ROW_PANEL_SIZE; ++i) {
+	// 	active_col_idx.push_back(mtx.elements[i].col);
+	// }
+}
+
 /*
  * Converts mtx from COO to CSR format
  * Writes to filename.csr binary
@@ -146,6 +193,7 @@ void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
 	std::vector<__half> val(static_cast<size_t>(mtx.nnz));
 
 	std::sort(mtx.elements.begin(), mtx.elements.end(), [](const auto& a, const auto& b) { return std::tie(a.row, a.col) < std::tie(b.row, b.col); });
+
 	std::cout << "Populating row_ptr, col_idx, val..." << std::flush;
 
 	for (size_t i = 0; i < mtx.elements.size(); ++i) {
