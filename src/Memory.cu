@@ -15,10 +15,10 @@
 		}                                                                                                \
 	} while (0)
 
-static void load_binary_to_host(const std::filesystem::path& filepath)
+[[maybe_unused]] static void load_binary_to_host(const std::filesystem::path& filepath)
 {
 	void* host_ptr = nullptr;
-	// TODO: Check if its actually a file.
+	// TODO: Check if its actually a file (???)
 	size_t filesize = std::filesystem::file_size(filepath);
 
 	cudaMallocHost(&host_ptr, filesize);
@@ -49,12 +49,9 @@ static void query_device()
 
 // TODO: Read binary file size
 // TODO: Decide on how to pass the input, filename
-// CSRMatrix Bytes
 // Header
-// Data
-// DenseMatrix Bytes
-// Header
-// Data
+// Sparse Data
+// Dense Data
 int main()
 {
 	// load_binary_to_host("~/projects/sparse-attention/data/scircuit.csr");
@@ -62,10 +59,10 @@ int main()
 
 	const auto path = std::filesystem::directory_iterator("/home/godot/projects/sparse-attention/data/fv1");
 
-	query_device();
-	convert(path);
+	// query_device();
+	convert(path, &write_hrpb);
 
-	load_binary_to_host("/home/godot/projects/sparse-attention/data/fv1/fv1.csr");
+	// load_binary_to_host("/home/godot/projects/sparse-attention/data/fv1/fv1.csr");
 
 	return 0;
 }

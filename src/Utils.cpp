@@ -105,7 +105,6 @@ static COOMatrix read_mtx(const std::filesystem::path& filepath)
 	std::cout << "Done!\n";
 
 	fclose(f);
-	std::sort(elements.begin(), elements.end(), [](const auto& a, const auto& b) { return std::tie(a.row, a.col) < std::tie(b.row, b.col); });
 	return { rows, cols, nnz, std::move(elements) };
 }
 
@@ -115,7 +114,7 @@ static COOMatrix read_mtx(const std::filesystem::path& filepath)
  */
 // TODO: Parallelize?
 // TODO: Made static after testing
-std::vector<__half> generate_dense(size_t size)
+static std::vector<__half> generate_dense(size_t size)
 {
 	std::random_device                    rd;
 	std::minstd_rand                      rng(rd());
@@ -138,13 +137,15 @@ std::vector<__half> generate_dense(size_t size)
  * Converts mtx from COO to CSR format
  * Writes to filename.csr binary
  */
-static void write_csr(const COOMatrix& mtx, const std::filesystem::path& filepath)
+// TODO: Figure out how to make static
+void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
 {
 	std::vector<int> row_ptr(static_cast<size_t>(mtx.rows) + 1, 0);
 	std::vector<int> col_idx(static_cast<size_t>(mtx.nnz));
 	// TODO: template the val?
 	std::vector<__half> val(static_cast<size_t>(mtx.nnz));
 
+	std::sort(mtx.elements.begin(), mtx.elements.end(), [](const auto& a, const auto& b) { return std::tie(a.row, a.col) < std::tie(b.row, b.col); });
 	std::cout << "Populating row_ptr, col_idx, val..." << std::flush;
 
 	for (size_t i = 0; i < mtx.elements.size(); ++i) {
@@ -199,12 +200,12 @@ static bool requires_conversion(const std::filesystem::path& path)
  * Will iterate over all data/ *.mtx matrices
  * and convert them to .bcsr format
  */
-void convert(const std::filesystem::directory_iterator& target_dir)
+void convert(const std::filesystem::directory_iterator& target_dir, void (*conversion_func_ptr)(COOMatrix& mtx, const std::filesystem::path& filepath))
 {
 	for (const auto& filepath : std::filesystem::directory_iterator(target_dir)) {
 		if (filepath.is_regular_file() && requires_conversion(filepath.path())) {
 			COOMatrix coo_matrix = read_mtx(filepath.path());
-			write_csr(coo_matrix, filepath.path());
+			conversion_func_ptr(coo_matrix, filepath.path());
 		}
 	}
 }

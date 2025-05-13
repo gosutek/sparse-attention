@@ -44,7 +44,8 @@ std::vector<__half> generate_dense(size_t size);
  * Will iterate over all data/ *.mtx matrices
  * and convert them to .bcsr format
  */
-void convert(const std::filesystem::directory_iterator& target_dir);
+void convert(const std::filesystem::directory_iterator& target_dir, void (*conversion_func_ptr)(COOMatrix& mtx, const std::filesystem::path& filepath));
 
 // TODO: Write description
 void print_matrix_specs(const std::filesystem::path& filepath);
+void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath);
