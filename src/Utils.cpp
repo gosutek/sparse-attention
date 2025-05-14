@@ -5,6 +5,7 @@
 #include <numeric>
 #include <ostream>
 #include <random>
+#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -79,10 +80,10 @@ struct HRPB
 	uint  sizePtr[NUM_BLKS + 1];
 };
 
-static bool custom_sort(const COOElement& a, const COOElement& b)
+static bool row_panel_sort(const COOElement& a, const COOElement& b)
 {
-	const auto row_panel_idx_a = a.row / ROW_PANEL_SIZE;
-	const auto row_panel_idx_b = b.row / ROW_PANEL_SIZE;
+	const int row_panel_idx_a = a.row / ROW_PANEL_SIZE;
+	const int row_panel_idx_b = b.row / ROW_PANEL_SIZE;
 	return std::tie(row_panel_idx_a, a.row, a.col) < std::tie(row_panel_idx_b, b.row, b.col);
 }
 
@@ -169,11 +170,29 @@ static std::vector<__half> generate_dense(size_t size)
 // TODO: Figure out how to make static
 void write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
 {
-	std::sort(mtx.elements.begin(), mtx.elements.end(), &custom_sort);
-	for (size_t i = 0; i < 100; ++i) {
+	std::sort(mtx.elements.begin(), mtx.elements.end(), &row_panel_sort);
+	for (size_t i = 0; i < 1000; ++i) {
 		printf("(%d, %d) ~ %f\n", mtx.elements[i].row, mtx.elements[i].col, mtx.elements[i].val);
 	}
 	std::vector<int> active_col_idx;
+
+	int                                                                         row_panel_num = (mtx.rows + ROW_PANEL_SIZE - 1) / ROW_PANEL_SIZE;
+	std::vector<std::ranges::subrange<std::vector<COOElement>::const_iterator>> panel_ranges;
+	panel_ranges.reserve(row_panel_num);
+
+	auto panel_start = mtx.elements.begin();
+	auto matrix_end = mtx.elements.end();
+	while (panel_start != matrix_end) {
+		size_t panel_idx = panel_start->row / ROW_PANEL_SIZE;
+		auto   panel_end = std::find_if(panel_start, matrix_end, [panel_idx](const COOElement& e) {
+            return e.row > (panel_idx + 1) * ROW_PANEL_SIZE - 1;
+        });
+
+		printf("Emplacing back (%d, %d)\n", panel_start->row, (panel_end - 1)->row);
+		panel_ranges.emplace_back(panel_start, panel_end - 1);
+		panel_start = panel_end;
+	}
+
 	// // For one row panel
 	// for (size_t i = 0; mtx.elements[i].row < ROW_PANEL_SIZE; ++i) {
 	// 	active_col_idx.push_back(mtx.elements[i].col);
