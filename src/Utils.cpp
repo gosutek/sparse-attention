@@ -184,11 +184,12 @@ void write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
 	auto matrix_end = mtx.elements.end();
 	while (panel_start != matrix_end) {
 		size_t panel_idx = panel_start->row / ROW_PANEL_SIZE;
-		auto   panel_end = std::find_if(panel_start, matrix_end, [panel_idx](const COOElement& e) {
-            return e.row > (panel_idx + 1) * ROW_PANEL_SIZE - 1;
-        });
+		size_t max_row = (panel_idx + 1) * ROW_PANEL_SIZE - 1;
 
-		printf("Emplacing back (%d, %d)\n", panel_start->row, (panel_end - 1)->row);
+		auto panel_end = std::upper_bound(
+			panel_start, matrix_end, max_row,
+			[](size_t r, const COOElement& e) { return r < e.row; });
+
 		panel_ranges.emplace_back(panel_start, panel_end - 1);
 		panel_start = panel_end;
 	}
