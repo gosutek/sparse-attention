@@ -13,7 +13,9 @@ CFLAGS=-g -Wall -Wpointer-arith -Werror -O0 -Weffc++ -Wextra -Wconversion -Wsign
 
 CFLAGS+=-fopenmp -mf16c -mavx2 -mfma
 
-CUFLAGS+=-g -O0 -lineinfo
+CUFLAGS=-g -O0 -lineinfo
+
+CUFLAGS+=-std=c++20
 
 ifeq ($(CUARCH),)
 	CUFLAGS+=-gencode arch=compute_89,code=sm_89 --threads 2
