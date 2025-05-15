@@ -111,14 +111,14 @@ static bool block_brick_sort(const COOElement& a, const COOElement& b)
 			   row_panel_idx_a,
 			   block_row_a,
 			   block_col_a,
-			   brick_row_a,
 			   brick_col_a,
+			   brick_row_a,
 			   a.col,
 			   a.row) < std::tie(row_panel_idx_b,
 							block_row_b,
 							block_col_b,
-							brick_row_b,
 							brick_col_b,
+							brick_row_b,
 							b.col,
 							b.row);
 }
@@ -225,6 +225,7 @@ void write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
      * Iterate first by row panel then by col
      * aggregate all columns containing at least one non-zero
      */
+	size_t count = 0;
 	for (COOElement& e : mtx.elements) {
 		size_t panel_idx = e.row / ROW_PANEL_SIZE;
 		if (panel_idx != current_panel) {  // Entered a new row panel
@@ -242,28 +243,50 @@ void write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
 
 	std::sort(mtx.elements.begin(), mtx.elements.end(), &block_brick_sort);
 	// Iterate one block
-	size_t block_idx = 1;
-	size_t brick_idx = 1;
-	// Can we avoid the ifs here and on the last loop?
-	// Don't think so, since each row panel has an number of
-	// non-zero values not known at compile time.
-	for (size_t i = 0; i < 200; ++i) {
-		if (LIKELY(mtx.elements[i].row >= ((block_idx - 1) * TM) + (brick_idx * brick_m) || mtx.elements[i].col >= ((block_idx - 1) * TK) + (brick_idx * brick_k))) {
-			printf("Moved to the next brick for element (%d, %d) with brick_idx(%ld) and block_idx(%ld)\n", mtx.elements[i].row, mtx.elements[i].col, brick_idx, block_idx);
-			brick_idx++;
+	size_t block_row = 1;  // The row of the block in the matrix, can be [1..mtx.rows / TM]
+	size_t block_col = 1;  // The col of the block in the matrix, can be [1..mtx.cols / TK]
+
+	size_t brick_row = 1;  // The row of the brick in the block, can be either 1 or 2
+	size_t brick_col = 1;  // The col of the brick in the block, can be [1..4]
+						   // Can we avoid the ifs here and on the last loop?
+						   // Don't think so, since each row panel has an number of
+						   // non-zero values not known at compile time.
+	printf("Starting at block (0,0) and brick(0,0)\n");
+	for (size_t i = 0; i < 64; ++i) {
+		if (LIKELY(mtx.elements[i].row > brick_row * brick_m - 1)) {
+			brick_row++;
+			printf("Moved to the BRICK below, for element (%d, %d) with brick_coords(%ld, %ld)\n", mtx.elements[i].row, mtx.elements[i].col, brick_row - 1, brick_col - 1);
 		}
-		if (mtx.elements[i].row >= block_idx * TM || mtx.elements[i].col >= block_idx * TK) {
-			printf("Moved to the next block for element (%d, %d)\n", mtx.elements[i].row, mtx.elements[i].col);
-			block_idx++;
+		if (LIKELY(mtx.elements[i].col > brick_col * brick_k - 1)) {
+			brick_col++;
+			printf("Moved to the BRICK on the right, for element (%d, %d) with brick_coords(%ld, %ld)\n", mtx.elements[i].row, mtx.elements[i].col, brick_row - 1, brick_col - 1);
+		}
+		if (mtx.elements[i].row > block_row * TM - 1) {
+			block_row++;
+			printf("Moved to the BLOCK on the bottom, for element (%d, %d) with block_coords(%ld, %ld)\n", mtx.elements[i].row, mtx.elements[i].col, block_row - 1, block_col - 1);
+			break;
+		}
+		if (mtx.elements[i].col > block_col * TK - 1) {
+			block_col++;
+			printf("Moved to the BLOCK on the right, for element (%d, %d) with block_coords(%ld, %ld)\n", mtx.elements[i].row, mtx.elements[i].col, block_row - 1, block_col - 1);
+			break;
 		}
 		printf("(%d, %d)\n", mtx.elements[i].row, mtx.elements[i].col);
 	}
 
 	/*
      * Next on the list:
-     * 1. Break into blocks
-     * 2. Subdivide even further into bricks
-     * 3. Can this be done in one swoop? i.e. the above loop?
+     * 1. Break into blocks ~ KINDOF DONE
+     * 2. Subdivide even further into bricks ~ KINDOF DONE
+     * 3. But don't do it like that. Look note below
+     * 4. Can this be done in one swoop? i.e. the above loop?
+     */
+
+	/*
+     * 1. No need to sort again after row_paneling
+     * 2. Iterate normally
+     * 3. For each element calculate IN WHICH BLOCK AND BRICK THEY BELONG TO
+     * 4. Fill pattern array
      */
 }
 
