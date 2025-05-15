@@ -20,9 +20,11 @@
 //
 // __half2float
 
+#define LIKELY(x) __builtin_expect(!!(x), 1)
+
 #define DATA_DIRECTORY "data/"
 #define ALIGNMENT 128
-#define ROW_PANEL_SIZE 16
+#define ROW_PANEL_SIZE 1024
 
 // bogus
 #define TM 32
@@ -31,6 +33,15 @@
 #define brick_k 4
 #define M 1000
 #define NUM_BLKS 16
+
+/*
+ * C = A*B
+ * MxNxK
+ * where 
+ * A is MxK
+ * B is KxN
+ * C is MxN
+ */
 
 #ifndef BSR_BLOCK_SIZE
 #	define BSR_BLOCK_SIZE 2
@@ -79,10 +90,43 @@ struct HRPB
 	uint  sizePtr[NUM_BLKS + 1];
 };
 
+static bool block_brick_sort(const COOElement& a, const COOElement& b)
+{
+	const size_t row_panel_idx_a = a.row / ROW_PANEL_SIZE;
+	const size_t row_panel_idx_b = b.row / ROW_PANEL_SIZE;
+
+	const size_t block_row_a = a.row / TM;
+	const size_t block_row_b = b.row / TM;
+
+	const size_t block_col_a = a.col / TK;
+	const size_t block_col_b = b.col / TK;
+
+	const size_t brick_row_a = a.row / brick_m;
+	const size_t brick_row_b = b.row / brick_m;
+
+	const size_t brick_col_a = a.col / brick_k;
+	const size_t brick_col_b = b.col / brick_k;
+
+	return std::tie(
+			   row_panel_idx_a,
+			   block_row_a,
+			   block_col_a,
+			   brick_row_a,
+			   brick_col_a,
+			   a.col,
+			   a.row) < std::tie(row_panel_idx_b,
+							block_row_b,
+							block_col_b,
+							brick_row_b,
+							brick_col_b,
+							b.col,
+							b.row);
+}
+
 static bool row_panel_sort(const COOElement& a, const COOElement& b)
 {
-	const int row_panel_idx_a = a.row / ROW_PANEL_SIZE;
-	const int row_panel_idx_b = b.row / ROW_PANEL_SIZE;
+	const size_t row_panel_idx_a = a.row / ROW_PANEL_SIZE;
+	const size_t row_panel_idx_b = b.row / ROW_PANEL_SIZE;
 	return std::tie(row_panel_idx_a, a.col, a.row) < std::tie(row_panel_idx_b, b.col, b.row);
 }
 
@@ -170,9 +214,6 @@ static std::vector<__half> generate_dense(size_t size)
 void write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
 {
 	std::sort(mtx.elements.begin(), mtx.elements.end(), &row_panel_sort);
-	for (size_t i = 0; i < 1000; ++i) {
-		printf("(%d, %d) ~ %f\n", mtx.elements[i].row, mtx.elements[i].col, mtx.elements[i].val);
-	}
 	std::vector<int> active_col_idx;
 
 	size_t row_panel_num = (mtx.rows + ROW_PANEL_SIZE - 1) / ROW_PANEL_SIZE;
@@ -199,10 +240,31 @@ void write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
 		e.col = where_i_should_go;
 	}
 
-	for (size_t i = 0; i < 1000; ++i) {
-		size_t panel_idx = mtx.elements[i].row / ROW_PANEL_SIZE;
-		printf("Panel: %ld ~ (%d) with starting column: %d\n", panel_idx, mtx.elements[i].col, active_col_idx[i]);
+	std::sort(mtx.elements.begin(), mtx.elements.end(), &block_brick_sort);
+	// Iterate one block
+	size_t block_idx = 1;
+	size_t brick_idx = 1;
+	// Can we avoid the ifs here and on the last loop?
+	// Don't think so, since each row panel has an number of
+	// non-zero values not known at compile time.
+	for (size_t i = 0; i < 200; ++i) {
+		if (LIKELY(mtx.elements[i].row >= ((block_idx - 1) * TM) + (brick_idx * brick_m) || mtx.elements[i].col >= ((block_idx - 1) * TK) + (brick_idx * brick_k))) {
+			printf("Moved to the next brick for element (%d, %d) with brick_idx(%ld) and block_idx(%ld)\n", mtx.elements[i].row, mtx.elements[i].col, brick_idx, block_idx);
+			brick_idx++;
+		}
+		if (mtx.elements[i].row >= block_idx * TM || mtx.elements[i].col >= block_idx * TK) {
+			printf("Moved to the next block for element (%d, %d)\n", mtx.elements[i].row, mtx.elements[i].col);
+			block_idx++;
+		}
+		printf("(%d, %d)\n", mtx.elements[i].row, mtx.elements[i].col);
 	}
+
+	/*
+     * Next on the list:
+     * 1. Break into blocks
+     * 2. Subdivide even further into bricks
+     * 3. Can this be done in one swoop? i.e. the above loop?
+     */
 }
 
 /*
