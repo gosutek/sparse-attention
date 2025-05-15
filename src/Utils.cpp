@@ -5,7 +5,6 @@
 #include <numeric>
 #include <ostream>
 #include <random>
-#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -23,7 +22,7 @@
 
 #define DATA_DIRECTORY "data/"
 #define ALIGNMENT 128
-#define ROW_PANEL_SIZE 64
+#define ROW_PANEL_SIZE 16
 
 // bogus
 #define TM 32
@@ -84,7 +83,7 @@ static bool row_panel_sort(const COOElement& a, const COOElement& b)
 {
 	const int row_panel_idx_a = a.row / ROW_PANEL_SIZE;
 	const int row_panel_idx_b = b.row / ROW_PANEL_SIZE;
-	return std::tie(row_panel_idx_a, a.row, a.col) < std::tie(row_panel_idx_b, b.row, b.col);
+	return std::tie(row_panel_idx_a, a.col, a.row) < std::tie(row_panel_idx_b, b.col, b.row);
 }
 
 // TODO: Parallelize?
@@ -176,28 +175,34 @@ void write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
 	}
 	std::vector<int> active_col_idx;
 
-	int                                                                         row_panel_num = (mtx.rows + ROW_PANEL_SIZE - 1) / ROW_PANEL_SIZE;
-	std::vector<std::ranges::subrange<std::vector<COOElement>::const_iterator>> panel_ranges;
-	panel_ranges.reserve(row_panel_num);
+	size_t row_panel_num = (mtx.rows + ROW_PANEL_SIZE - 1) / ROW_PANEL_SIZE;
+	size_t current_panel = -1;
+	size_t current_col = -1;
+	size_t where_i_should_go = 0;  // Rename this shit
 
-	auto panel_start = mtx.elements.begin();
-	auto matrix_end = mtx.elements.end();
-	while (panel_start != matrix_end) {
-		size_t panel_idx = panel_start->row / ROW_PANEL_SIZE;
-		size_t max_row = (panel_idx + 1) * ROW_PANEL_SIZE - 1;
-
-		auto panel_end = std::upper_bound(
-			panel_start, matrix_end, max_row,
-			[](size_t r, const COOElement& e) { return r < e.row; });
-
-		panel_ranges.emplace_back(panel_start, panel_end - 1);
-		panel_start = panel_end;
+	/*
+     * Iterate first by row panel then by col
+     * aggregate all columns containing at least one non-zero
+     */
+	for (COOElement& e : mtx.elements) {
+		size_t panel_idx = e.row / ROW_PANEL_SIZE;
+		if (panel_idx != current_panel) {  // Entered a new row panel
+			current_panel = panel_idx;
+			current_col = -1;
+			where_i_should_go = -1;
+		}
+		if (e.col != current_col) {  // Entered a new col in the panel
+			current_col = e.col;
+			where_i_should_go++;
+		}
+		active_col_idx.push_back(e.col);  // I don't think we know the size of this at compile time
+		e.col = where_i_should_go;
 	}
 
-	// // For one row panel
-	// for (size_t i = 0; mtx.elements[i].row < ROW_PANEL_SIZE; ++i) {
-	// 	active_col_idx.push_back(mtx.elements[i].col);
-	// }
+	for (size_t i = 0; i < 1000; ++i) {
+		size_t panel_idx = mtx.elements[i].row / ROW_PANEL_SIZE;
+		printf("Panel: %ld ~ (%d) with starting column: %d\n", panel_idx, mtx.elements[i].col, active_col_idx[i]);
+	}
 }
 
 /*
