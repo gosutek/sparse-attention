@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -76,10 +77,15 @@ struct COOMatrix
 
 struct Block
 {
-	float*   nnz_array;
-	uint64_t patterns[TM / brick_m][TK / brick_k];  // why is this in [][] format?
-	uint     colPtr[TK / brick_k + 1];
-	uint     rows[TM / brick_m * TK / brick_k];
+	std::array<uint64_t, (TM / brick_m) * (TK / brick_k)> patterns;  // why is this in [][] format?
+	std::array<uint, TK / brick_k + 1>                    colPtr;
+	std::array<uint, (TM / brick_m) * (TK / brick_k)>     rows;
+	std::vector<float>                                    nnz_array;  // unknown at compile time
+
+	Block() :
+		patterns{}, colPtr{}, rows{} {}  // Zero initialize them
+										 // Might not be needed for colPtr, rows
+										 // DEFINATELY needed for patterns
 };
 
 struct HRPB
@@ -241,53 +247,82 @@ void write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
 		e.col = where_i_should_go;
 	}
 
-	std::sort(mtx.elements.begin(), mtx.elements.end(), &block_brick_sort);
-	// Iterate one block
-	size_t block_row = 1;  // The row of the block in the matrix, can be [1..mtx.rows / TM]
-	size_t block_col = 1;  // The col of the block in the matrix, can be [1..mtx.cols / TK]
-
-	size_t brick_row = 1;  // The row of the brick in the block, can be either 1 or 2
-	size_t brick_col = 1;  // The col of the brick in the block, can be [1..4]
-						   // Can we avoid the ifs here and on the last loop?
-						   // Don't think so, since each row panel has an number of
-						   // non-zero values not known at compile time.
-	printf("Starting at block (0,0) and brick(0,0)\n");
-	for (size_t i = 0; i < 64; ++i) {
-		if (LIKELY(mtx.elements[i].row > brick_row * brick_m - 1)) {
-			brick_row++;
-			printf("Moved to the BRICK below, for element (%d, %d) with brick_coords(%ld, %ld)\n", mtx.elements[i].row, mtx.elements[i].col, brick_row - 1, brick_col - 1);
-		}
-		if (LIKELY(mtx.elements[i].col > brick_col * brick_k - 1)) {
-			brick_col++;
-			printf("Moved to the BRICK on the right, for element (%d, %d) with brick_coords(%ld, %ld)\n", mtx.elements[i].row, mtx.elements[i].col, brick_row - 1, brick_col - 1);
-		}
-		if (mtx.elements[i].row > block_row * TM - 1) {
-			block_row++;
-			printf("Moved to the BLOCK on the bottom, for element (%d, %d) with block_coords(%ld, %ld)\n", mtx.elements[i].row, mtx.elements[i].col, block_row - 1, block_col - 1);
-			break;
-		}
-		if (mtx.elements[i].col > block_col * TK - 1) {
-			block_col++;
-			printf("Moved to the BLOCK on the right, for element (%d, %d) with block_coords(%ld, %ld)\n", mtx.elements[i].row, mtx.elements[i].col, block_row - 1, block_col - 1);
-			break;
-		}
-		printf("(%d, %d)\n", mtx.elements[i].row, mtx.elements[i].col);
-	}
-
 	/*
-     * Next on the list:
-     * 1. Break into blocks ~ KINDOF DONE
-     * 2. Subdivide even further into bricks ~ KINDOF DONE
-     * 3. But don't do it like that. Look note below
-     * 4. Can this be done in one swoop? i.e. the above loop?
-     */
-
-	/*
-     * 1. No need to sort again after row_paneling
+     * 1. Sort again after row panelling
      * 2. Iterate normally
      * 3. For each element calculate IN WHICH BLOCK AND BRICK THEY BELONG TO
      * 4. Fill pattern array
      */
+
+	std::sort(mtx.elements.begin(), mtx.elements.end(), &block_brick_sort);
+
+	size_t block_row = 0;
+	size_t block_col = 0;
+
+	size_t brick_row = 0;
+	size_t brick_col = 0;
+
+	size_t brick_idx = 0;
+
+	size_t brick_colPtr_count = 0;  // we handle the first brick out of the loop
+	size_t brick_colPtr_idx = 0;    // we handle the first brick out of the loop
+
+	Block* block_ptr = new Block();
+	// Add the brick data of the first element
+	block_ptr->rows[brick_idx] = mtx.elements[0].row / brick_m;
+	brick_idx++;
+	brick_colPtr_count++;
+
+	for (const COOElement& e : mtx.elements) {
+		if (block_row < e.row / TM)  // Moved down one block
+		{
+			block_row = e.row / TM;
+			// Should create a new block here
+			break;                          // let's do for one block only
+		} else if (block_col < e.col / TK)  // Moved right one block
+		{
+			block_col = e.col / TK;
+			// Should create a new block here
+			break;  // let's do for one block only
+		}
+
+		if (brick_row < e.row / brick_m) {  // Moved down one brick
+			brick_row = e.row / brick_m;
+
+			block_ptr->rows[brick_idx] = brick_row;
+			brick_idx++;
+			brick_colPtr_count++;
+			printf("Moved down for (%d, %d)\n", e.row, e.col);
+		} else if (brick_col < e.col / brick_k) {  // Moved right one brick
+			brick_col = e.col / brick_k;
+
+			block_ptr->rows[brick_idx] = brick_row;
+			brick_idx++;
+			brick_colPtr_idx++;
+
+			block_ptr->colPtr[brick_colPtr_idx] = brick_colPtr_count;
+			brick_colPtr_count++;
+		}
+
+		block_ptr->nnz_array.push_back(e.val);
+
+		size_t e_relative_row;
+		size_t e_relative_col;
+		if (brick_row == 0) {  // add unlikely
+			e_relative_row = e.row;
+		} else {
+			e_relative_row = brick_row * brick_m - e.row;
+		}
+
+		if (brick_col == 0) {  // add unlikely
+			e_relative_col = e.col;
+		} else {
+			e_relative_col = brick_col * brick_k - e.col;
+		}
+		size_t e_row_major_idx = e_relative_row * brick_k + e_relative_col;
+		block_ptr->patterns[brick_row * (TM / brick_m) + brick_col] |= 1 << e_row_major_idx;
+	}
+	delete block_ptr;
 }
 
 /*
