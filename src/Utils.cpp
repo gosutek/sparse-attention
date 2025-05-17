@@ -80,7 +80,7 @@ struct COOMatrix
 struct Block
 {
 	// maybe leave the arrays I only write to uninitialized?
-	std::array<uint64_t, (TM / brick_m) * (TK / brick_k)> patterns{};  // why is this in [][] format?
+	std::array<uint64_t, (TM / brick_m) * (TK / brick_k)> patterns{};  // cache-friendly
 	std::array<uint64_t, TK / brick_k + 1>                colPtr{};
 	std::array<uint64_t, (TM / brick_m) * (TK / brick_k)> rows{};
 	std::vector<float>                                    nnz_array{};  // unknown at compile time
@@ -88,10 +88,10 @@ struct Block
 
 struct HRPB
 {
-	void* packedBlocks;
-	uint  blockedRowPtr[M / TK + 1];
-	uint  activeCols[NUM_BLKS * TK];
-	uint  sizePtr[NUM_BLKS + 1];
+	std::array<uint32_t, M / TK + 1>    block_row_ptr{};
+	std::array<uint32_t, NUM_BLKS * TK> activeCols{};
+	std::vector<uint32_t>               size_ptr{};
+	std::vector<Block>                  packed_blocks{};  // What happens if this has to resize? Do all above elements get moves aswell?
 };
 
 static bool block_brick_sort(const COOElement& a, const COOElement& b)
@@ -217,6 +217,8 @@ static std::vector<__half> generate_dense(size_t size)
 // TODO: Figure out how to make static
 void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& filepath)
 {
+	HRPB* hrpb_ptr = new HRPB();
+	hrpb_ptr->size_ptr.push_back(0);
 	std::sort(mtx.elements.begin(), mtx.elements.end(), &row_panel_sort);
 	std::vector<uint32_t> active_col_idx;
 
@@ -243,13 +245,16 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		if (where_i_should_go == static_cast<uint32_t>(-1)) {
 			THROW_RUNTIME_ERROR("variable 'where_i_should_go' is negative when it shouldn't");
 		}
-		e.col = static_cast<uint32_t>(where_i_should_go);
+		e.col = where_i_should_go;
 	}
 
 	std::sort(mtx.elements.begin(), mtx.elements.end(), &block_brick_sort);
 
 	size_t block_row = 0;
 	size_t block_col = 0;
+
+	size_t block_row_ptr_count = 0;
+	size_t block_row_ptr_idx = 0;
 
 	size_t brick_row = 0;
 	size_t brick_col = 0;
@@ -259,50 +264,60 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 	size_t brick_colPtr_count = 0;
 	size_t brick_colPtr_idx = 0;
 
-	Block* block_ptr = new Block();
+	block_row_ptr_count++;
+
+	Block& block_ref = hrpb_ptr->packed_blocks.emplace_back();
 	// Add the brick data of the first element
-	block_ptr->rows[brick_idx] = mtx.elements[0].row / brick_m;
+	block_ref.rows[brick_idx] = mtx.elements[0].row / brick_m;
 	brick_idx++;
 	brick_colPtr_count++;
 
+	// Add descriptive comments for this mess of a for loop
 	for (const COOElement& e : mtx.elements) {
 		if (block_row < e.row / TM)  // Moved down one block
 		{
 			block_row = e.row / TM;
-			// Should create a new block here
+			hrpb_ptr->size_ptr.push_back(sizeof(block_ref) + hrpb_ptr->size_ptr.back());
+			block_ref = hrpb_ptr->packed_blocks.emplace_back();
+			block_row_ptr_idx++;
+
+			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;
+			block_row_ptr_count++;
 			break;                          // let's do for one block only
 		} else if (block_col < e.col / TK)  // Moved right one block
 		{
 			block_col = e.col / TK;
-			// Should create a new block here
+			hrpb_ptr->size_ptr.push_back(sizeof(block_ref) + hrpb_ptr->size_ptr.back());
+			block_ref = hrpb_ptr->packed_blocks.emplace_back();
+			block_row_ptr_count++;
 			break;  // let's do for one block only
 		}
 
 		if (brick_row < e.row / brick_m) {  // Moved down one brick
 			brick_row = e.row / brick_m;
 
-			block_ptr->rows[brick_idx] = brick_row;
+			block_ref.rows[brick_idx] = brick_row;
 			brick_idx++;
 			brick_colPtr_count++;
 			printf("Moved down for (%d, %d)\n", e.row, e.col);
 		} else if (brick_col < e.col / brick_k) {  // Moved right one brick
 			brick_col = e.col / brick_k;
 
-			block_ptr->rows[brick_idx] = brick_row;
+			block_ref.rows[brick_idx] = brick_row;
 			brick_idx++;
 			brick_colPtr_idx++;
 
-			block_ptr->colPtr[brick_colPtr_idx] = brick_colPtr_count;
+			block_ref.colPtr[brick_colPtr_idx] = brick_colPtr_count;
 			brick_colPtr_count++;
 		}
 
 		/*
-         * 1. How do I store past blocks?
+         * 1. How do I store past blocks? In an std::vector<Block>
          * 2. Maybe write them to binary
          * while processing the next one?
          */
 
-		block_ptr->nnz_array.push_back(e.val);
+		block_ref.nnz_array.push_back(e.val);
 
 		size_t e_relative_row;
 		size_t e_relative_col;
@@ -318,9 +333,9 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			e_relative_col = brick_col * brick_k - e.col;
 		}
 		size_t e_row_major_idx = e_relative_row * brick_k + e_relative_col;
-		block_ptr->patterns[brick_row * (TM / brick_m) + brick_col] |= 1 << e_row_major_idx;
+		block_ref.patterns[brick_row * (TM / brick_m) + brick_col] |= 1 << e_row_major_idx;
 	}
-	delete block_ptr;
+	delete hrpb_ptr;
 }
 
 /*
