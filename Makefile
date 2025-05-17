@@ -2,7 +2,6 @@ NVCC:=nvcc
 CC:=clang
 CXX:=clang++
 ERROR_FLAGS:=-Wall -Wpointer-arith -Weffc++ -Wextra -Wconversion -Wsign-conversion -pedantic
-FILTERED_OUT_ERROR_FLAGS:=-Wno-pedantic
 OPT:= -O0
 
 BUILD:=build
@@ -19,7 +18,7 @@ CUFLAGS=-g $(OPT) -lineinfo
 
 CUFLAGS+=-std=c++20
 
-CUFLAGS+=-Xcompiler "$(ERROR_FLAGS) $(FILTERED_OUT_ERROR_FLAGS)"
+CUFLAGS+=-Xcompiler "$(ERROR_FLAGS) -Wno-pedantic -Wno-deprecated-gpu-targets"
 
 ifeq ($(CUARCH),)
 	CUFLAGS+=-gencode arch=compute_89,code=sm_89 --threads 2
