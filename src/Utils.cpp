@@ -48,12 +48,14 @@
 #	define BSR_BLOCK_SIZE 2
 #endif
 
+#define THROW_RUNTIME_ERROR(message) throw std::runtime_error(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " - " + message)
+
 // TODO: Review structs
 struct MatrixHeader
 {
-	int32_t rows;
-	int32_t cols;
-	int64_t nnz;
+	uint32_t rows;
+	uint32_t cols;
+	uint32_t nnz;
 
 	size_t row_ptr_bytes;
 	size_t col_idx_bytes;
@@ -63,29 +65,25 @@ struct MatrixHeader
 
 struct COOElement
 {
-	int row, col;
+	uint32_t row, col;
 
 	float val;
 };
 
 struct COOMatrix
 {
-	int rows, cols, nnz;
+	uint32_t rows, cols, nnz;
 
 	std::vector<COOElement> elements;
 };
 
 struct Block
 {
-	std::array<uint64_t, (TM / brick_m) * (TK / brick_k)> patterns;  // why is this in [][] format?
-	std::array<uint, TK / brick_k + 1>                    colPtr;
-	std::array<uint, (TM / brick_m) * (TK / brick_k)>     rows;
-	std::vector<float>                                    nnz_array;  // unknown at compile time
-
-	Block() :
-		patterns{}, colPtr{}, rows{} {}  // Zero initialize them
-										 // Might not be needed for colPtr, rows
-										 // DEFINATELY needed for patterns
+	// maybe leave the arrays I only write to uninitialized?
+	std::array<uint64_t, (TM / brick_m) * (TK / brick_k)> patterns{};  // why is this in [][] format?
+	std::array<uint64_t, TK / brick_k + 1>                colPtr{};
+	std::array<uint64_t, (TM / brick_m) * (TK / brick_k)> rows{};
+	std::vector<float>                                    nnz_array{};  // unknown at compile time
 };
 
 struct HRPB
@@ -151,23 +149,23 @@ static COOMatrix read_mtx(const std::filesystem::path& filepath)
 {
 	FILE* f = fopen(filepath.c_str(), "r");
 	if (!f)
-		throw std::runtime_error("Failed to open file " + filepath.filename().string());
+		THROW_RUNTIME_ERROR("Failed to open file ~ " + filepath.filename().string());
 
 	MM_typecode matcode;
 	if (mm_read_banner(f, &matcode) != 0) {
 		fclose(f);
-		throw std::runtime_error("Error reading mtx banner");
+		THROW_RUNTIME_ERROR("Error reading mtx banner");
 	}
 
 	if (!mm_is_sparse(matcode)) {
 		fclose(f);
-		throw std::runtime_error("Matrix is not sparse");
+		THROW_RUNTIME_ERROR("Matrix is not sparse");
 	}
 
 	int rows, cols, nnz;
 	if (mm_read_mtx_crd_size(f, &rows, &cols, &nnz) != 0) {
 		fclose(f);
-		throw std::runtime_error("Failed to read matrix size");
+		THROW_RUNTIME_ERROR("Failed to read matrix size");
 	}
 
 	std::vector<COOElement> elements;
@@ -177,9 +175,9 @@ static COOMatrix read_mtx(const std::filesystem::path& filepath)
 
 	for (int i = 0; i < nnz; ++i) {
 		COOElement e;
-		if (fscanf(f, "%d %d %f\n", &e.row, &e.col, &e.val) != 3) {
+		if (fscanf(f, "%u %u %f\n", &e.row, &e.col, &e.val) != 3) {
 			fclose(f);
-			throw std::runtime_error("Error reading element " + std::to_string(i));
+			THROW_RUNTIME_ERROR("Error reading element ~ " + std::to_string(i));
 		}
 		e.row--;
 		e.col--;
@@ -188,7 +186,7 @@ static COOMatrix read_mtx(const std::filesystem::path& filepath)
 	std::cout << "Done!\n";
 
 	fclose(f);
-	return { rows, cols, nnz, std::move(elements) };
+	return { static_cast<uint32_t>(rows), static_cast<uint32_t>(cols), static_cast<uint32_t>(nnz), std::move(elements) };
 }
 
 /*
@@ -217,42 +215,36 @@ static std::vector<__half> generate_dense(size_t size)
 }
 
 // TODO: Figure out how to make static
-void write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
+void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& filepath)
 {
 	std::sort(mtx.elements.begin(), mtx.elements.end(), &row_panel_sort);
-	std::vector<int> active_col_idx;
+	std::vector<uint32_t> active_col_idx;
 
-	size_t row_panel_num = (mtx.rows + ROW_PANEL_SIZE - 1) / ROW_PANEL_SIZE;
-	size_t current_panel = -1;
-	size_t current_col = -1;
-	size_t where_i_should_go = 0;  // Rename this shit
+	uint32_t current_panel = static_cast<uint32_t>(-1);  // WARNING: overflows
+	uint32_t current_col = static_cast<uint32_t>(-1);    // WARNING: overflows
+	uint32_t where_i_should_go = 0;                      // Rename this shit
 
 	/*
      * Iterate first by row panel then by col
      * aggregate all columns containing at least one non-zero
      */
-	size_t count = 0;
 	for (COOElement& e : mtx.elements) {
-		size_t panel_idx = e.row / ROW_PANEL_SIZE;
+		uint32_t panel_idx = e.row / ROW_PANEL_SIZE;
 		if (panel_idx != current_panel) {  // Entered a new row panel
 			current_panel = panel_idx;
-			current_col = -1;
-			where_i_should_go = -1;
+			current_col = static_cast<uint32_t>(-1);
+			where_i_should_go = static_cast<uint32_t>(-1);
 		}
 		if (e.col != current_col) {  // Entered a new col in the panel
 			current_col = e.col;
 			where_i_should_go++;
 		}
 		active_col_idx.push_back(e.col);  // I don't think we know the size of this at compile time
-		e.col = where_i_should_go;
+		if (where_i_should_go == static_cast<uint32_t>(-1)) {
+			THROW_RUNTIME_ERROR("variable 'where_i_should_go' is negative when it shouldn't");
+		}
+		e.col = static_cast<uint32_t>(where_i_should_go);
 	}
-
-	/*
-     * 1. Sort again after row panelling
-     * 2. Iterate normally
-     * 3. For each element calculate IN WHICH BLOCK AND BRICK THEY BELONG TO
-     * 4. Fill pattern array
-     */
 
 	std::sort(mtx.elements.begin(), mtx.elements.end(), &block_brick_sort);
 
@@ -264,8 +256,8 @@ void write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
 
 	size_t brick_idx = 0;
 
-	size_t brick_colPtr_count = 0;  // we handle the first brick out of the loop
-	size_t brick_colPtr_idx = 0;    // we handle the first brick out of the loop
+	size_t brick_colPtr_count = 0;
+	size_t brick_colPtr_idx = 0;
 
 	Block* block_ptr = new Block();
 	// Add the brick data of the first element
@@ -304,6 +296,12 @@ void write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
 			brick_colPtr_count++;
 		}
 
+		/*
+         * 1. How do I store past blocks?
+         * 2. Maybe write them to binary
+         * while processing the next one?
+         */
+
 		block_ptr->nnz_array.push_back(e.val);
 
 		size_t e_relative_row;
@@ -332,8 +330,8 @@ void write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
 // TODO: Figure out how to make static
 void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
 {
-	std::vector<int> row_ptr(static_cast<size_t>(mtx.rows) + 1, 0);
-	std::vector<int> col_idx(static_cast<size_t>(mtx.nnz));
+	std::vector<int>      row_ptr(static_cast<size_t>(mtx.rows) + 1, 0);
+	std::vector<uint32_t> col_idx(static_cast<size_t>(mtx.nnz));
 	// TODO: template the val?
 	std::vector<__half> val(static_cast<size_t>(mtx.nnz));
 
@@ -411,12 +409,12 @@ void print_matrix_specs(const std::filesystem::path& filepath)
 	int   nnz = 0;
 
 	if (!f)
-		throw std::runtime_error("Failed to open file " + filepath.filename().string());
+		THROW_RUNTIME_ERROR("Failed to open file ~ " + filepath.filename().string());
 
 	MM_typecode matcode;
 	if (mm_read_banner(f, &matcode) != 0) {
 		fclose(f);
-		throw std::runtime_error("Error reading mtx banner");
+		THROW_RUNTIME_ERROR("Error reading mtx banner");
 	}
 
 	std::cout << filepath.filename() << "\n";

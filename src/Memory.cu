@@ -1,5 +1,7 @@
 #include <cstdio>
+#include <exception>
 #include <filesystem>
+#include <iostream>
 
 #include "mma.h"
 
@@ -40,7 +42,7 @@
 	cudaFreeHost(host_ptr);
 }
 
-static void query_device()
+[[maybe_unused]] static void query_device()
 {
 	cudaDeviceProp device_prop;
 	cudaGetDeviceProperties(&device_prop, 0);
@@ -60,7 +62,11 @@ int main()
 	const auto path = std::filesystem::directory_iterator("/home/godot/projects/sparse-attention/data/fv1");
 
 	// query_device();
-	convert(path, &write_hrpb);
+	try {
+		convert(path, &write_hrpb);
+	} catch (const std::exception& e) {
+		std::cerr << "Exception: " << e.what() << "\n";
+	}
 
 	// load_binary_to_host("/home/godot/projects/sparse-attention/data/fv1/fv1.csr");
 
