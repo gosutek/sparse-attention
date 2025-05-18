@@ -25,7 +25,7 @@
 
 #define DATA_DIRECTORY "data/"
 #define ALIGNMENT 128
-#define ROW_PANEL_SIZE 1024
+#define ROW_PANEL_SIZE 32  // I think this should be the same as TM
 
 // bogus
 #define TM 32
@@ -250,11 +250,13 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 
 	std::sort(mtx.elements.begin(), mtx.elements.end(), &block_brick_sort);
 
+	uint32_t row_panel_idx = 0;
+
 	size_t block_row = 0;
 	size_t block_col = 0;
 
-	size_t block_row_ptr_count = 0;
-	size_t block_row_ptr_idx = 0;
+	uint32_t block_row_ptr_count = 0;
+	uint32_t block_row_ptr_idx = 0;
 
 	size_t brick_row = 0;
 	size_t brick_col = 0;
@@ -274,23 +276,32 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 
 	// Add descriptive comments for this mess of a for loop
 	for (const COOElement& e : mtx.elements) {
+		// Entered new row panel
+		// since ROW_PANEL_SIZE multiple of TM we have also
+		// entered a new block
+		if (row_panel_idx < e.row / ROW_PANEL_SIZE) {
+			block_row = e.row / TM;
+			block_row_ptr_idx++;
+			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;
+			block_row_ptr_count++;
+
+			block_ref = hrpb_ptr->packed_blocks.emplace_back();
+			break;
+		}
+
 		if (block_row < e.row / TM)  // Moved down one block
 		{
 			block_row = e.row / TM;
 			hrpb_ptr->size_ptr.push_back(sizeof(block_ref) + hrpb_ptr->size_ptr.back());
 			block_ref = hrpb_ptr->packed_blocks.emplace_back();
-			block_row_ptr_idx++;
 
-			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;
 			block_row_ptr_count++;
-			break;                          // let's do for one block only
 		} else if (block_col < e.col / TK)  // Moved right one block
 		{
 			block_col = e.col / TK;
 			hrpb_ptr->size_ptr.push_back(sizeof(block_ref) + hrpb_ptr->size_ptr.back());
 			block_ref = hrpb_ptr->packed_blocks.emplace_back();
 			block_row_ptr_count++;
-			break;  // let's do for one block only
 		}
 
 		if (brick_row < e.row / brick_m) {  // Moved down one brick
@@ -335,6 +346,8 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		size_t e_row_major_idx = e_relative_row * brick_k + e_relative_col;
 		block_ref.patterns[brick_row * (TM / brick_m) + brick_col] |= 1 << e_row_major_idx;
 	}
+	printf("First block block_row_ptr: %d and size ptr: %d\n", hrpb_ptr->block_row_ptr[0], hrpb_ptr->size_ptr[0]);
+	printf("Second block block_row_ptr: %d and size ptr: %d\n", hrpb_ptr->block_row_ptr[1], hrpb_ptr->size_ptr[1]);
 	delete hrpb_ptr;
 }
 
