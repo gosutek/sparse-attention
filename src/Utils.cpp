@@ -344,7 +344,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		if (brick_row == 0) {  // add unlikely
 			e_relative_row = e.row;
 		} else {
-			e_relative_row = brick_row * brick_m - e.row;
+			e_relative_row = e.row - brick_row * brick_m;
 		}
 
 		if (brick_col == 0) {  // add unlikely
