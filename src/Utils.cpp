@@ -84,6 +84,11 @@ struct Block
 	std::array<uint64_t, TK / brick_k + 1>                colPtr{};
 	std::array<uint64_t, (TM / brick_m) * (TK / brick_k)> rows{};
 	std::vector<float>                                    nnz_array{};  // unknown at compile time
+
+	uint32_t get_block_size()
+	{
+		return static_cast<uint32_t>(sizeof(Block) + nnz_array.size());
+	}
 };
 
 struct HRPB
@@ -268,9 +273,11 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 
 	block_row_ptr_count++;
 
-	Block& block_ref = hrpb_ptr->packed_blocks.emplace_back();
+	hrpb_ptr->packed_blocks.emplace_back();
+	size_t block_idx = 0;
+
 	// Add the brick data of the first element
-	block_ref.rows[brick_idx] = mtx.elements[0].row / brick_m;
+	hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = mtx.elements[0].row / brick_m;
 	brick_idx++;
 	brick_colPtr_count++;
 
@@ -286,23 +293,22 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;
 			block_row_ptr_count++;
 
-			block_ref = hrpb_ptr->packed_blocks.emplace_back();
 		}
 
 		if (block_row < e.row / TM)  // Moved down one block
 		{
 			printf("Entered a new block below for element (%d, %d)\n", e.row, e.col);
 			block_row = e.row / TM;
-			hrpb_ptr->size_ptr.push_back(sizeof(block_ref) + hrpb_ptr->size_ptr.back());
-			block_ref = hrpb_ptr->packed_blocks.emplace_back();
+			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
+			hrpb_ptr->packed_blocks.emplace_back();
 
 			block_row_ptr_count++;
 		} else if (block_col < e.col / TK)  // Moved right one block
 		{
 			printf("Entered a new block on the right for element (%d, %d)\n", e.row, e.col);
 			block_col = e.col / TK;
-			hrpb_ptr->size_ptr.push_back(sizeof(block_ref) + hrpb_ptr->size_ptr.back());
-			block_ref = hrpb_ptr->packed_blocks.emplace_back();
+			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
+			hrpb_ptr->packed_blocks.emplace_back();
 			block_row_ptr_count++;
 		}
 
@@ -310,18 +316,18 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			printf("Entered a new brick below for element (%d, %d)\n", e.row, e.col);
 			brick_row = e.row / brick_m;
 
-			block_ref.rows[brick_idx] = brick_row;
+			hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = brick_row;  // THIS MEMORY CORRUPTS - NEED TO ZERO OUT BRICK_IDX
 			brick_idx++;
 			brick_colPtr_count++;
 		} else if (brick_col < e.col / brick_k) {  // Moved right one brick
 			printf("Entered a new brick on the right for element (%d, %d)\n", e.row, e.col);
 			brick_col = e.col / brick_k;
 
-			block_ref.rows[brick_idx] = brick_row;
+			hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = brick_row;
 			brick_idx++;
 			brick_colPtr_idx++;
 
-			block_ref.colPtr[brick_colPtr_idx] = brick_colPtr_count;
+			hrpb_ptr->packed_blocks[block_idx].colPtr[brick_colPtr_idx] = brick_colPtr_count;
 			brick_colPtr_count++;
 		}
 
@@ -331,7 +337,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
          * while processing the next one?
          */
 
-		block_ref.nnz_array.push_back(e.val);
+		hrpb_ptr->packed_blocks[block_idx].nnz_array.push_back(e.val);
 
 		size_t e_relative_row;
 		size_t e_relative_col;
@@ -347,7 +353,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			e_relative_col = e.col - brick_col * brick_k;
 		}
 		size_t e_row_major_idx = e_relative_row * brick_k + e_relative_col;
-		block_ref.patterns[brick_row * (TM / brick_m) + brick_col] |= static_cast<uint64_t>(1) << e_row_major_idx;
+		hrpb_ptr->packed_blocks[block_idx].patterns[brick_row * (TM / brick_m) + brick_col] |= static_cast<uint64_t>(1) << e_row_major_idx;
 	}
 	printf("First block block_row_ptr: %d and size ptr: %d\n", hrpb_ptr->block_row_ptr[0], hrpb_ptr->size_ptr[0]);
 	printf("Second block block_row_ptr: %d and size ptr: %d\n", hrpb_ptr->block_row_ptr[1], hrpb_ptr->size_ptr[1]);
