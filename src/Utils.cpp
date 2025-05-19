@@ -347,7 +347,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			e_relative_col = e.col - brick_col * brick_k;
 		}
 		size_t e_row_major_idx = e_relative_row * brick_k + e_relative_col;
-		block_ref.patterns[brick_row * (TM / brick_m) + brick_col] |= 1 << e_row_major_idx;
+		block_ref.patterns[brick_row * (TM / brick_m) + brick_col] |= static_cast<uint64_t>(1) << e_row_major_idx;
 	}
 	printf("First block block_row_ptr: %d and size ptr: %d\n", hrpb_ptr->block_row_ptr[0], hrpb_ptr->size_ptr[0]);
 	printf("Second block block_row_ptr: %d and size ptr: %d\n", hrpb_ptr->block_row_ptr[1], hrpb_ptr->size_ptr[1]);
