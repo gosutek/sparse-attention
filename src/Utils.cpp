@@ -286,41 +286,45 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		// Entered new row panel
 		// since ROW_PANEL_SIZE multiple of TM we have also
 		// entered a new block
-		if (row_panel_idx < e.row / ROW_PANEL_SIZE) {
+		if (row_panel_idx != e.row / ROW_PANEL_SIZE) {
 			row_panel_idx = e.row / ROW_PANEL_SIZE;
 			printf("Entered a new row panel for element (%d, %d)\n", e.row, e.col);
 			block_row_ptr_idx++;
 			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;
 			block_row_ptr_count++;
-
 		}
 
-		if (block_row < e.row / TM)  // Moved down one block
+		if (block_row != e.row / TM)  // Moved down one block
 		{
 			printf("Entered a new block below for element (%d, %d)\n", e.row, e.col);
 			block_row = e.row / TM;
 			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
 			hrpb_ptr->packed_blocks.emplace_back();
+			brick_idx = 0;
+			block_idx++;
 
 			block_row_ptr_count++;
-		} else if (block_col < e.col / TK)  // Moved right one block
-		{
-			printf("Entered a new block on the right for element (%d, %d)\n", e.row, e.col);
+		}
+		if (block_col != e.col / TK) {  // Changed block column (either way)
+			printf("Changed block column for element (%d, %d)\n", e.row, e.col);
 			block_col = e.col / TK;
 			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
 			hrpb_ptr->packed_blocks.emplace_back();
+			brick_idx = 0;
+			block_idx++;
 			block_row_ptr_count++;
 		}
 
-		if (brick_row < e.row / brick_m) {  // Moved down one brick
+		if (brick_row != e.row / brick_m) {  // Changed brick row (down)
 			printf("Entered a new brick below for element (%d, %d)\n", e.row, e.col);
 			brick_row = e.row / brick_m;
 
 			hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = brick_row;  // THIS MEMORY CORRUPTS - NEED TO ZERO OUT BRICK_IDX
 			brick_idx++;
 			brick_colPtr_count++;
-		} else if (brick_col < e.col / brick_k) {  // Moved right one brick
-			printf("Entered a new brick on the right for element (%d, %d)\n", e.row, e.col);
+		}
+		if (brick_col != e.col / brick_k) {  // Changed brick column
+			printf("Changed brick column for element (%d, %d)\n", e.row, e.col);
 			brick_col = e.col / brick_k;
 
 			hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = brick_row;
