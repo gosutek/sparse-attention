@@ -280,17 +280,18 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		// since ROW_PANEL_SIZE multiple of TM we have also
 		// entered a new block
 		if (row_panel_idx < e.row / ROW_PANEL_SIZE) {
-			block_row = e.row / TM;
+			row_panel_idx = e.row / ROW_PANEL_SIZE;
+			printf("Entered a new row panel for element (%d, %d)\n", e.row, e.col);
 			block_row_ptr_idx++;
 			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;
 			block_row_ptr_count++;
 
 			block_ref = hrpb_ptr->packed_blocks.emplace_back();
-			break;
 		}
 
 		if (block_row < e.row / TM)  // Moved down one block
 		{
+			printf("Entered a new block below for element (%d, %d)\n", e.row, e.col);
 			block_row = e.row / TM;
 			hrpb_ptr->size_ptr.push_back(sizeof(block_ref) + hrpb_ptr->size_ptr.back());
 			block_ref = hrpb_ptr->packed_blocks.emplace_back();
@@ -298,6 +299,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			block_row_ptr_count++;
 		} else if (block_col < e.col / TK)  // Moved right one block
 		{
+			printf("Entered a new block on the right for element (%d, %d)\n", e.row, e.col);
 			block_col = e.col / TK;
 			hrpb_ptr->size_ptr.push_back(sizeof(block_ref) + hrpb_ptr->size_ptr.back());
 			block_ref = hrpb_ptr->packed_blocks.emplace_back();
@@ -305,13 +307,14 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		}
 
 		if (brick_row < e.row / brick_m) {  // Moved down one brick
+			printf("Entered a new brick below for element (%d, %d)\n", e.row, e.col);
 			brick_row = e.row / brick_m;
 
 			block_ref.rows[brick_idx] = brick_row;
 			brick_idx++;
 			brick_colPtr_count++;
-			printf("Moved down for (%d, %d)\n", e.row, e.col);
 		} else if (brick_col < e.col / brick_k) {  // Moved right one brick
+			printf("Entered a new brick on the right for element (%d, %d)\n", e.row, e.col);
 			brick_col = e.col / brick_k;
 
 			block_ref.rows[brick_idx] = brick_row;
@@ -341,7 +344,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		if (brick_col == 0) {  // add unlikely
 			e_relative_col = e.col;
 		} else {
-			e_relative_col = brick_col * brick_k - e.col;
+			e_relative_col = e.col - brick_col * brick_k;
 		}
 		size_t e_row_major_idx = e_relative_row * brick_k + e_relative_col;
 		block_ref.patterns[brick_row * (TM / brick_m) + brick_col] |= 1 << e_row_major_idx;
