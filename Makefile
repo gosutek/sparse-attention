@@ -18,7 +18,7 @@ CUFLAGS=-g $(OPT) -lineinfo
 
 CUFLAGS+=-std=c++20
 
-CUFLAGS+=-Xcompiler "$(ERROR_FLAGS) -Wno-pedantic -Wno-deprecated-gpu-targets"
+CUFLAGS+=-Xcompiler "$(ERROR_FLAGS) -Wno-pedantic -Wno-deprecated-gpu-targets -D_GLIBCXX_DEBUG"
 
 ifeq ($(CUARCH),)
 	CUFLAGS+=-gencode arch=compute_89,code=sm_89 --threads 2
