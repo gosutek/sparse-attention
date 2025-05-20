@@ -32,8 +32,6 @@
 #define TK 16
 #define brick_m 16
 #define brick_k 4
-#define M 1000
-#define NUM_BLKS 16
 
 /*
  * C = A*B
@@ -93,10 +91,10 @@ struct Block
 
 struct HRPB
 {
-	std::array<uint32_t, M / TK + 1>    block_row_ptr{};
-	std::array<uint32_t, NUM_BLKS * TK> activeCols{};
-	std::vector<uint32_t>               size_ptr{};
-	std::vector<Block>                  packed_blocks{};  // What happens if this has to resize? Do all above elements get moves aswell?
+	std::vector<uint32_t> block_row_ptr{};
+	std::vector<uint32_t> active_cols{};
+	std::vector<uint32_t> size_ptr{};
+	std::vector<Block>    packed_blocks{};  // What happens if this has to resize? Do all above elements get moves aswell?
 };
 
 static bool block_brick_sort(const COOElement& a, const COOElement& b)
@@ -223,8 +221,8 @@ static std::vector<__half> generate_dense(size_t size)
 void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& filepath)
 {
 	HRPB* hrpb_ptr = new HRPB();
+	hrpb_ptr->block_row_ptr.resize(mtx.rows / TM + 1);
 	std::sort(mtx.elements.begin(), mtx.elements.end(), &row_panel_sort);
-	std::vector<uint32_t> active_col_idx;
 
 	uint32_t current_panel = static_cast<uint32_t>(-1);  // WARNING: intended overflow
 	uint32_t current_col = static_cast<uint32_t>(-1);    // WARNING: intended overflow
@@ -245,7 +243,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			current_col = e.col;
 			where_i_should_go++;
 		}
-		active_col_idx.push_back(e.col);  // I don't think we know the size of this at compile time
+		hrpb_ptr->active_cols.push_back(e.col);  // I don't think we know the size of this at compile time
 		if (where_i_should_go == static_cast<uint32_t>(-1)) {
 			THROW_RUNTIME_ERROR("variable 'where_i_should_go' is negative when it shouldn't");
 		}
@@ -272,6 +270,8 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 	size_t brick_colPtr_count = 0;
 	size_t brick_colPtr_idx = 0;
 
+	size_t active_col_prev_size = hrpb_ptr->active_cols.size();
+
 	// Add descriptive comments for this mess of a for loop
 	for (const COOElement& e : mtx.elements) {
 		// Entered new row panel
@@ -280,7 +280,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		if (row_panel_idx != e.row / ROW_PANEL_SIZE) {
 			row_panel_idx = e.row / ROW_PANEL_SIZE;
 			printf("Entered a new row panel for element (%d, %d)\n", e.row, e.col);
-			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;  // Register the blocks of the previous row_panel
+			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;  // Register the blocks of the previous row_panel | THIS GOES OUT OF BOUNDS
 
 			block_row_ptr_idx++;
 		}
@@ -289,7 +289,8 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		{
 			printf("Changed ONLY block row, for element (%d, %d)\n", e.row, e.col);
 			block_row = e.row / TM;
-			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
+			// hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
+			hrpb_ptr->size_ptr.push_back(1);
 			hrpb_ptr->packed_blocks[block_idx].colPtr[4] = brick_idx + 1;
 			hrpb_ptr->packed_blocks.emplace_back();
 			block_row_ptr_count++;
@@ -302,7 +303,8 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		} else if (block_col != e.col / TK && block_row == e.row / TM) {  // if we changed ONLY the block column
 			printf("Changed ONLY block column, for element (%d, %d)\n", e.row, e.col);
 			block_col = e.col / TK;
-			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
+			// hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
+			hrpb_ptr->size_ptr.push_back(1);
 			hrpb_ptr->packed_blocks[block_idx].colPtr[4] = brick_idx;  // when changing blocks, the last element of the previous block's colPtr vector should be equal to the number of bricks in that block
 			hrpb_ptr->packed_blocks.emplace_back();
 			block_row_ptr_count++;
@@ -317,7 +319,8 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			block_row = e.row / TM;
 			block_col = e.col / TK;
 			if (!hrpb_ptr->size_ptr.empty()) {
-				hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
+				// hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
+				hrpb_ptr->size_ptr.push_back(1);
 			} else {
 				hrpb_ptr->size_ptr.push_back(0);
 			}
