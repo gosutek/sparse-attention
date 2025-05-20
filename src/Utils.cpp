@@ -270,8 +270,6 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 	size_t brick_colPtr_count = 0;
 	size_t brick_colPtr_idx = 0;
 
-	size_t active_col_prev_size = hrpb_ptr->active_cols.size();
-
 	// Add descriptive comments for this mess of a for loop
 	for (const COOElement& e : mtx.elements) {
 		// Entered new row panel
@@ -279,7 +277,6 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		// entered a new block
 		if (row_panel_idx != e.row / ROW_PANEL_SIZE) {
 			row_panel_idx = e.row / ROW_PANEL_SIZE;
-			printf("Entered a new row panel for element (%d, %d)\n", e.row, e.col);
 			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;  // Register the blocks of the previous row_panel | THIS GOES OUT OF BOUNDS
 
 			block_row_ptr_idx++;
@@ -287,11 +284,9 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 
 		if (block_row != e.row / TM && block_col == e.col / TK)  // if we changed ONLY the block row
 		{
-			printf("Changed ONLY block row, for element (%d, %d)\n", e.row, e.col);
 			block_row = e.row / TM;
-			// hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
-			hrpb_ptr->size_ptr.push_back(1);
-			hrpb_ptr->packed_blocks[block_idx].colPtr[4] = brick_idx + 1;
+			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
+			hrpb_ptr->packed_blocks[block_idx].colPtr[4] = brick_idx;
 			hrpb_ptr->packed_blocks.emplace_back();
 			block_row_ptr_count++;
 			brick_idx = 0;
@@ -301,10 +296,8 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			brick_colPtr_count = 0;
 
 		} else if (block_col != e.col / TK && block_row == e.row / TM) {  // if we changed ONLY the block column
-			printf("Changed ONLY block column, for element (%d, %d)\n", e.row, e.col);
 			block_col = e.col / TK;
-			// hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
-			hrpb_ptr->size_ptr.push_back(1);
+			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
 			hrpb_ptr->packed_blocks[block_idx].colPtr[4] = brick_idx;  // when changing blocks, the last element of the previous block's colPtr vector should be equal to the number of bricks in that block
 			hrpb_ptr->packed_blocks.emplace_back();
 			block_row_ptr_count++;
@@ -315,12 +308,10 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			brick_colPtr_count = 0;
 
 		} else if (block_row != e.row / TM && block_col != e.col / TK) {  // if we change both row and column of a block. Happens when we reach the right side of the matrix
-			printf("Changed BOTH column and row, for element (%d, %d)\n", e.row, e.col);
 			block_row = e.row / TM;
 			block_col = e.col / TK;
 			if (!hrpb_ptr->size_ptr.empty()) {
-				// hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
-				hrpb_ptr->size_ptr.push_back(1);
+				hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
 			} else {
 				hrpb_ptr->size_ptr.push_back(0);
 			}
@@ -334,14 +325,12 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		}
 
 		if (brick_row != e.row / brick_m && brick_col == e.col / brick_k) {  // Changed brick row ONLY (down)
-			printf("Change ONLY brick row, for element (%d, %d)\n", e.row, e.col);
 			brick_row = e.row / brick_m;
 
 			hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = brick_row;
 			brick_idx++;
 			brick_colPtr_count++;
 		} else if (brick_col != e.col / brick_k && brick_row == e.row / brick_m) {  // Changed brick column ONLY
-			printf("Changed ONLY brick column, for element (%d, %d)\n", e.row, e.col);
 			brick_col = e.col / brick_k;
 			hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = brick_row;
 			brick_idx++;
@@ -350,7 +339,6 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			hrpb_ptr->packed_blocks[block_idx].colPtr[brick_colPtr_idx] = brick_colPtr_count;
 			brick_colPtr_count++;
 		} else if (brick_row != e.row / brick_m && brick_col != e.col / brick_k) {  // Changed BOTH column and row
-			printf("Changed BOTH brick row and column, for element (%d, %d)\n", e.row, e.col);
 			brick_row = e.row / brick_m;
 			brick_col = e.col / brick_k;
 
@@ -400,8 +388,6 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		size_t e_row_major_idx = e_relative_row * brick_k + e_relative_col;
 		hrpb_ptr->packed_blocks[block_idx].patterns[brick_relative_row * (TK / brick_k) + brick_relative_col] |= static_cast<uint64_t>(1) << e_row_major_idx;
 	}
-	printf("First row panel %d and size ptr: %d\n", hrpb_ptr->block_row_ptr[0], hrpb_ptr->size_ptr[0]);
-	printf("Second row panel block_row_ptr: %d and size ptr: %d\n", hrpb_ptr->block_row_ptr[1], hrpb_ptr->size_ptr[1]);
 	delete hrpb_ptr;
 }
 
