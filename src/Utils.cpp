@@ -223,12 +223,11 @@ static std::vector<__half> generate_dense(size_t size)
 void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& filepath)
 {
 	HRPB* hrpb_ptr = new HRPB();
-	hrpb_ptr->size_ptr.push_back(0);
 	std::sort(mtx.elements.begin(), mtx.elements.end(), &row_panel_sort);
 	std::vector<uint32_t> active_col_idx;
 
-	uint32_t current_panel = static_cast<uint32_t>(-1);  // WARNING: overflows
-	uint32_t current_col = static_cast<uint32_t>(-1);    // WARNING: overflows
+	uint32_t current_panel = static_cast<uint32_t>(-1);  // WARNING: intended overflow
+	uint32_t current_col = static_cast<uint32_t>(-1);    // WARNING: intended overflow
 	uint32_t where_i_should_go = 0;                      // Rename this shit
 
 	/*
@@ -255,31 +254,23 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 
 	std::sort(mtx.elements.begin(), mtx.elements.end(), &block_brick_sort);
 
-	uint32_t row_panel_idx = 0;
+	uint32_t row_panel_idx = static_cast<uint32_t>(-1);  // WARNING: intended overflow
 
-	size_t block_row = 0;
-	size_t block_col = 0;
+	size_t block_row = static_cast<size_t>(-1);  // WARNING: inteded overflow
+	size_t block_col = static_cast<size_t>(-1);  // WARNING: intended overflow
+
+	size_t block_idx = static_cast<size_t>(-1);  // WARNING: inteded overflow
 
 	uint32_t block_row_ptr_count = 0;
 	uint32_t block_row_ptr_idx = 0;
 
-	size_t brick_row = 0;
-	size_t brick_col = 0;
+	size_t brick_row = static_cast<size_t>(-1);  // WARNING: inteded overflow
+	size_t brick_col = static_cast<size_t>(-1);  // WARNING: inteded overflow
 
 	size_t brick_idx = 0;
 
 	size_t brick_colPtr_count = 0;
 	size_t brick_colPtr_idx = 0;
-
-	block_row_ptr_count++;
-
-	hrpb_ptr->packed_blocks.emplace_back();
-	size_t block_idx = 0;
-
-	// Add the brick data of the first element
-	hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = mtx.elements[0].row / brick_m;
-	brick_idx++;
-	brick_colPtr_count++;
 
 	// Add descriptive comments for this mess of a for loop
 	for (const COOElement& e : mtx.elements) {
@@ -289,52 +280,81 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		if (row_panel_idx != e.row / ROW_PANEL_SIZE) {
 			row_panel_idx = e.row / ROW_PANEL_SIZE;
 			printf("Entered a new row panel for element (%d, %d)\n", e.row, e.col);
+			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;  // Register the blocks of the previous row_panel
+
 			block_row_ptr_idx++;
-			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;
-			block_row_ptr_count++;
 		}
 
-		if (block_row != e.row / TM)  // Moved down one block
+		if (block_row != e.row / TM && block_col == e.col / TK)  // if we changed ONLY the block row
 		{
-			printf("Entered a new block below for element (%d, %d)\n", e.row, e.col);
+			printf("Changed ONLY block row, for element (%d, %d)\n", e.row, e.col);
 			block_row = e.row / TM;
 			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
+			hrpb_ptr->packed_blocks[block_idx].colPtr[4] = brick_idx + 1;
 			hrpb_ptr->packed_blocks.emplace_back();
+			block_row_ptr_count++;
 			brick_idx = 0;
 			block_idx++;
 
-			block_row_ptr_count++;
-		}
-		if (block_col != e.col / TK) {  // Changed block column (either way)
-			printf("Changed block column for element (%d, %d)\n", e.row, e.col);
+			brick_colPtr_idx = 0;
+			brick_colPtr_count = 0;
+
+		} else if (block_col != e.col / TK && block_row == e.row / TM) {  // if we changed ONLY the block column
+			printf("Changed ONLY block column, for element (%d, %d)\n", e.row, e.col);
 			block_col = e.col / TK;
 			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
+			hrpb_ptr->packed_blocks[block_idx].colPtr[4] = brick_idx;  // when changing blocks, the last element of the previous block's colPtr vector should be equal to the number of bricks in that block
 			hrpb_ptr->packed_blocks.emplace_back();
+			block_row_ptr_count++;
 			brick_idx = 0;
 			block_idx++;
+
+			brick_colPtr_idx = 0;
+			brick_colPtr_count = 0;
+
+		} else if (block_row != e.row / TM && block_col != e.col / TK) {  // if we change both row and column of a block. Happens when we reach the right side of the matrix
+			printf("Changed BOTH column and row, for element (%d, %d)\n", e.row, e.col);
+			block_row = e.row / TM;
+			block_col = e.col / TK;
+			if (!hrpb_ptr->size_ptr.empty()) {
+				hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
+			} else {
+				hrpb_ptr->size_ptr.push_back(0);
+			}
+			hrpb_ptr->packed_blocks.emplace_back();
 			block_row_ptr_count++;
+			brick_idx = 0;
+			block_idx++;
+
+			brick_colPtr_idx = 0;
+			brick_colPtr_count = 0;
 		}
 
-		if (brick_row != e.row / brick_m) {  // Changed brick row (down)
-			printf("Entered a new brick below for element (%d, %d)\n", e.row, e.col);
+		if (brick_row != e.row / brick_m && brick_col == e.col / brick_k) {  // Changed brick row ONLY (down)
+			printf("Change ONLY brick row, for element (%d, %d)\n", e.row, e.col);
 			brick_row = e.row / brick_m;
 
-			hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = brick_row;  // THIS MEMORY CORRUPTS - NEED TO ZERO OUT BRICK_IDX
+			hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = brick_row;
 			brick_idx++;
 			brick_colPtr_count++;
-		}
-		if (brick_col != e.col / brick_k) {  // Changed brick column
-			printf("Changed brick column for element (%d, %d)\n", e.row, e.col);
+		} else if (brick_col != e.col / brick_k && brick_row == e.row / brick_m) {  // Changed brick column ONLY
+			printf("Changed ONLY brick column, for element (%d, %d)\n", e.row, e.col);
 			brick_col = e.col / brick_k;
-
 			hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = brick_row;
 			brick_idx++;
 			brick_colPtr_idx++;
 
 			hrpb_ptr->packed_blocks[block_idx].colPtr[brick_colPtr_idx] = brick_colPtr_count;
 			brick_colPtr_count++;
-		}
+		} else if (brick_row != e.row / brick_m && brick_col != e.col / brick_k) {  // Changed BOTH column and row
+			printf("Changed BOTH brick row and column, for element (%d, %d)\n", e.row, e.col);
+			brick_row = e.row / brick_m;
+			brick_col = e.col / brick_k;
 
+			hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = brick_row;
+			brick_idx++;
+			brick_colPtr_count++;
+		}
 		/*
          * 1. How do I store past blocks? In an std::vector<Block>
          * 2. Maybe write them to binary
@@ -343,8 +363,13 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 
 		hrpb_ptr->packed_blocks[block_idx].nnz_array.push_back(e.val);
 
-		size_t e_relative_row;
-		size_t e_relative_col;
+		size_t e_relative_row;  // relative to brick
+		size_t e_relative_col;  // relative to brick
+
+		size_t brick_relative_row;  // relative to block, should have a range [0..1]
+		size_t brick_relative_col;  // relative to block, should have a range [0..3]
+
+		// TODO: Rearrange the if, the most common should be on the top
 		if (brick_row == 0) {  // add unlikely
 			e_relative_row = e.row;
 		} else {
@@ -356,11 +381,24 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		} else {
 			e_relative_col = e.col - brick_col * brick_k;
 		}
+
+		if (block_row == 0) {  // add unlikely
+			brick_relative_row = brick_row;
+		} else {
+			brick_relative_row = brick_row - block_row * (TM / brick_m);
+		}
+
+		if (block_col == 0) {  // add unlikely
+			brick_relative_col = brick_col;
+		} else {
+			brick_relative_col = brick_col - block_col * (TK / brick_k);
+		}
+
 		size_t e_row_major_idx = e_relative_row * brick_k + e_relative_col;
-		hrpb_ptr->packed_blocks[block_idx].patterns[brick_row * (TM / brick_m) + brick_col] |= static_cast<uint64_t>(1) << e_row_major_idx;
+		hrpb_ptr->packed_blocks[block_idx].patterns[brick_relative_row * (TK / brick_k) + brick_relative_col] |= static_cast<uint64_t>(1) << e_row_major_idx;
 	}
-	printf("First block block_row_ptr: %d and size ptr: %d\n", hrpb_ptr->block_row_ptr[0], hrpb_ptr->size_ptr[0]);
-	printf("Second block block_row_ptr: %d and size ptr: %d\n", hrpb_ptr->block_row_ptr[1], hrpb_ptr->size_ptr[1]);
+	printf("First row panel %d and size ptr: %d\n", hrpb_ptr->block_row_ptr[0], hrpb_ptr->size_ptr[0]);
+	printf("Second row panel block_row_ptr: %d and size ptr: %d\n", hrpb_ptr->block_row_ptr[1], hrpb_ptr->size_ptr[1]);
 	delete hrpb_ptr;
 }
 
