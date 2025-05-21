@@ -80,12 +80,12 @@ struct Block
 	// maybe leave the arrays I only write to uninitialized?
 	std::array<uint64_t, (TM / brick_m) * (TK / brick_k)> patterns{};  // cache-friendly
 	std::array<uint64_t, TK / brick_k + 1>                colPtr{};
-	std::array<uint64_t, (TM / brick_m) * (TK / brick_k)> rows{};
+	std::vector<uint64_t>                                 rows{};       // unknown at compile time, paper is wrong
 	std::vector<float>                                    nnz_array{};  // unknown at compile time
 
 	uint32_t get_block_size()
 	{
-		return static_cast<uint32_t>(sizeof(Block) + nnz_array.size());
+		return static_cast<uint32_t>(sizeof(Block) + nnz_array.size() * sizeof(float));
 	}
 };
 
@@ -254,16 +254,16 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 
 	uint32_t row_panel_idx = static_cast<uint32_t>(-1);  // WARNING: intended overflow
 
-	size_t block_row = static_cast<size_t>(-1);  // WARNING: inteded overflow
+	size_t block_row = static_cast<size_t>(-1);  // WARNING: intended overflow
 	size_t block_col = static_cast<size_t>(-1);  // WARNING: intended overflow
 
-	size_t block_idx = static_cast<size_t>(-1);  // WARNING: inteded overflow
+	size_t block_idx = static_cast<size_t>(-1);  // WARNING: intended overflow
 
 	uint32_t block_row_ptr_count = 0;
 	uint32_t block_row_ptr_idx = 0;
 
-	size_t brick_row = static_cast<size_t>(-1);  // WARNING: inteded overflow
-	size_t brick_col = static_cast<size_t>(-1);  // WARNING: inteded overflow
+	size_t brick_row = static_cast<size_t>(-1);  // WARNING: intended overflow
+	size_t brick_col = static_cast<size_t>(-1);  // WARNING: intended overflow
 
 	size_t brick_idx = 0;
 
@@ -277,7 +277,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		// entered a new block
 		if (row_panel_idx != e.row / ROW_PANEL_SIZE) {
 			row_panel_idx = e.row / ROW_PANEL_SIZE;
-			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;  // Register the blocks of the previous row_panel | THIS GOES OUT OF BOUNDS
+			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;  // Register the blocks of the previous row_panel
 
 			block_row_ptr_idx++;
 		}
@@ -286,8 +286,8 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		{
 			block_row = e.row / TM;
 			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
-			hrpb_ptr->packed_blocks[block_idx].colPtr[4] = brick_idx;
-			hrpb_ptr->packed_blocks.emplace_back();
+			hrpb_ptr->packed_blocks[block_idx].colPtr[TK / brick_k] = brick_idx;                   // when changing blocks, the last element of the previous block's colPtr vector should be equal to the number of bricks in that block
+			hrpb_ptr->packed_blocks.emplace_back().rows.reserve((TM / brick_m) * (TK / brick_k));  // Reserve at the maximum possible size
 			block_row_ptr_count++;
 			brick_idx = 0;
 			block_idx++;
@@ -298,8 +298,8 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		} else if (block_col != e.col / TK && block_row == e.row / TM) {  // if we changed ONLY the block column
 			block_col = e.col / TK;
 			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
-			hrpb_ptr->packed_blocks[block_idx].colPtr[4] = brick_idx;  // when changing blocks, the last element of the previous block's colPtr vector should be equal to the number of bricks in that block
-			hrpb_ptr->packed_blocks.emplace_back();
+			hrpb_ptr->packed_blocks[block_idx].colPtr[TK / brick_k] = brick_idx;                   // when changing blocks, the last element of the previous block's colPtr vector should be equal to the number of bricks in that block
+			hrpb_ptr->packed_blocks.emplace_back().rows.reserve((TM / brick_m) * (TK / brick_k));  // Reserve at the maximum possible size
 			block_row_ptr_count++;
 			brick_idx = 0;
 			block_idx++;
@@ -315,7 +315,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			} else {
 				hrpb_ptr->size_ptr.push_back(0);
 			}
-			hrpb_ptr->packed_blocks.emplace_back();
+			hrpb_ptr->packed_blocks.emplace_back().rows.reserve((TM / brick_m) * (TK / brick_k));  // Reserve at the maximum possible size
 			block_row_ptr_count++;
 			brick_idx = 0;
 			block_idx++;
@@ -327,12 +327,12 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		if (brick_row != e.row / brick_m && brick_col == e.col / brick_k) {  // Changed brick row ONLY (down)
 			brick_row = e.row / brick_m;
 
-			hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = brick_row;
+			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_row);
 			brick_idx++;
 			brick_colPtr_count++;
 		} else if (brick_col != e.col / brick_k && brick_row == e.row / brick_m) {  // Changed brick column ONLY
 			brick_col = e.col / brick_k;
-			hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = brick_row;
+			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_row);
 			brick_idx++;
 			brick_colPtr_idx++;
 
@@ -342,7 +342,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			brick_row = e.row / brick_m;
 			brick_col = e.col / brick_k;
 
-			hrpb_ptr->packed_blocks[block_idx].rows[brick_idx] = brick_row;
+			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_row);
 			brick_idx++;
 			brick_colPtr_count++;
 		}
@@ -388,6 +388,11 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		size_t e_row_major_idx = e_relative_row * brick_k + e_relative_col;
 		hrpb_ptr->packed_blocks[block_idx].patterns[brick_relative_row * (TK / brick_k) + brick_relative_col] |= static_cast<uint64_t>(1) << e_row_major_idx;
 	}
+	for (size_t i = brick_idx; i < hrpb_ptr->packed_blocks[block_idx].colPtr.size(); ++i) {
+		hrpb_ptr->packed_blocks[block_idx].colPtr[i] = brick_idx;  // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
+	}
+	// do the same for remaining block_row_ptr
+	hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;
 	delete hrpb_ptr;
 }
 
