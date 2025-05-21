@@ -277,6 +277,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		// entered a new block
 		if (row_panel_idx != e.row / ROW_PANEL_SIZE) {
 			row_panel_idx = e.row / ROW_PANEL_SIZE;
+
 			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;  // Register the blocks of the previous row_panel
 
 			block_row_ptr_idx++;
@@ -284,6 +285,9 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 
 		if (block_row != e.row / TM && block_col == e.col / TK)  // if we changed ONLY the block row
 		{
+			for (size_t i = ++brick_colPtr_idx; i < hrpb_ptr->packed_blocks[block_idx].colPtr.size(); ++i) {  // any leftovers AFTER brick_colPtr_idx (where we left off) should be equal to the number of bricks
+				hrpb_ptr->packed_blocks[block_idx].colPtr[i] = brick_idx;                                     // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
+			}
 			block_row = e.row / TM;
 			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
 			hrpb_ptr->packed_blocks[block_idx].colPtr[TK / brick_k] = brick_idx;                   // when changing blocks, the last element of the previous block's colPtr vector should be equal to the number of bricks in that block
@@ -296,6 +300,11 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			brick_colPtr_count = 0;
 
 		} else if (block_col != e.col / TK && block_row == e.row / TM) {  // if we changed ONLY the block column
+
+			for (size_t i = ++brick_colPtr_idx; i < hrpb_ptr->packed_blocks[block_idx].colPtr.size(); ++i) {  // any leftovers AFTER brick_colPtr_idx (where we left off) should be equal to the number of bricks
+				hrpb_ptr->packed_blocks[block_idx].colPtr[i] = brick_idx;                                     // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
+			}
+
 			block_col = e.col / TK;
 			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
 			hrpb_ptr->packed_blocks[block_idx].colPtr[TK / brick_k] = brick_idx;                   // when changing blocks, the last element of the previous block's colPtr vector should be equal to the number of bricks in that block
@@ -308,6 +317,13 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			brick_colPtr_count = 0;
 
 		} else if (block_row != e.row / TM && block_col != e.col / TK) {  // if we change both row and column of a block. Happens when we reach the right side of the matrix AND must enter a new block
+
+			if (block_idx != static_cast<size_t>(-1)) {
+				for (size_t i = ++brick_colPtr_idx; i < hrpb_ptr->packed_blocks[block_idx].colPtr.size(); ++i) {  // any leftovers AFTER brick_colPtr_idx (where we left off) should be equal to the number of bricks
+					hrpb_ptr->packed_blocks[block_idx].colPtr[i] = brick_idx;                                     // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
+				}
+			}
+
 			block_row = e.row / TM;
 			block_col = e.col / TK;
 			if (!hrpb_ptr->size_ptr.empty()) {
@@ -320,7 +336,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			brick_idx = 0;
 			block_idx++;
 
-			brick_colPtr_idx = static_cast<size_t>(-1);
+			brick_colPtr_idx = 0;
 			brick_colPtr_count = 0;
 		}
 
@@ -334,20 +350,20 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			brick_col = e.col / brick_k;
 			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_row);
 			brick_idx++;
-			brick_colPtr_idx++;
 
-			hrpb_ptr->packed_blocks[block_idx].colPtr[brick_colPtr_idx] = brick_colPtr_count;
+			brick_colPtr_idx++;
 			brick_colPtr_count++;
+			hrpb_ptr->packed_blocks[block_idx].colPtr[brick_colPtr_idx] = brick_colPtr_count;
 		} else if (brick_row != e.row / brick_m && brick_col != e.col / brick_k) {  // Changed BOTH column and row
 			brick_row = e.row / brick_m;
 			brick_col = e.col / brick_k;
 
 			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_row);
 			brick_idx++;
-			brick_colPtr_idx++;
 
-			hrpb_ptr->packed_blocks[block_idx].colPtr[brick_colPtr_idx] = brick_colPtr_count;
+			brick_colPtr_idx++;
 			brick_colPtr_count++;
+			hrpb_ptr->packed_blocks[block_idx].colPtr[brick_colPtr_idx] = brick_colPtr_count;
 		}
 		/*
          * 1. How do I store past blocks? In an std::vector<Block>
