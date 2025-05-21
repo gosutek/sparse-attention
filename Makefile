@@ -18,7 +18,7 @@ CUFLAGS=-g $(OPT) -lineinfo
 
 CUFLAGS+=-std=c++20
 
-CUFLAGS+=-Xcompiler "$(ERROR_FLAGS) -Wno-pedantic -Wno-deprecated-gpu-targets -D_GLIBCXX_DEBUG" #REMOVE DEBUG IN RELEASE
+CUFLAGS+=-Xcompiler "$(ERROR_FLAGS) -Wno-pedantic -Wno-deprecated-gpu-targets"
 
 ifeq ($(CUARCH),)
 	CUFLAGS+=-gencode arch=compute_89,code=sm_89 --threads 2
@@ -29,6 +29,12 @@ endif
 CUFLAGS += -I/opt/cuda/targets/x86_64-linux/include/
 
 all: $(BINARY)
+
+unit: CUFLAGS+=-Xcompiler "-D_UNIT_TESTING"
+unit: $(BINARY)
+
+bounds: CUFLAGS+=-Xcompiler "-D_GLIBCXX_DEBUG"
+bounds: $(BINARY)
 
 $(BINARY): $(OBJECTS)
 	$(NVCC) $(OBJECTS) -o $@
@@ -49,4 +55,4 @@ debug:
 clean:
 	rm -rf $(BUILD)/*
 
-.PHONY: all clean format
+.PHONY: all test clean
