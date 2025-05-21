@@ -340,15 +340,28 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			brick_colPtr_count = 0;
 		}
 
+		size_t brick_relative_row;  // relative to block, should have a range [0..1]
+		size_t brick_relative_col;  // relative to block, should have a range [0..3]
+
 		if (brick_row != e.row / brick_m && brick_col == e.col / brick_k) {  // Changed brick row ONLY (down)
 			brick_row = e.row / brick_m;
 
-			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_row);
+			if (block_row == 0) {  // add unlikely
+				brick_relative_row = brick_row;
+			} else {
+				brick_relative_row = brick_row - block_row * (TM / brick_m);
+			}
+			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_relative_row);
 			brick_idx++;
 			brick_colPtr_count++;
 		} else if (brick_col != e.col / brick_k && brick_row == e.row / brick_m) {  // Changed brick column ONLY
 			brick_col = e.col / brick_k;
-			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_row);
+			if (block_col == 0) {  // add unlikely
+				brick_relative_col = brick_col;
+			} else {
+				brick_relative_col = brick_col - block_col * (TK / brick_k);
+			}
+			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_relative_row);
 			brick_idx++;
 
 			brick_colPtr_idx++;
@@ -358,7 +371,18 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			brick_row = e.row / brick_m;
 			brick_col = e.col / brick_k;
 
-			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_row);
+			if (block_row == 0) {  // add unlikely
+				brick_relative_row = brick_row;
+			} else {
+				brick_relative_row = brick_row - block_row * (TM / brick_m);
+			}
+
+			if (block_col == 0) {  // add unlikely
+				brick_relative_col = brick_col;
+			} else {
+				brick_relative_col = brick_col - block_col * (TK / brick_k);
+			}
+			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_relative_row);
 			brick_idx++;
 
 			brick_colPtr_idx++;
@@ -376,9 +400,6 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		size_t e_relative_row;  // relative to brick
 		size_t e_relative_col;  // relative to brick
 
-		size_t brick_relative_row;  // relative to block, should have a range [0..1]
-		size_t brick_relative_col;  // relative to block, should have a range [0..3]
-
 		// TODO: Rearrange the if, the most common should be on the top
 		if (brick_row == 0) {  // add unlikely
 			e_relative_row = e.row;
@@ -390,18 +411,6 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			e_relative_col = e.col;
 		} else {
 			e_relative_col = e.col - brick_col * brick_k;
-		}
-
-		if (block_row == 0) {  // add unlikely
-			brick_relative_row = brick_row;
-		} else {
-			brick_relative_row = brick_row - block_row * (TM / brick_m);
-		}
-
-		if (block_col == 0) {  // add unlikely
-			brick_relative_col = brick_col;
-		} else {
-			brick_relative_col = brick_col - block_col * (TK / brick_k);
 		}
 
 		size_t e_row_major_idx = e_relative_row * brick_k + e_relative_col;
