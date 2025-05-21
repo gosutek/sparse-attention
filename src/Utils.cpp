@@ -268,7 +268,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 	size_t brick_idx = 0;
 
 	size_t brick_colPtr_count = 0;
-	size_t brick_colPtr_idx = 0;
+	size_t brick_colPtr_idx = static_cast<size_t>(-1);  // WARNING: intended overflow
 
 	// Add descriptive comments for this mess of a for loop
 	for (const COOElement& e : mtx.elements) {
@@ -307,7 +307,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			brick_colPtr_idx = 0;
 			brick_colPtr_count = 0;
 
-		} else if (block_row != e.row / TM && block_col != e.col / TK) {  // if we change both row and column of a block. Happens when we reach the right side of the matrix
+		} else if (block_row != e.row / TM && block_col != e.col / TK) {  // if we change both row and column of a block. Happens when we reach the right side of the matrix AND must enter a new block
 			block_row = e.row / TM;
 			block_col = e.col / TK;
 			if (!hrpb_ptr->size_ptr.empty()) {
@@ -320,7 +320,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 			brick_idx = 0;
 			block_idx++;
 
-			brick_colPtr_idx = 0;
+			brick_colPtr_idx = static_cast<size_t>(-1);
 			brick_colPtr_count = 0;
 		}
 
@@ -344,6 +344,9 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 
 			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_row);
 			brick_idx++;
+			brick_colPtr_idx++;
+
+			hrpb_ptr->packed_blocks[block_idx].colPtr[brick_colPtr_idx] = brick_colPtr_count;
 			brick_colPtr_count++;
 		}
 		/*
@@ -388,8 +391,9 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 		size_t e_row_major_idx = e_relative_row * brick_k + e_relative_col;
 		hrpb_ptr->packed_blocks[block_idx].patterns[brick_relative_row * (TK / brick_k) + brick_relative_col] |= static_cast<uint64_t>(1) << e_row_major_idx;
 	}
-	for (size_t i = brick_idx; i < hrpb_ptr->packed_blocks[block_idx].colPtr.size(); ++i) {
-		hrpb_ptr->packed_blocks[block_idx].colPtr[i] = brick_idx;  // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
+
+	for (size_t i = ++brick_colPtr_idx; i < hrpb_ptr->packed_blocks[block_idx].colPtr.size(); ++i) {  // any leftovers AFTER brick_colPtr_idx (where we left off) should be equal to the number of bricks
+		hrpb_ptr->packed_blocks[block_idx].colPtr[i] = brick_idx;                                     // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
 	}
 	// do the same for remaining block_row_ptr
 	hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;
