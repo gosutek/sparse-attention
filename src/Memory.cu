@@ -58,7 +58,7 @@ int main()
 {
 	// load_binary_to_host("~/projects/sparse-attention/data/scircuit.csr");
 	// print_matrix_specs("/home/godot/projects/sparse-attention/data/fv1/fv1.mtx");
-	const auto path = std::filesystem::directory_iterator("/home/godot/projects/sparse-attention/data/testing/");
+	const auto path = std::filesystem::directory_iterator("/home/godot/projects/sparse-attention/data/fv1/");
 
 	// query_device();
 	try {
