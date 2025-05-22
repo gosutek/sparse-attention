@@ -75,11 +75,30 @@ struct COOMatrix
 	std::vector<COOElement> elements;
 };
 
+struct ProcessingState
+{
+	int32_t current_row_panel = -1;
+
+	int32_t current_block_row = -1;
+	int32_t current_block_col = -1;
+
+	int32_t current_brick_row = -1;
+	int32_t current_brick_col = -1;
+
+	int32_t block_idx = -1;
+	size_t  brick_idx = 0;
+
+	size_t brick_col_ptr_idx = 0;
+
+	size_t block_row_ptr_idx = 0;
+	size_t block_row_ptr_count = 0;
+};
+
 struct Block
 {
 	// maybe leave the arrays I only write to uninitialized?
 	std::array<uint64_t, (TM / brick_m) * (TK / brick_k)> patterns{};  // cache-friendly
-	std::array<uint64_t, TK / brick_k + 1>                colPtr{};
+	std::array<uint64_t, TK / brick_k + 1>                col_ptr{};
 	std::vector<uint64_t>                                 rows{};       // unknown at compile time, paper is wrong
 	std::vector<float>                                    nnz_array{};  // unknown at compile time
 
@@ -217,11 +236,41 @@ static std::vector<__half> generate_dense(size_t size)
 	return dense_values;
 }
 
+static void initialize_new_block(HRPB* hrpb_ptr, ProcessingState& state)
+{
+	Block& block_ref = hrpb_ptr->packed_blocks.emplace_back();
+	block_ref.rows.reserve((TM / brick_m) * (TK / brick_k));  // Reserve the maximum amount possible for this block, i.e. the max number of bricks in a block
+
+	state.block_idx++;    // Block indices are relative to the array, i.e. they never zero out
+	state.brick_idx = 0;  // Brick indices are relative to the block, so this should zero out
+
+	// brick_col_ptr
+	state.brick_col_ptr_idx = 0;
+
+	// block_row_ptr
+	state.block_row_ptr_count++;  // we have entered a new block
+}
+
+static void finalize_block(HRPB* hrpb_ptr, ProcessingState& state)
+{
+	Block& block = hrpb_ptr->packed_blocks[state.block_idx];
+	for (size_t i = state.brick_col_ptr_idx; i < block.col_ptr.size(); ++i) {  // any leftovers at brick_col_ptr_idx (where we left off) should be equal to the number of bricks
+		block.col_ptr[i] = state.brick_idx;                                    // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
+	}
+	hrpb_ptr->size_ptr.push_back(block.get_block_size() + hrpb_ptr->size_ptr.back());  // This blocks starting address is that previous block's starting address plus its size in bytes
+}
+
 // TODO: Figure out how to make static
+// TODO: Handle case where mtx.rows % ROW_PANEL_SIZE != 0
+// TODO: Write unit tests
 void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& filepath)
 {
-	HRPB* hrpb_ptr = new HRPB();
-	hrpb_ptr->block_row_ptr.resize(mtx.rows / TM + 1);
+	HRPB*           hrpb_ptr = new HRPB();
+	ProcessingState state;
+
+	hrpb_ptr->block_row_ptr.resize((mtx.rows + ROW_PANEL_SIZE - 1) / ROW_PANEL_SIZE + 1);
+	hrpb_ptr->block_row_ptr[0] = 0;
+
 	std::sort(mtx.elements.begin(), mtx.elements.end(), &row_panel_sort);
 
 	uint32_t current_panel = static_cast<uint32_t>(-1);  // WARNING: intended overflow
@@ -232,6 +281,7 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
      * Iterate first by row panel then by col
      * aggregate all columns containing at least one non-zero
      */
+	// TODO: Refactor this
 	for (COOElement& e : mtx.elements) {
 		uint32_t panel_idx = e.row / ROW_PANEL_SIZE;
 		if (panel_idx != current_panel) {  // Entered a new row panel
@@ -252,176 +302,64 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 
 	std::sort(mtx.elements.begin(), mtx.elements.end(), &block_brick_sort);
 
-	uint32_t row_panel_idx = static_cast<uint32_t>(-1);  // WARNING: intended overflow
-
-	size_t block_row = static_cast<size_t>(-1);  // WARNING: intended overflow
-	size_t block_col = static_cast<size_t>(-1);  // WARNING: intended overflow
-
-	size_t block_idx = static_cast<size_t>(-1);  // WARNING: intended overflow
-
-	uint32_t block_row_ptr_count = 0;
-	uint32_t block_row_ptr_idx = 0;
-
-	size_t brick_row = static_cast<size_t>(-1);  // WARNING: intended overflow
-	size_t brick_col = static_cast<size_t>(-1);  // WARNING: intended overflow
-
-	size_t brick_idx = 0;
-
-	size_t brick_colPtr_count = 0;
-	size_t brick_colPtr_idx = static_cast<size_t>(-1);  // WARNING: intended overflow
-
-	// Add descriptive comments for this mess of a for loop
 	for (const COOElement& e : mtx.elements) {
+		const int32_t row_panel_idx = e.row / ROW_PANEL_SIZE;
+		const int32_t block_row = e.row / TM;
+		const int32_t block_col = e.col / TK;
+		const int32_t brick_row = e.row / brick_m;
+		const int32_t brick_col = e.col / brick_k;
+
 		// Entered new row panel
 		// since ROW_PANEL_SIZE multiple of TM we have also
 		// entered a new block
-		if (row_panel_idx != e.row / ROW_PANEL_SIZE) {
-			row_panel_idx = e.row / ROW_PANEL_SIZE;
 
-			hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;  // Register the blocks of the previous row_panel
-
-			block_row_ptr_idx++;
+		if (row_panel_idx != state.current_row_panel) {
+			hrpb_ptr->block_row_ptr[row_panel_idx] = hrpb_ptr->packed_blocks.size();
+			state.current_row_panel = row_panel_idx;
 		}
 
-		if (block_row != e.row / TM && block_col == e.col / TK)  // if we changed ONLY the block row
-		{
-			for (size_t i = ++brick_colPtr_idx; i < hrpb_ptr->packed_blocks[block_idx].colPtr.size(); ++i) {  // any leftovers AFTER brick_colPtr_idx (where we left off) should be equal to the number of bricks
-				hrpb_ptr->packed_blocks[block_idx].colPtr[i] = brick_idx;                                     // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
-			}
-			block_row = e.row / TM;
-			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
-			hrpb_ptr->packed_blocks[block_idx].colPtr[TK / brick_k] = brick_idx;                   // when changing blocks, the last element of the previous block's colPtr vector should be equal to the number of bricks in that block
-			hrpb_ptr->packed_blocks.emplace_back().rows.reserve((TM / brick_m) * (TK / brick_k));  // Reserve at the maximum possible size
-			block_row_ptr_count++;
-			brick_idx = 0;
-			block_idx++;
-
-			brick_colPtr_idx = 0;
-			brick_colPtr_count = 0;
-
-		} else if (block_col != e.col / TK && block_row == e.row / TM) {  // if we changed ONLY the block column
-
-			for (size_t i = ++brick_colPtr_idx; i < hrpb_ptr->packed_blocks[block_idx].colPtr.size(); ++i) {  // any leftovers AFTER brick_colPtr_idx (where we left off) should be equal to the number of bricks
-				hrpb_ptr->packed_blocks[block_idx].colPtr[i] = brick_idx;                                     // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
-			}
-
-			block_col = e.col / TK;
-			hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
-			hrpb_ptr->packed_blocks[block_idx].colPtr[TK / brick_k] = brick_idx;                   // when changing blocks, the last element of the previous block's colPtr vector should be equal to the number of bricks in that block
-			hrpb_ptr->packed_blocks.emplace_back().rows.reserve((TM / brick_m) * (TK / brick_k));  // Reserve at the maximum possible size
-			block_row_ptr_count++;
-			brick_idx = 0;
-			block_idx++;
-
-			brick_colPtr_idx = 0;
-			brick_colPtr_count = 0;
-
-		} else if (block_row != e.row / TM && block_col != e.col / TK) {  // if we change both row and column of a block. Happens when we reach the right side of the matrix AND must enter a new block
-
-			if (block_idx != static_cast<size_t>(-1)) {
-				for (size_t i = ++brick_colPtr_idx; i < hrpb_ptr->packed_blocks[block_idx].colPtr.size(); ++i) {  // any leftovers AFTER brick_colPtr_idx (where we left off) should be equal to the number of bricks
-					hrpb_ptr->packed_blocks[block_idx].colPtr[i] = brick_idx;                                     // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
-				}
-			}
-
-			block_row = e.row / TM;
-			block_col = e.col / TK;
-			if (!hrpb_ptr->size_ptr.empty()) {
-				hrpb_ptr->size_ptr.push_back(hrpb_ptr->packed_blocks[block_idx].get_block_size() + hrpb_ptr->size_ptr.back());
+		if (block_row != state.current_block_row || block_col != state.current_block_col) {
+			// Block transitions
+			if (state.block_idx > -1) {
+				finalize_block(hrpb_ptr, state);
 			} else {
-				hrpb_ptr->size_ptr.push_back(0);
+				hrpb_ptr->size_ptr.push_back(0);  // the first block starts at 0 offset
 			}
-			hrpb_ptr->packed_blocks.emplace_back().rows.reserve((TM / brick_m) * (TK / brick_k));  // Reserve at the maximum possible size
-			block_row_ptr_count++;
-			brick_idx = 0;
-			block_idx++;
 
-			brick_colPtr_idx = 0;
-			brick_colPtr_count = 0;
+			state.current_block_row = block_row;
+			state.current_block_col = block_col;
+			initialize_new_block(hrpb_ptr, state);
 		}
 
-		size_t brick_relative_row;  // relative to block, should have a range [0..1]
-		size_t brick_relative_col;  // relative to block, should have a range [0..3]
+		if (brick_row != state.current_brick_row || brick_col != state.current_brick_col) {
+			// Brick transitions
+			const int32_t rel_brick_row = brick_row - (state.current_block_row * (TM / brick_m));
+			const int32_t rel_brick_col = brick_col - (state.current_block_col * (TK / brick_k));
 
-		if (brick_row != e.row / brick_m && brick_col == e.col / brick_k) {  // Changed brick row ONLY (down)
-			brick_row = e.row / brick_m;
+			if (rel_brick_col < 0 || rel_brick_row < 0)
+				THROW_RUNTIME_ERROR("Relative row or block came back negative");
 
-			if (block_row == 0) {  // add unlikely
-				brick_relative_row = brick_row;
-			} else {
-				brick_relative_row = brick_row - block_row * (TM / brick_m);
-			}
-			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_relative_row);
-			brick_idx++;
-			brick_colPtr_count++;
-		} else if (brick_col != e.col / brick_k && brick_row == e.row / brick_m) {  // Changed brick column ONLY
-			brick_col = e.col / brick_k;
-			if (block_col == 0) {  // add unlikely
-				brick_relative_col = brick_col;
-			} else {
-				brick_relative_col = brick_col - block_col * (TK / brick_k);
-			}
-			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_relative_row);
-			brick_idx++;
+			hrpb_ptr->packed_blocks[state.block_idx].rows.push_back(rel_brick_row);
 
-			brick_colPtr_idx++;
-			brick_colPtr_count++;
-			hrpb_ptr->packed_blocks[block_idx].colPtr[brick_colPtr_idx] = brick_colPtr_count;
-		} else if (brick_row != e.row / brick_m && brick_col != e.col / brick_k) {  // Changed BOTH column and row
-			brick_row = e.row / brick_m;
-			brick_col = e.col / brick_k;
-
-			if (block_row == 0) {  // add unlikely
-				brick_relative_row = brick_row;
-			} else {
-				brick_relative_row = brick_row - block_row * (TM / brick_m);
+			if (brick_col != state.current_brick_col) {  // brick col changed
+				hrpb_ptr->packed_blocks[state.block_idx].col_ptr[state.brick_col_ptr_idx] = state.brick_idx;
+				state.brick_col_ptr_idx++;
 			}
 
-			if (block_col == 0) {  // add unlikely
-				brick_relative_col = brick_col;
-			} else {
-				brick_relative_col = brick_col - block_col * (TK / brick_k);
-			}
-			hrpb_ptr->packed_blocks[block_idx].rows.push_back(brick_relative_row);
-			brick_idx++;
-
-			brick_colPtr_idx++;
-			brick_colPtr_count++;
-			hrpb_ptr->packed_blocks[block_idx].colPtr[brick_colPtr_idx] = brick_colPtr_count;
-		}
-		/*
-         * 1. How do I store past blocks? In an std::vector<Block>
-         * 2. Maybe write them to binary
-         * while processing the next one?
-         */
-
-		hrpb_ptr->packed_blocks[block_idx].nnz_array.push_back(e.val);
-
-		size_t e_relative_row;  // relative to brick
-		size_t e_relative_col;  // relative to brick
-
-		// TODO: Rearrange the if, the most common should be on the top
-		if (brick_row == 0) {  // add unlikely
-			e_relative_row = e.row;
-		} else {
-			e_relative_row = e.row - brick_row * brick_m;
+			state.current_brick_row = brick_row;
+			state.current_brick_col = brick_col;
+			state.brick_idx++;
 		}
 
-		if (brick_col == 0) {  // add unlikely
-			e_relative_col = e.col;
-		} else {
-			e_relative_col = e.col - brick_col * brick_k;
-		}
+		const int32_t rel_elem_row = e.row % brick_m;
+		const int32_t rel_elem_col = e.col % brick_k;
+		const int32_t pattern_idx = rel_elem_row * brick_k + rel_elem_col;
+		hrpb_ptr->packed_blocks[state.block_idx].nnz_array.push_back(e.val);
 
-		size_t e_row_major_idx = e_relative_row * brick_k + e_relative_col;
-		hrpb_ptr->packed_blocks[block_idx].patterns[brick_relative_row * (TK / brick_k) + brick_relative_col] |= static_cast<uint64_t>(1) << e_row_major_idx;
+		hrpb_ptr->packed_blocks[state.block_idx].patterns[state.brick_idx - 1] |= (1ull << pattern_idx);
 	}
 
-	for (size_t i = ++brick_colPtr_idx; i < hrpb_ptr->packed_blocks[block_idx].colPtr.size(); ++i) {  // any leftovers AFTER brick_colPtr_idx (where we left off) should be equal to the number of bricks
-		hrpb_ptr->packed_blocks[block_idx].colPtr[i] = brick_idx;                                     // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
-	}
-	// do the same for remaining block_row_ptr
-	hrpb_ptr->block_row_ptr[block_row_ptr_idx] = block_row_ptr_count;
+	finalize_block(hrpb_ptr, state);  // final block
 	delete hrpb_ptr;
 }
 
