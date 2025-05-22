@@ -27,7 +27,6 @@
 #define ALIGNMENT 128
 #define ROW_PANEL_SIZE 32  // I think this should be the same as TM
 
-// bogus
 #define TM 32
 #define TK 16
 #define brick_m 16
@@ -167,7 +166,7 @@ static void write_binary_aligned(std::ofstream& file, const void* data, size_t s
 	file.write(zeros.data(), static_cast<std::streamsize>(padding));
 }
 
-static COOMatrix read_mtx(const std::filesystem::path& filepath)
+COOMatrix read_mtx(const std::filesystem::path& filepath)
 {
 	FILE* f = fopen(filepath.c_str(), "r");
 	if (!f)
@@ -193,8 +192,6 @@ static COOMatrix read_mtx(const std::filesystem::path& filepath)
 	std::vector<COOElement> elements;
 	elements.reserve(static_cast<size_t>(nnz));
 
-	std::cout << "Reading COO..." << std::flush;
-
 	for (int i = 0; i < nnz; ++i) {
 		COOElement e;
 		if (fscanf(f, "%u %u %f\n", &e.row, &e.col, &e.val) != 3) {
@@ -205,8 +202,6 @@ static COOMatrix read_mtx(const std::filesystem::path& filepath)
 		e.col--;
 		elements.push_back(e);
 	}
-	std::cout << "Done!\n";
-
 	fclose(f);
 	return { static_cast<uint32_t>(rows), static_cast<uint32_t>(cols), static_cast<uint32_t>(nnz), std::move(elements) };
 }
@@ -263,7 +258,7 @@ static void finalize_block(HRPB* hrpb_ptr, ProcessingState& state)
 // TODO: Figure out how to make static
 // TODO: Handle case where mtx.rows % ROW_PANEL_SIZE != 0
 // TODO: Write unit tests
-void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& filepath)
+HRPB* write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& filepath)
 {
 	HRPB*           hrpb_ptr = new HRPB();
 	ProcessingState state;
@@ -360,7 +355,8 @@ void write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& fi
 	}
 
 	finalize_block(hrpb_ptr, state);  // final block
-	delete hrpb_ptr;
+	return hrpb_ptr;
+	// delete hrpb_ptr;
 }
 
 /*
