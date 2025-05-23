@@ -34,7 +34,7 @@
 
 	printf("rows: %d\n", header_ptr->rows);
 	printf("cols: %d\n", header_ptr->cols);
-	printf("nnz: %ld\n", header_ptr->nnz);
+	printf("nnz: %u\n", header_ptr->nnz);
 
 	// WARNING: This should only happen once every
 	// matrix needed is loaded into device memory

@@ -170,11 +170,11 @@ static void initialize_new_block(HRPB* hrpb_ptr, ProcessingState& state)
 
 static void finalize_block(HRPB* hrpb_ptr, ProcessingState& state)
 {
-	Block& block = hrpb_ptr->packed_blocks[state.block_idx];
+	Block& block = hrpb_ptr->packed_blocks[static_cast<size_t>(state.block_idx)];
 	for (size_t i = state.brick_col_ptr_idx; i < block.col_ptr.size(); ++i) {  // any leftovers at brick_col_ptr_idx (where we left off) should be equal to the number of bricks
 		block.col_ptr[i] = state.brick_idx;                                    // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
 	}
-	hrpb_ptr->size_ptr.push_back(block.get_block_size() + hrpb_ptr->size_ptr.back());  // This blocks starting address is that previous block's starting address plus its size in bytes
+	hrpb_ptr->block_row_ptr.back() = hrpb_ptr->packed_blocks.size();
 }
 
 // TODO: Figure out how to make static
@@ -182,7 +182,7 @@ static void finalize_block(HRPB* hrpb_ptr, ProcessingState& state)
 // TODO: Write unit tests
 HRPB* write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& filepath)
 {
-	HRPB*           hrpb_ptr = new HRPB();
+	HRPB*           hrpb_ptr = new HRPB();  // NOTE: maybe don't allocate this on the heap?
 	ProcessingState state;
 
 	hrpb_ptr->block_row_ptr.resize((mtx.rows + ROW_PANEL_SIZE - 1) / ROW_PANEL_SIZE + 1);
@@ -349,7 +349,7 @@ static bool requires_conversion(const std::filesystem::path& path)
  * Will iterate over all data/ *.mtx matrices
  * and convert them to .bcsr format
  */
-void convert(const std::filesystem::directory_iterator& target_dir, void (*conversion_func_ptr)(COOMatrix& mtx, const std::filesystem::path& filepath))
+void convert(const std::filesystem::directory_iterator& target_dir, HRPB* (*conversion_func_ptr)(COOMatrix& mtx, const std::filesystem::path& filepath))
 {
 	for (const auto& filepath : std::filesystem::directory_iterator(target_dir)) {
 		if (filepath.is_regular_file() && requires_conversion(filepath.path())) {
