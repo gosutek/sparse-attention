@@ -63,16 +63,29 @@ std::ostream& operator<<(std::ostream& out_stream, const std::array<T, N>& arr)
 }
 
 // TODO: Review structs
-struct MatrixHeader
+struct CSRMatrixHeader
 {
-	uint32_t rows;
-	uint32_t cols;
-	uint32_t nnz;
+	uint32_t rows{};
+	uint32_t cols{};
+	uint32_t nnz{};
 
-	size_t row_ptr_bytes;
-	size_t col_idx_bytes;
-	size_t val_bytes;
-	size_t dense_bytes;
+	size_t row_ptr_bytes{};
+	size_t col_idx_bytes{};
+	size_t val_bytes{};
+	size_t dense_bytes{};
+};
+
+struct HRPBMatrixHeader
+{
+	uint32_t rows{};
+	uint32_t cols{};
+	uint32_t nnz{};
+
+	size_t packed_blocks_size{};
+	size_t block_row_ptr_size{};
+	size_t active_cols_size{};
+	size_t size_ptr_size{};
+	size_t dense_bytes{};
 };
 
 struct COOElement
@@ -151,8 +164,8 @@ struct HRPB
 };
 
 // TODO: Write description
-void      print_matrix_specs(const std::filesystem::path& filepath);
-void      write_csr(COOMatrix& mtx, const std::filesystem::path& filepath);
-COOMatrix read_mtx(const std::filesystem::path& filepath);
+void                  print_matrix_specs(const std::filesystem::path& filepath);
 std::shared_ptr<HRPB> write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath);
+void                  write_csr(COOMatrix& mtx, const std::filesystem::path& filepath);
 void                  convert(const std::filesystem::directory_iterator& target_dir, std::shared_ptr<HRPB> (*conversion_func_ptr)(COOMatrix& mtx, const std::filesystem::path& filepath), const char* ext);
+COOMatrix             read_mtx(const std::filesystem::path& filepath);

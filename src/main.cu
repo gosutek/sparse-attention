@@ -30,7 +30,7 @@
 	fread(host_ptr, filesize, 1, file);
 	fclose(file);
 
-	MatrixHeader* header_ptr = reinterpret_cast<MatrixHeader*>(host_ptr);
+	CSRMatrixHeader* header_ptr = reinterpret_cast<CSRMatrixHeader*>(host_ptr);
 
 	printf("rows: %d\n", header_ptr->rows);
 	printf("cols: %d\n", header_ptr->cols);
@@ -62,7 +62,7 @@ int main()
 
 	// query_device();
 	try {
-		convert(path, &write_hrpb);
+		convert(path, &write_hrpb, ".hrpb");
 	} catch (const std::exception& e) {
 		std::cerr << "Exception: " << e.what() << "\n";
 	}

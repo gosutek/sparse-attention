@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <numeric>
 #include <ostream>
 #include <random>
@@ -78,10 +79,10 @@ static bool row_panel_sort(const COOElement& a, const COOElement& b)
 }
 
 // TODO: Parallelize?
-static void write_binary_aligned(const std::filesystem::path& filepath, const void* data, size_t size, size_t alignment)
+static void write_binary_aligned(const std::filesystem::path& filepath, const void* data, size_t size, size_t alignment, const char* ext)
 {
 	// NOTE: trunc flag should be redundant
-	std::ofstream file(filepath.parent_path() / filepath.filename().replace_extension(".csr"), std::ios::binary | std::ios::trunc);
+	std::ofstream file(filepath.parent_path() / filepath.filename().replace_extension(ext), std::ios::binary | std::ios::trunc);
 	file.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
 
 	// TODO: Review arithmetic
@@ -294,6 +295,28 @@ std::shared_ptr<HRPB> write_hrpb(COOMatrix& mtx, const std::filesystem::path& fi
 	}
 
 	finalize_last_block(hrpb_ptr, state);  // final block
+
+	std::vector<__half> dense = generate_dense(static_cast<size_t>(mtx.rows * mtx.cols));
+
+	HRPBMatrixHeader header = {
+		mtx.rows,
+		mtx.cols,
+		mtx.nnz,
+		hrpb_ptr->packed_blocks.size() * sizeof(Block),
+		hrpb_ptr->block_row_ptr.size() * sizeof(uint32_t),
+		hrpb_ptr->active_cols.size() * sizeof(uint32_t),
+		hrpb_ptr->size_ptr.size() * sizeof(uint32_t),
+		(static_cast<size_t>(mtx.rows * mtx.cols)) * sizeof(__half)
+
+	};
+
+	// TODO: instead of calling x times, maybe I can PACK and SHIP
+	write_binary_aligned(filepath, &header, sizeof(header), ALIGNMENT, ".hrpb");
+	write_binary_aligned(filepath, hrpb_ptr->block_row_ptr.data(), header.block_row_ptr_size, ALIGNMENT, ".hrpb");
+	write_binary_aligned(filepath, hrpb_ptr->active_cols.data(), header.active_cols_size, ALIGNMENT, ".hrpb");
+	write_binary_aligned(filepath, hrpb_ptr->size_ptr.data(), header.size_ptr_size, ALIGNMENT, ".hrpb");
+	write_binary_aligned(filepath, hrpb_ptr->packed_blocks.data(), header.packed_blocks_size, ALIGNMENT, ".hrpb");
+	write_binary_aligned(filepath, dense.data(), header.dense_bytes, ALIGNMENT, ".hrpb");
 	return hrpb_ptr;
 	// delete hrpb_ptr;
 }
@@ -335,11 +358,11 @@ void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
 		(static_cast<size_t>(mtx.rows * mtx.cols)) * sizeof(__half)
 	};
 
-	write_binary_aligned(filepath, &header, sizeof(header), ALIGNMENT);
-	write_binary_aligned(filepath, row_ptr.data(), header.row_ptr_bytes, ALIGNMENT);
-	write_binary_aligned(filepath, col_idx.data(), header.col_idx_bytes, ALIGNMENT);
-	write_binary_aligned(filepath, val.data(), header.val_bytes, ALIGNMENT);
-	write_binary_aligned(filepath, dense.data(), header.dense_bytes, ALIGNMENT);
+	write_binary_aligned(filepath, &header, sizeof(header), ALIGNMENT, ".csr");
+	write_binary_aligned(filepath, row_ptr.data(), header.row_ptr_bytes, ALIGNMENT, ".csr");
+	write_binary_aligned(filepath, col_idx.data(), header.col_idx_bytes, ALIGNMENT, ".csr");
+	write_binary_aligned(filepath, val.data(), header.val_bytes, ALIGNMENT, ".csr");
+	write_binary_aligned(filepath, dense.data(), header.dense_bytes, ALIGNMENT, ".csr");
 
 	return;
 }
@@ -349,12 +372,12 @@ void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
  * and
  * if the same filename exists as a .csr
  */
-static bool requires_conversion(const std::filesystem::path& path)
+static bool requires_conversion(const std::filesystem::path& path, const char* ext)
 {
 	// TODO: Add a check for .bsr when it's implemented
 	// Add a check for KBSR when it's implemented
 	return path.extension().string() == ".mtx" &&
-	       !(std::filesystem::exists(path.parent_path() / path.filename().replace_extension(".csr")));
+	       !(std::filesystem::exists(path.parent_path() / path.filename().replace_extension(ext)));
 }
 
 /*
@@ -365,7 +388,7 @@ static bool requires_conversion(const std::filesystem::path& path)
 void convert(const std::filesystem::directory_iterator& target_dir, std::shared_ptr<HRPB> (*conversion_func_ptr)(COOMatrix& mtx, const std::filesystem::path& filepath), const char* ext)
 {
 	for (const auto& filepath : std::filesystem::directory_iterator(target_dir)) {
-		if (filepath.is_regular_file() && requires_conversion(filepath.path())) {
+		if (filepath.is_regular_file() && requires_conversion(filepath.path(), ext)) {
 			COOMatrix coo_matrix = read_mtx(filepath.path());
 			conversion_func_ptr(coo_matrix, filepath.path());
 		}
