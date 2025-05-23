@@ -1,4 +1,4 @@
 data/
 build/
-testing/
+test/test_cases/
 valgrind*
