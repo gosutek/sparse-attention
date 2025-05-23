@@ -1,17 +1,12 @@
 #include <algorithm>
-#include <array>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <numeric>
 #include <ostream>
 #include <random>
-#include <stdexcept>
 #include <string>
 #include <utility>
-#include <vector>
 
-#include "cuda_fp16.h"
 #include "mmio.h"
 // __float2half(const float a)
 // __float2half_rd(const float a) ~ round down
@@ -21,58 +16,7 @@
 //
 // __half2float
 
-#define LIKELY(x) __builtin_expect(!!(x), 1)
-
-#define DATA_DIRECTORY "data/"
-#define ALIGNMENT 128
-#define ROW_PANEL_SIZE 32  // I think this should be the same as TM
-
-#define TM 32
-#define TK 16
-#define brick_m 16
-#define brick_k 4
-
-/*
- * C = A*B
- * MxNxK
- * where 
- * A is MxK
- * B is KxN
- * C is MxN
- */
-
-#ifndef BSR_BLOCK_SIZE
-#	define BSR_BLOCK_SIZE 2
-#endif
-
-#define THROW_RUNTIME_ERROR(message) throw std::runtime_error(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " - " + message)
-
-// TODO: Review structs
-struct MatrixHeader
-{
-	uint32_t rows;
-	uint32_t cols;
-	uint32_t nnz;
-
-	size_t row_ptr_bytes;
-	size_t col_idx_bytes;
-	size_t val_bytes;
-	size_t dense_bytes;
-};
-
-struct COOElement
-{
-	uint32_t row, col;
-
-	float val;
-};
-
-struct COOMatrix
-{
-	uint32_t rows, cols, nnz;
-
-	std::vector<COOElement> elements;
-};
+#include "Utils.h"
 
 struct ProcessingState
 {
@@ -91,28 +35,6 @@ struct ProcessingState
 
 	size_t block_row_ptr_idx = 0;
 	size_t block_row_ptr_count = 0;
-};
-
-struct Block
-{
-	// maybe leave the arrays I only write to uninitialized?
-	std::array<uint64_t, (TM / brick_m) * (TK / brick_k)> patterns{};  // cache-friendly
-	std::array<uint64_t, TK / brick_k + 1>                col_ptr{};
-	std::vector<uint64_t>                                 rows{};       // unknown at compile time, paper is wrong
-	std::vector<float>                                    nnz_array{};  // unknown at compile time
-
-	uint32_t get_block_size()
-	{
-		return static_cast<uint32_t>(sizeof(Block) + nnz_array.size() * sizeof(float));
-	}
-};
-
-struct HRPB
-{
-	std::vector<uint32_t> block_row_ptr{};
-	std::vector<uint32_t> active_cols{};
-	std::vector<uint32_t> size_ptr{};
-	std::vector<Block>    packed_blocks{};  // What happens if this has to resize? Do all above elements get moves aswell?
 };
 
 static bool block_brick_sort(const COOElement& a, const COOElement& b)
