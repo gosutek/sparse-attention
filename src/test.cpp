@@ -45,7 +45,7 @@ static ReadExpectedOutput read_expected(const std::filesystem::path& expected_fi
 		block.nnz_array = i_block["nnz_array"].get<std::vector<float>>();
 		block.col_ptr = i_block["col_ptr"].get<std::array<uint64_t, 5>>();
 		block.rows = i_block["rows"].get<std::vector<uint64_t>>();
-		hrpb.packed_blocks.push_back(block);
+		hrpb.packed_blocks.push_back(std::move(block));
 	}
 
 	return { no_blocks, hrpb };
@@ -62,16 +62,14 @@ static void unit_test_hrpb(const std::filesystem::directory_iterator& test_filep
 			}
 
 			std::cout << "Testing for file: " << file.path() << "\n";
-			COOMatrix          mtx = read_mtx(file.path());
-			HRPB*              hrpb_ptr = write_hrpb(mtx, file.path());
-			ReadExpectedOutput expected = read_expected(expected_file);
+			COOMatrix             mtx = read_mtx(file.path());
+			std::shared_ptr<HRPB> hrpb_ptr = write_hrpb(mtx, file.path());
+			ReadExpectedOutput    expected = read_expected(expected_file);
 
 			ASSERT_EQ(expected.no_blocks, hrpb_ptr->packed_blocks.size(), "Block size mismatch");
 			ASSERT_EQ(expected.hrpb, *hrpb_ptr, "Structs are different");
 
 			printf("Test successful\n");
-
-			delete hrpb_ptr;
 		}
 	}
 }

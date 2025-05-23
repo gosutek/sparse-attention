@@ -89,6 +89,7 @@ struct COOMatrix
 	std::vector<COOElement> elements;
 };
 
+// TODO: This need to be converted to __half
 struct Block
 {
 	// maybe leave the arrays I only write to uninitialized?
@@ -127,7 +128,7 @@ struct HRPB
 	std::vector<uint32_t> block_row_ptr{};
 	std::vector<uint32_t> active_cols{};
 	std::vector<uint32_t> size_ptr{};
-	std::vector<Block>    packed_blocks{};  // What happens if this has to resize? Do all above elements get moves aswell?
+	std::vector<Block>    packed_blocks{};
 
 	bool operator==(const HRPB& other) const
 	{
@@ -151,7 +152,7 @@ struct HRPB
 
 // TODO: Write description
 void      print_matrix_specs(const std::filesystem::path& filepath);
-HRPB*     write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath);
 void      write_csr(COOMatrix& mtx, const std::filesystem::path& filepath);
-void      convert(const std::filesystem::directory_iterator& target_dir, HRPB* (*conversion_func_ptr)(COOMatrix& mtx, const std::filesystem::path& filepath));
 COOMatrix read_mtx(const std::filesystem::path& filepath);
+std::shared_ptr<HRPB> write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath);
+void                  convert(const std::filesystem::directory_iterator& target_dir, std::shared_ptr<HRPB> (*conversion_func_ptr)(COOMatrix& mtx, const std::filesystem::path& filepath), const char* ext);

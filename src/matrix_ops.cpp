@@ -156,7 +156,7 @@ static std::vector<__half> generate_dense(size_t size)
 	return dense_values;
 }
 
-static void initialize_new_block(HRPB* hrpb_ptr, ProcessingState& state)
+static void initialize_new_block(std::shared_ptr<HRPB> hrpb_ptr, ProcessingState& state)
 {
 	Block& block_ref = hrpb_ptr->packed_blocks.emplace_back();
 	block_ref.rows.reserve((TM / brick_m) * (TK / brick_k));  // Reserve the maximum amount possible for this block, i.e. the max number of bricks in a block
@@ -171,7 +171,7 @@ static void initialize_new_block(HRPB* hrpb_ptr, ProcessingState& state)
 	state.block_row_ptr_count++;  // we have entered a new block
 }
 
-static void finalize_block(HRPB* hrpb_ptr, ProcessingState& state)
+static void finalize_block(std::shared_ptr<HRPB> hrpb_ptr, ProcessingState& state)
 {
 	Block& block = hrpb_ptr->packed_blocks[static_cast<size_t>(state.block_idx)];
 	if (state.brick_col_ptr_idx == 0)
@@ -184,7 +184,7 @@ static void finalize_block(HRPB* hrpb_ptr, ProcessingState& state)
 }
 
 // TODO: Merge this and above
-static void finalize_last_block(HRPB* hrpb_ptr, ProcessingState& state)
+static void finalize_last_block(std::shared_ptr<HRPB> hrpb_ptr, ProcessingState& state)
 {
 	Block& block = hrpb_ptr->packed_blocks[static_cast<size_t>(state.block_idx)];
 	if (state.brick_col_ptr_idx == 0)
@@ -195,13 +195,12 @@ static void finalize_last_block(HRPB* hrpb_ptr, ProcessingState& state)
 	hrpb_ptr->block_row_ptr.back() = hrpb_ptr->packed_blocks.size();
 }
 
-// TODO: Figure out how to make static
+// TODO: Should be static
 // TODO: Handle case where mtx.rows % ROW_PANEL_SIZE != 0
-// TODO: Write unit tests
-HRPB* write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& filepath)
+std::shared_ptr<HRPB> write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
 {
-	HRPB*           hrpb_ptr = new HRPB();  // NOTE: maybe don't allocate this on the heap?
-	ProcessingState state;
+	std::shared_ptr<HRPB> hrpb_ptr = std::make_shared<HRPB>();  // NOTE: maybe don't allocate this on the heap?
+	ProcessingState       state;
 
 	hrpb_ptr->block_row_ptr.resize((mtx.rows + ROW_PANEL_SIZE - 1) / ROW_PANEL_SIZE + 1);
 	hrpb_ptr->block_row_ptr[0] = 0;
@@ -361,8 +360,9 @@ static bool requires_conversion(const std::filesystem::path& path)
 /*
  * Will iterate over all data/ *.mtx matrices
  * and convert them to .bcsr format
+ * WARNING: this func is utter garbagio
  */
-void convert(const std::filesystem::directory_iterator& target_dir, HRPB* (*conversion_func_ptr)(COOMatrix& mtx, const std::filesystem::path& filepath))
+void convert(const std::filesystem::directory_iterator& target_dir, std::shared_ptr<HRPB> (*conversion_func_ptr)(COOMatrix& mtx, const std::filesystem::path& filepath), const char* ext)
 {
 	for (const auto& filepath : std::filesystem::directory_iterator(target_dir)) {
 		if (filepath.is_regular_file() && requires_conversion(filepath.path())) {
