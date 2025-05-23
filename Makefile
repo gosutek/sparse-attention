@@ -7,15 +7,15 @@ OPT:= -O0
 BUILD_DIR:=build
 
 SRC_DIR:=src
-TEST_DIR:=testing
+TEST_DIR:=test
 
-SOURCES:=$(wildcard src/*.cpp) $(wildcard src/*.c) $(wildcard src/*.cu)
-TEST_SOURCES:=$(wildcard src/*.cpp) $(wildcard src/*.c) $(wildcard testing/*.cpp)
+SOURCES:=$(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/*.cu)
+TEST_SOURCES:=$(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(SRC_DIR)/*.c) $(wildcard $(TEST_DIR)/*.cpp)
 
-OBJECTS:=$(SOURCES:src/%=$(BUILD_DIR)/%.o)
-FILT:=$(filter src/%, $(TEST_SOURCES))
-TEST_FILT:=$(filter testing/%, $(TEST_SOURCES))
-TEST_OBJECTS:=$(FILT:src/%=$(BUILD_DIR)/%.o) $(TEST_FILT:testing/%=$(BUILD_DIR)/%.o)
+OBJECTS:=$(SOURCES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
+FILT:=$(filter $(SRC_DIR)/%, $(TEST_SOURCES))
+TEST_FILT:=$(filter $(TEST_DIR)/%, $(TEST_SOURCES))
+TEST_OBJECTS:=$(FILT:$(SRC_DIR)/%=$(BUILD_DIR)/%.o) $(TEST_FILT:$(TEST_DIR)/%=$(BUILD_DIR)/%.o)
 
 CFLAGS=-g $(ERROR_FLAGS) $(OPT)
 CFLAGS+=-fopenmp -mf16c -mavx2 -mfma
@@ -52,7 +52,7 @@ $(BUILD_DIR)/cute_bounds_checking: $(OBJECTS)
 	@mkdir -p $(@D)
 	$(NVCC) $(OBJECTS) -o $@
 
-$(BUILD_DIR)/testing.cpp.o: $(TEST_DIR)/testing.cpp
+$(BUILD_DIR)/test.cpp.o: $(TEST_DIR)/test.cpp
 	@mkdir -p $(@D)
 	$(NVCC) $< $(CUFLAGS) -c -o $@
 
