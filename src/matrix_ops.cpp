@@ -78,14 +78,17 @@ static bool row_panel_sort(const COOElement& a, const COOElement& b)
 }
 
 // TODO: Parallelize?
-static void write_binary_aligned(std::ofstream& file, const void* data, size_t size, size_t alignment)
+static void write_binary_aligned(const std::filesystem::path& filepath, const void* data, size_t size, size_t alignment)
 {
+	// NOTE: trunc flag should be redundant
+	std::ofstream file(filepath.parent_path() / filepath.filename().replace_extension(".csr"), std::ios::binary | std::ios::trunc);
 	file.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
 
 	// TODO: Review arithmetic
 	size_t            padding = (alignment - (size % alignment)) % alignment;
 	std::vector<char> zeros(padding, 0);
 	file.write(zeros.data(), static_cast<std::streamsize>(padding));
+	file.close();
 }
 
 COOMatrix read_mtx(const std::filesystem::path& filepath)
@@ -323,10 +326,7 @@ void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
 
 	std::vector<__half> dense = generate_dense(static_cast<size_t>(mtx.rows * mtx.cols));
 
-	// NOTE: trunc flag should be redundant
-	std::ofstream file(filepath.parent_path() / filepath.filename().replace_extension(".csr"), std::ios::binary | std::ios::trunc);
-
-	MatrixHeader header = {
+	CSRMatrixHeader header = {
 		mtx.rows,
 		mtx.cols,
 		mtx.nnz,
@@ -336,13 +336,11 @@ void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
 		(static_cast<size_t>(mtx.rows * mtx.cols)) * sizeof(__half)
 	};
 
-	write_binary_aligned(file, &header, sizeof(header), ALIGNMENT);
-	write_binary_aligned(file, row_ptr.data(), header.row_ptr_bytes, ALIGNMENT);
-	write_binary_aligned(file, col_idx.data(), header.col_idx_bytes, ALIGNMENT);
-	write_binary_aligned(file, val.data(), header.val_bytes, ALIGNMENT);
-	write_binary_aligned(file, dense.data(), header.dense_bytes, ALIGNMENT);
-
-	file.close();
+	write_binary_aligned(filepath, &header, sizeof(header), ALIGNMENT);
+	write_binary_aligned(filepath, row_ptr.data(), header.row_ptr_bytes, ALIGNMENT);
+	write_binary_aligned(filepath, col_idx.data(), header.col_idx_bytes, ALIGNMENT);
+	write_binary_aligned(filepath, val.data(), header.val_bytes, ALIGNMENT);
+	write_binary_aligned(filepath, dense.data(), header.dense_bytes, ALIGNMENT);
 
 	return;
 }
