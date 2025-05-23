@@ -8,8 +8,6 @@
 
 #include "cuda_fp16.h"
 
-#define LIKELY(x) __builtin_expect(!!(x), 1)
-
 #define DATA_DIRECTORY "data/"
 #define ALIGNMENT 128
 #define ROW_PANEL_SIZE 32  // I think this should be the same as TM
@@ -27,10 +25,6 @@
  * B is KxN
  * C is MxN
  */
-
-#ifndef BSR_BLOCK_SIZE
-#	define BSR_BLOCK_SIZE 2
-#endif
 
 #define THROW_RUNTIME_ERROR(message) throw std::runtime_error(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " - " + message)
 

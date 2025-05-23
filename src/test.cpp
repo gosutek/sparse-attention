@@ -7,8 +7,6 @@
 
 #include "matrix_ops.h"
 
-#define THROW_RUNTIME_ERROR(message) throw std::runtime_error(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " - " + message)
-
 #define ASSERT_EQ(expected, actual, message)                           \
 	do {                                                               \
 		if (!((expected) == (actual))) {                               \

@@ -257,7 +257,7 @@ std::shared_ptr<HRPB> write_hrpb(COOMatrix& mtx, const std::filesystem::path& fi
 			// Block transitions
 			if (state.block_idx > -1) {
 				finalize_block(hrpb_ptr, state);
-			} else {
+			} else [[unlikely]] {
 				hrpb_ptr->size_ptr.push_back(0);  // the first block starts at 0 offset
 			}
 
@@ -306,7 +306,7 @@ std::shared_ptr<HRPB> write_hrpb(COOMatrix& mtx, const std::filesystem::path& fi
 		hrpb_ptr->block_row_ptr.size() * sizeof(uint32_t),
 		hrpb_ptr->active_cols.size() * sizeof(uint32_t),
 		hrpb_ptr->size_ptr.size() * sizeof(uint32_t),
-		(static_cast<size_t>(mtx.rows * mtx.cols)) * sizeof(__half)
+		static_cast<size_t>(mtx.rows * mtx.cols) * sizeof(__half)
 
 	};
 
@@ -355,7 +355,7 @@ void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
 		row_ptr.size() * sizeof(int),
 		col_idx.size() * sizeof(int),
 		val.size() * sizeof(int),
-		(static_cast<size_t>(mtx.rows * mtx.cols)) * sizeof(__half)
+		static_cast<size_t>(mtx.rows * mtx.cols) * sizeof(__half)
 	};
 
 	write_binary_aligned(filepath, &header, sizeof(header), ALIGNMENT, ".csr");
