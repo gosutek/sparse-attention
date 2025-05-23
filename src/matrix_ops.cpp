@@ -7,7 +7,7 @@
 #include <string>
 #include <utility>
 
-#include "mmio.h"
+#include "../extern/mmio.h"
 // __float2half(const float a)
 // __float2half_rd(const float a) ~ round down
 // __float2half_rn(const float a) ~ round nearest
@@ -16,7 +16,7 @@
 //
 // __half2float
 
-#include "Utils.h"
+#include "matrix_ops.h"
 
 struct ProcessingState
 {

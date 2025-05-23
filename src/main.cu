@@ -5,7 +5,7 @@
 
 #include "mma.h"
 
-#include "Utils.h"
+#include "matrix_ops.h"
 
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \

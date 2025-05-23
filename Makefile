@@ -7,15 +7,13 @@ OPT:= -O0
 BUILD_DIR:=build
 
 SRC_DIR:=src
-TEST_DIR:=test
+EXT_DIR:=extern
 
-SOURCES:=$(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/*.cu)
-TEST_SOURCES:=$(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(SRC_DIR)/*.c) $(wildcard $(TEST_DIR)/*.cpp)
+SOURCES:=$(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(EXT_DIR)/*.c) $(wildcard $(SRC_DIR)/*.cu)
+TEST_SOURCES:=$(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(EXT_DIR)/*.c)
 
 OBJECTS:=$(SOURCES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
-FILT:=$(filter $(SRC_DIR)/%, $(TEST_SOURCES))
-TEST_FILT:=$(filter $(TEST_DIR)/%, $(TEST_SOURCES))
-TEST_OBJECTS:=$(FILT:$(SRC_DIR)/%=$(BUILD_DIR)/%.o) $(TEST_FILT:$(TEST_DIR)/%=$(BUILD_DIR)/%.o)
+TEST_OBJECTS:=$(patsubst $(SRC_DIR)/%,$(BUILD_DIR)/%.o,$(patsubst $(EXT_DIR)/%,$(BUILD_DIR)/%.o,$(TEST_SOURCES)))
 
 CFLAGS=-g $(ERROR_FLAGS) $(OPT)
 CFLAGS+=-fopenmp -mf16c -mavx2 -mfma

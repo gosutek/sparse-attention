@@ -1,4 +1,5 @@
-data/
 build/
-test/test_cases/
+data/
+extern/
+test/
 valgrind*

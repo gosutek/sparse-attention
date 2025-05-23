@@ -3,9 +3,9 @@
 #include <fstream>
 #include <iostream>
 
-#include "./include/json.hpp"
+#include "../extern/json.hpp"
 
-#include "../src/Utils.h"
+#include "matrix_ops.h"
 
 #define THROW_RUNTIME_ERROR(message) throw std::runtime_error(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " - " + message)
 
