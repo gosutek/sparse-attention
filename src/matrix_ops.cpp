@@ -171,6 +171,21 @@ static void initialize_new_block(HRPB* hrpb_ptr, ProcessingState& state)
 static void finalize_block(HRPB* hrpb_ptr, ProcessingState& state)
 {
 	Block& block = hrpb_ptr->packed_blocks[static_cast<size_t>(state.block_idx)];
+	if (state.brick_col_ptr_idx == 0)
+		state.brick_col_ptr_idx++;
+	for (size_t i = state.brick_col_ptr_idx; i < block.col_ptr.size(); ++i) {  // any leftovers at brick_col_ptr_idx (where we left off) should be equal to the number of bricks
+		block.col_ptr[i] = state.brick_idx;                                    // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
+	}
+	hrpb_ptr->block_row_ptr.back() = hrpb_ptr->packed_blocks.size();
+	hrpb_ptr->size_ptr.push_back(block.get_block_size() + hrpb_ptr->size_ptr.back());  // This blocks starting address is that previous block's starting address plus its size in bytes
+}
+
+// TODO: Merge this and above
+static void finalize_last_block(HRPB* hrpb_ptr, ProcessingState& state)
+{
+	Block& block = hrpb_ptr->packed_blocks[static_cast<size_t>(state.block_idx)];
+	if (state.brick_col_ptr_idx == 0)
+		state.brick_col_ptr_idx++;
 	for (size_t i = state.brick_col_ptr_idx; i < block.col_ptr.size(); ++i) {  // any leftovers at brick_col_ptr_idx (where we left off) should be equal to the number of bricks
 		block.col_ptr[i] = state.brick_idx;                                    // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
 	}
@@ -276,7 +291,7 @@ HRPB* write_hrpb(COOMatrix& mtx, [[maybe_unused]] const std::filesystem::path& f
 		hrpb_ptr->packed_blocks[state.block_idx].patterns[state.brick_idx - 1] |= (1ull << pattern_idx);
 	}
 
-	finalize_block(hrpb_ptr, state);  // final block
+	finalize_last_block(hrpb_ptr, state);  // final block
 	return hrpb_ptr;
 	// delete hrpb_ptr;
 }

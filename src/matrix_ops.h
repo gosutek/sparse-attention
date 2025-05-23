@@ -112,7 +112,7 @@ struct Block
 
 	friend std::ostream& operator<<(std::ostream& out_stream, const Block& block)
 	{
-		out_stream << "Block:\n\t"
+		out_stream << "\nBlock:\n\t"
 				   << "patterns: " << block.patterns << "\n\t"
 				   << "col_ptr: " << block.col_ptr << "\n\t"
 				   << "rows: " << block.rows << "\n\t"

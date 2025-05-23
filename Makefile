@@ -12,7 +12,8 @@ EXT_DIR:=extern
 SOURCES:=$(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(EXT_DIR)/*.c) $(wildcard $(SRC_DIR)/*.cu)
 TEST_SOURCES:=$(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(EXT_DIR)/*.c)
 
-OBJECTS:=$(SOURCES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
+SOURCES_FILT = $(filter-out $(SRC_DIR)/test.cpp, $(SOURCES))
+OBJECTS:=$(SOURCES_FILT:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
 TEST_OBJECTS:=$(patsubst $(SRC_DIR)/%,$(BUILD_DIR)/%.o,$(patsubst $(EXT_DIR)/%,$(BUILD_DIR)/%.o,$(TEST_SOURCES)))
 
 CFLAGS=-g $(ERROR_FLAGS) $(OPT)
@@ -50,7 +51,7 @@ $(BUILD_DIR)/cute_bounds_checking: $(OBJECTS)
 	@mkdir -p $(@D)
 	$(NVCC) $(OBJECTS) -o $@
 
-$(BUILD_DIR)/test.cpp.o: $(TEST_DIR)/test.cpp
+$(BUILD_DIR)/test.cpp.o: $(SRC_DIR)/test.cpp
 	@mkdir -p $(@D)
 	$(NVCC) $< $(CUFLAGS) -c -o $@
 
@@ -62,7 +63,7 @@ $(BUILD_DIR)/%.cu.o: $(SRC_DIR)/%.cu
 	@mkdir -p $(@D)
 	$(NVCC) $<  $(CUFLAGS) -c -o $@
 
-$(BUILD_DIR)/%.c.o: $(SRC_DIR)/%.c
+$(BUILD_DIR)/%.c.o: $(EXT_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) $< $(filter-out -Werror, $(CFLAGS)) -c -o $@
 

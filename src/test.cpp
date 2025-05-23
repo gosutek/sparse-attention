@@ -78,7 +78,7 @@ static void unit_test_hrpb(const std::filesystem::directory_iterator& test_filep
 
 int main()
 {
-	const auto testing_path = std::filesystem::current_path() / "test/test_cases/";
+	const auto testing_path = std::filesystem::current_path() / "test/";
 	unit_test_hrpb(std::filesystem::directory_iterator(testing_path));
 	return 0;
 }
