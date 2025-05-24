@@ -197,32 +197,36 @@ static MatrixDTO deserialize(const std::filesystem::path& path)
 	return actual;
 }
 
-static void serialize(const std::filesystem::path& path, const SerializationInput& data)
+static void serialize(const std::filesystem::path& path, const MatrixDTO& data)
 {
 	std::ofstream ofs(path, std::ios::binary);
 
-	size_t padding = 0;
-	size_t chunk_size = 0;
+	size_t            padding = 0;
+	size_t            chunk_size = 0;
+	std::vector<char> zeros;
 
 	ofs.write(reinterpret_cast<const char*>(&data.rows), sizeof(data.rows));
 	ofs.write(reinterpret_cast<const char*>(&data.cols), sizeof(data.cols));
 
 	chunk_size = sizeof(data.rows) + sizeof(data.cols);
 	padding = calculate_padding(chunk_size);
+	zeros.resize(padding, 0);
 	printf("Metadata: Size equal to %lu, I need to pad %lu bytes\n", chunk_size, padding);
-	ofs.write(reinterpret_cast<const char*>(&padding), sizeof(padding));
+	ofs.write(zeros.data(), padding);
 
-	ofs.write(reinterpret_cast<const char*>(data.sparse_elements.data()), data.sparse_elements.size() * sizeof(float));
 	chunk_size = data.sparse_elements.size() * sizeof(float);
+	ofs.write(reinterpret_cast<const char*>(data.sparse_elements.data()), chunk_size);
 	padding = calculate_padding(chunk_size);
+	zeros.resize(padding, 0);
 	printf("Sparse Matrix: Size equal to %lu, I need to pad %lu bytes\n", chunk_size, padding);
-	ofs.write(reinterpret_cast<const char*>(&padding), sizeof(padding));
+	ofs.write(zeros.data(), padding);
 
-	ofs.write(reinterpret_cast<const char*>(data.dense_elements.data()), data.dense_elements.size() * sizeof(float));
 	chunk_size = data.dense_elements.size() * sizeof(float);
+	ofs.write(reinterpret_cast<const char*>(data.dense_elements.data()), chunk_size);
 	padding = calculate_padding(chunk_size);
+	zeros.resize(padding, 0);
 	printf("Dense Matrix: Size equal to %lu, I need to pad %lu bytes\n", chunk_size, padding);
-	ofs.write(reinterpret_cast<const char*>(&padding), sizeof(padding));
+	ofs.write(zeros.data(), padding);
 
 	ofs.close();
 }
