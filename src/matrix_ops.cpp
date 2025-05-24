@@ -1,21 +1,15 @@
 #include <algorithm>
-#include <fstream>
-#include <iostream>
 #include <memory>
-#include <numeric>
-#include <ostream>
-#include <random>
-#include <string>
-#include <utility>
 
-#include "../extern/mmio.h"
+#include "common.h"
+
 // __float2half(const float a)
 // __float2half_rd(const float a) ~ round down
 // __float2half_rn(const float a) ~ round nearest
 // __float2half_ru(const float a) ~ round up
 // __float2half_rz(const float a) ~ round towards zero
 //
-// __half2float
+// float2float
 
 #include "matrix_ops.h"
 

@@ -1,11 +1,8 @@
-#include <cstdio>
 #include <exception>
-#include <filesystem>
-#include <iostream>
 
 #include "mma.h"
 
-#include "matrix_ops.h"
+#include "common.h"
 
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \

@@ -1,21 +1,10 @@
 #pragma once
 
-#include <array>
 #include <cstddef>
-#include <cstdint>
-#include <filesystem>
-#include <vector>
 
 #include "cuda_fp16.h"
 
-#define DATA_DIRECTORY "data/"
-#define ALIGNMENT 128
-#define ROW_PANEL_SIZE 32  // I think this should be the same as TM
-
-#define TM 32
-#define TK 16
-#define brick_m 16
-#define brick_k 4
+#include "common.h"
 
 /*
  * C = A*B
@@ -25,36 +14,6 @@
  * B is KxN
  * C is MxN
  */
-
-#define THROW_RUNTIME_ERROR(message) throw std::runtime_error(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " - " + message)
-
-template <typename T>
-std::ostream& operator<<(std::ostream& out_stream, const std::vector<T>& vec)
-{
-	out_stream << "{";
-	for (size_t i = 0; i < vec.size(); ++i) {
-		out_stream << vec[i];
-		if (i < vec.size() - 1) {
-			out_stream << ", ";
-		}
-	}
-	out_stream << "}";
-	return out_stream;
-}
-
-template <typename T, size_t N>
-std::ostream& operator<<(std::ostream& out_stream, const std::array<T, N>& arr)
-{
-	out_stream << "[";
-	for (size_t i = 0; i < arr.size(); ++i) {
-		out_stream << arr[i];
-		if (i < arr.size() - 1) {
-			out_stream << ", ";
-		}
-	}
-	out_stream << "]";
-	return out_stream;
-}
 
 // TODO: Review structs
 struct CSRMatrixHeader
