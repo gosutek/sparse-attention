@@ -21,7 +21,7 @@ struct COOMatrix
 	std::vector<COOElement> elements;
 };
 
-struct SerializationInput
+struct MatrixDTO
 {
 	std::vector<float> sparse_elements{};
 	std::vector<float> dense_elements{};
@@ -165,9 +165,36 @@ static size_t calculate_padding(size_t size)
 	}
 }
 
-static void deserialize(const std::filesystem::path& path)
+/*
+ * This is for unit testing the serialization ONLY
+ * actual deserialization happens device-side
+ */
+static MatrixDTO deserialize(const std::filesystem::path& path)
 {
-	// TODO
+	MatrixDTO actual;
+
+	size_t padding = 0;
+	size_t chunk_size = 0;
+
+	std::ifstream ifs(path, std::ios::binary);
+
+	ifs.read(reinterpret_cast<char*>(&actual.rows), sizeof(actual.rows));
+	ifs.read(reinterpret_cast<char*>(&actual.cols), sizeof(actual.cols));
+	chunk_size = sizeof(actual.rows) + sizeof(actual.cols);
+	padding = calculate_padding(chunk_size);
+	ifs.seekg(padding, std::ios::cur);  // skip padding
+
+	actual.sparse_elements.resize(actual.rows * actual.cols);
+	actual.dense_elements.resize(actual.rows * actual.cols);
+
+	chunk_size = actual.rows * actual.cols * sizeof(float);
+	ifs.read(reinterpret_cast<char*>(actual.sparse_elements.data()), chunk_size);
+	padding = calculate_padding(chunk_size);
+	ifs.seekg(padding, std::ios::cur);
+
+	ifs.read(reinterpret_cast<char*>(actual.dense_elements.data()), chunk_size);
+
+	return actual;
 }
 
 static void serialize(const std::filesystem::path& path, const SerializationInput& data)
@@ -239,27 +266,7 @@ static bool unit_test_serialization(const std::filesystem::path& filepath)
 
 	COOMatrix          mtx = read_mtx(filepath);
 	std::vector<float> expected = coo_to_row_major(std::move(mtx));
-
-	SerializationInput actual;
-
-	std::ifstream ifs(binary_filepath, std::ios::binary);
-
-	ifs.read(reinterpret_cast<char*>(&actual.rows), sizeof(actual.rows));
-	printf("Read %lu bytes, rows are equal to %d\n", sizeof(actual.rows), actual.rows);
-	ifs.read(reinterpret_cast<char*>(&actual.cols), sizeof(actual.cols));
-	printf("Read %lu bytes, cols are equal to %d\n", sizeof(actual.cols), actual.cols);
-	printf("Reserving %lu bytes of memory for the vector of sparse elements (%u)\n", actual.rows * actual.cols * sizeof(float), actual.rows * actual.cols);
-	actual.sparse_elements.resize(actual.rows * actual.cols);
-	printf("Reserving %lu bytes of memory for the vector of dense elements (%u)\n", actual.rows * actual.cols * sizeof(float), actual.rows * actual.cols);
-	actual.dense_elements.resize(actual.rows * actual.cols);
-
-	printf("Reading %lu bytes, or %u elements of the vector of sparse elements\n", actual.rows * actual.cols * sizeof(float), actual.rows * actual.cols);
-	ifs.read(reinterpret_cast<char*>(actual.sparse_elements.data()), actual.rows * actual.cols * sizeof(float));
-
-	printf("Reading %lu bytes, or %u elements of the vector of dense elements\n", actual.rows * actual.cols * sizeof(float), actual.rows * actual.cols);
-	ifs.read(reinterpret_cast<char*>(actual.dense_elements.data()), actual.rows * actual.cols * sizeof(float));
-
-	std::cout << expected[0] << " " << actual.sparse_elements[0] << "\n";
+	MatrixDTO          actual = deserialize(binary_filepath);
 
 	return expected == actual.sparse_elements;
 }
