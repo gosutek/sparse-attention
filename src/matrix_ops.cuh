@@ -1,9 +1,5 @@
 #pragma once
 
-#include <cstddef>
-
-#include "cuda_fp16.h"
-
 #include "common.h"
 
 /*
@@ -77,3 +73,5 @@ struct HRPB
 		return out_stream;
 	}
 };
+
+__host__ void read_binary(const std::filesystem::path& filepath);

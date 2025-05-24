@@ -1,9 +1,5 @@
-#include <algorithm>
-#include <ostream>
 
 #include "common.h"
-
-#include "matrix_ops.h"
 
 // __float2half(const float a)
 // __float2half_rd(const float a) ~ round down
@@ -42,253 +38,237 @@ struct ProcessingState
 	size_t block_row_ptr_count = 0;
 };
 
-static bool block_brick_sort(const COOElement& a, const COOElement& b)
-{
-	const size_t row_panel_idx_a = a.row / ROW_PANEL_SIZE;
-	const size_t row_panel_idx_b = b.row / ROW_PANEL_SIZE;
-
-	const size_t block_row_a = a.row / TM;
-	const size_t block_row_b = b.row / TM;
-
-	const size_t block_col_a = a.col / TK;
-	const size_t block_col_b = b.col / TK;
-
-	const size_t brick_row_a = a.row / brick_m;
-	const size_t brick_row_b = b.row / brick_m;
-
-	const size_t brick_col_a = a.col / brick_k;
-	const size_t brick_col_b = b.col / brick_k;
-
-	return std::tie(
-			   row_panel_idx_a,
-			   block_row_a,
-			   block_col_a,
-			   brick_col_a,
-			   brick_row_a,
-			   a.col,
-			   a.row) < std::tie(row_panel_idx_b,
-							block_row_b,
-							block_col_b,
-							brick_col_b,
-							brick_row_b,
-							b.col,
-							b.row);
-}
-
-static bool row_panel_sort(const COOElement& a, const COOElement& b)
-{
-	const size_t row_panel_idx_a = a.row / ROW_PANEL_SIZE;
-	const size_t row_panel_idx_b = b.row / ROW_PANEL_SIZE;
-	return std::tie(row_panel_idx_a, a.col, a.row) < std::tie(row_panel_idx_b, b.col, b.row);
-}
-
-static void initialize_new_block(std::shared_ptr<HRPB> hrpb_ptr, ProcessingState& state)
-{
-	Block& block_ref = hrpb_ptr->packed_blocks.emplace_back();
-	block_ref.rows.reserve((TM / brick_m) * (TK / brick_k));  // Reserve the maximum amount possible for this block, i.e. the max number of bricks in a block
-
-	state.block_idx++;    // Block indices are relative to the array, i.e. they never zero out
-	state.brick_idx = 0;  // Brick indices are relative to the block, so this should zero out
-
-	// brick_col_ptr
-	state.brick_col_ptr_idx = 0;
-
-	// block_row_ptr
-	state.block_row_ptr_count++;  // we have entered a new block
-}
-
-static void finalize_block(std::shared_ptr<HRPB> hrpb_ptr, ProcessingState& state)
-{
-	Block& block = hrpb_ptr->packed_blocks[static_cast<size_t>(state.block_idx)];
-	if (state.brick_col_ptr_idx == 0)
-		state.brick_col_ptr_idx++;
-	for (size_t i = state.brick_col_ptr_idx; i < block.col_ptr.size(); ++i) {  // any leftovers at brick_col_ptr_idx (where we left off) should be equal to the number of bricks
-		block.col_ptr[i] = state.brick_idx;                                    // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
-	}
-	hrpb_ptr->block_row_ptr.back() = hrpb_ptr->packed_blocks.size();
-	hrpb_ptr->size_ptr.push_back(block.get_block_size() + hrpb_ptr->size_ptr.back());  // This blocks starting address is that previous block's starting address plus its size in bytes
-}
+// static bool block_brick_sort(const COOElement& a, const COOElement& b)
+// {
+// 	const size_t row_panel_idx_a = a.row / ROW_PANEL_SIZE;
+// 	const size_t row_panel_idx_b = b.row / ROW_PANEL_SIZE;
+//
+// 	const size_t block_row_a = a.row / TM;
+// 	const size_t block_row_b = b.row / TM;
+//
+// 	const size_t block_col_a = a.col / TK;
+// 	const size_t block_col_b = b.col / TK;
+//
+// 	const size_t brick_row_a = a.row / brick_m;
+// 	const size_t brick_row_b = b.row / brick_m;
+//
+// 	const size_t brick_col_a = a.col / brick_k;
+// 	const size_t brick_col_b = b.col / brick_k;
+//
+// 	return std::tie(
+// 			   row_panel_idx_a,
+// 			   block_row_a,
+// 			   block_col_a,
+// 			   brick_col_a,
+// 			   brick_row_a,
+// 			   a.col,
+// 			   a.row) < std::tie(row_panel_idx_b,
+// 							block_row_b,
+// 							block_col_b,
+// 							brick_col_b,
+// 							brick_row_b,
+// 							b.col,
+// 							b.row);
+// }
+//
+// static bool row_panel_sort(const COOElement& a, const COOElement& b)
+// {
+// 	const size_t row_panel_idx_a = a.row / ROW_PANEL_SIZE;
+// 	const size_t row_panel_idx_b = b.row / ROW_PANEL_SIZE;
+// 	return std::tie(row_panel_idx_a, a.col, a.row) < std::tie(row_panel_idx_b, b.col, b.row);
+// }
+//
+// static void initialize_new_block(std::shared_ptr<HRPB> hrpb_ptr, ProcessingState& state)
+// {
+// 	Block& block_ref = hrpb_ptr->packed_blocks.emplace_back();
+// 	block_ref.rows.reserve((TM / brick_m) * (TK / brick_k));  // Reserve the maximum amount possible for this block, i.e. the max number of bricks in a block
+//
+// 	state.block_idx++;    // Block indices are relative to the array, i.e. they never zero out
+// 	state.brick_idx = 0;  // Brick indices are relative to the block, so this should zero out
+//
+// 	// brick_col_ptr
+// 	state.brick_col_ptr_idx = 0;
+//
+// 	// block_row_ptr
+// 	state.block_row_ptr_count++;  // we have entered a new block
+// }
+//
+// static void finalize_block(std::shared_ptr<HRPB> hrpb_ptr, ProcessingState& state)
+// {
+// 	Block& block = hrpb_ptr->packed_blocks[static_cast<size_t>(state.block_idx)];
+// 	if (state.brick_col_ptr_idx == 0)
+// 		state.brick_col_ptr_idx++;
+// 	for (size_t i = state.brick_col_ptr_idx; i < block.col_ptr.size(); ++i) {  // any leftovers at brick_col_ptr_idx (where we left off) should be equal to the number of bricks
+// 		block.col_ptr[i] = state.brick_idx;                                    // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
+// 	}
+// 	hrpb_ptr->block_row_ptr.back() = hrpb_ptr->packed_blocks.size();
+// 	hrpb_ptr->size_ptr.push_back(block.get_block_size() + hrpb_ptr->size_ptr.back());  // This blocks starting address is that previous block's starting address plus its size in bytes
+// }
 
 // TODO: Merge this and above
-static void finalize_last_block(std::shared_ptr<HRPB> hrpb_ptr, ProcessingState& state)
-{
-	Block& block = hrpb_ptr->packed_blocks[static_cast<size_t>(state.block_idx)];
-	if (state.brick_col_ptr_idx == 0)
-		state.brick_col_ptr_idx++;
-	for (size_t i = state.brick_col_ptr_idx; i < block.col_ptr.size(); ++i) {  // any leftovers at brick_col_ptr_idx (where we left off) should be equal to the number of bricks
-		block.col_ptr[i] = state.brick_idx;                                    // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
-	}
-	hrpb_ptr->block_row_ptr.back() = hrpb_ptr->packed_blocks.size();
-}
+// static void finalize_last_block(std::shared_ptr<HRPB> hrpb_ptr, ProcessingState& state)
+// {
+// 	Block& block = hrpb_ptr->packed_blocks[static_cast<size_t>(state.block_idx)];
+// 	if (state.brick_col_ptr_idx == 0)
+// 		state.brick_col_ptr_idx++;
+// 	for (size_t i = state.brick_col_ptr_idx; i < block.col_ptr.size(); ++i) {  // any leftovers at brick_col_ptr_idx (where we left off) should be equal to the number of bricks
+// 		block.col_ptr[i] = state.brick_idx;                                    // should assign from brick_idx up to the end of col ptr with brick_idx on the last block of hrpb_ptr
+// 	}
+// 	hrpb_ptr->block_row_ptr.back() = hrpb_ptr->packed_blocks.size();
+// }
 
 // TODO: Should be static
 // TODO: Handle case where mtx.rows % ROW_PANEL_SIZE != 0
-std::shared_ptr<HRPB> write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
-{
-	std::shared_ptr<HRPB> hrpb_ptr = std::make_shared<HRPB>();  // NOTE: maybe don't allocate this on the heap?
-	ProcessingState       state;
-
-	hrpb_ptr->block_row_ptr.resize((mtx.rows + ROW_PANEL_SIZE - 1) / ROW_PANEL_SIZE + 1);
-	hrpb_ptr->block_row_ptr[0] = 0;
-
-	std::sort(mtx.elements.begin(), mtx.elements.end(), &row_panel_sort);
-
-	uint32_t current_panel = static_cast<uint32_t>(-1);  // WARNING: intended overflow
-	uint32_t current_col = static_cast<uint32_t>(-1);    // WARNING: intended overflow
-	uint32_t where_i_should_go = 0;                      // Rename this shit
-
-	/*
-     * Iterate first by row panel then by col
-     * aggregate all columns containing at least one non-zero
-     */
-	// TODO: Refactor this
-	for (COOElement& e : mtx.elements) {
-		uint32_t panel_idx = e.row / ROW_PANEL_SIZE;
-		if (panel_idx != current_panel) {  // Entered a new row panel
-			current_panel = panel_idx;
-			current_col = static_cast<uint32_t>(-1);
-			where_i_should_go = static_cast<uint32_t>(-1);
-		}
-		if (e.col != current_col) {  // Entered a new col in the panel
-			current_col = e.col;
-			where_i_should_go++;
-		}
-		hrpb_ptr->active_cols.push_back(e.col);  // I don't think we know the size of this at compile time
-		if (where_i_should_go == static_cast<uint32_t>(-1)) {
-			THROW_RUNTIME_ERROR("variable 'where_i_should_go' is negative when it shouldn't");
-		}
-		e.col = where_i_should_go;
-	}
-
-	std::sort(mtx.elements.begin(), mtx.elements.end(), &block_brick_sort);
-
-	for (const COOElement& e : mtx.elements) {
-		const int32_t row_panel_idx = e.row / ROW_PANEL_SIZE;
-		const int32_t block_row = e.row / TM;
-		const int32_t block_col = e.col / TK;
-		const int32_t brick_row = e.row / brick_m;
-		const int32_t brick_col = e.col / brick_k;
-
-		// Entered new row panel
-		// since ROW_PANEL_SIZE multiple of TM we have also
-		// entered a new block
-
-		if (row_panel_idx != state.current_row_panel) {
-			hrpb_ptr->block_row_ptr[row_panel_idx] = hrpb_ptr->packed_blocks.size();
-			state.current_row_panel = row_panel_idx;
-		}
-
-		if (block_row != state.current_block_row || block_col != state.current_block_col) {
-			// Block transitions
-			if (state.block_idx > -1) {
-				finalize_block(hrpb_ptr, state);
-			} else [[unlikely]] {
-				hrpb_ptr->size_ptr.push_back(0);  // the first block starts at 0 offset
-			}
-
-			state.current_block_row = block_row;
-			state.current_block_col = block_col;
-			initialize_new_block(hrpb_ptr, state);
-		}
-
-		if (brick_row != state.current_brick_row || brick_col != state.current_brick_col) {
-			// Brick transitions
-			const int32_t rel_brick_row = brick_row - (state.current_block_row * (TM / brick_m));
-			const int32_t rel_brick_col = brick_col - (state.current_block_col * (TK / brick_k));
-
-			if (rel_brick_col < 0 || rel_brick_row < 0)
-				THROW_RUNTIME_ERROR("Relative row or block came back negative");
-
-			hrpb_ptr->packed_blocks[state.block_idx].rows.push_back(rel_brick_row);
-
-			if (brick_col != state.current_brick_col) {  // brick col changed
-				hrpb_ptr->packed_blocks[state.block_idx].col_ptr[state.brick_col_ptr_idx] = state.brick_idx;
-				state.brick_col_ptr_idx++;
-			}
-
-			state.current_brick_row = brick_row;
-			state.current_brick_col = brick_col;
-			state.brick_idx++;
-		}
-
-		const int32_t rel_elem_row = e.row % brick_m;
-		const int32_t rel_elem_col = e.col % brick_k;
-		const int32_t pattern_idx = rel_elem_row * brick_k + rel_elem_col;
-		hrpb_ptr->packed_blocks[state.block_idx].nnz_array.push_back(e.val);
-
-		hrpb_ptr->packed_blocks[state.block_idx].patterns[state.brick_idx - 1] |= (1ull << pattern_idx);
-	}
-
-	finalize_last_block(hrpb_ptr, state);  // final block
-
-	return hrpb_ptr;
-	// delete hrpb_ptr;
-}
+// std::shared_ptr<HRPB> write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
+// {
+// 	std::shared_ptr<HRPB> hrpb_ptr = std::make_shared<HRPB>();  // NOTE: maybe don't allocate this on the heap?
+// 	ProcessingState       state;
+//
+// 	hrpb_ptr->block_row_ptr.resize((mtx.rows + ROW_PANEL_SIZE - 1) / ROW_PANEL_SIZE + 1);
+// 	hrpb_ptr->block_row_ptr[0] = 0;
+//
+// 	std::sort(mtx.elements.begin(), mtx.elements.end(), &row_panel_sort);
+//
+// 	uint32_t current_panel = static_cast<uint32_t>(-1);  // WARNING: intended overflow
+// 	uint32_t current_col = static_cast<uint32_t>(-1);    // WARNING: intended overflow
+// 	uint32_t where_i_should_go = 0;                      // Rename this shit
+//
+// 	/*
+//      * Iterate first by row panel then by col
+//      * aggregate all columns containing at least one non-zero
+//      */
+// 	// TODO: Refactor this
+// 	for (COOElement& e : mtx.elements) {
+// 		uint32_t panel_idx = e.row / ROW_PANEL_SIZE;
+// 		if (panel_idx != current_panel) {  // Entered a new row panel
+// 			current_panel = panel_idx;
+// 			current_col = static_cast<uint32_t>(-1);
+// 			where_i_should_go = static_cast<uint32_t>(-1);
+// 		}
+// 		if (e.col != current_col) {  // Entered a new col in the panel
+// 			current_col = e.col;
+// 			where_i_should_go++;
+// 		}
+// 		hrpb_ptr->active_cols.push_back(e.col);  // I don't think we know the size of this at compile time
+// 		if (where_i_should_go == static_cast<uint32_t>(-1)) {
+// 			THROW_RUNTIME_ERROR("variable 'where_i_should_go' is negative when it shouldn't");
+// 		}
+// 		e.col = where_i_should_go;
+// 	}
+//
+// 	std::sort(mtx.elements.begin(), mtx.elements.end(), &block_brick_sort);
+//
+// 	for (const COOElement& e : mtx.elements) {
+// 		const int32_t row_panel_idx = e.row / ROW_PANEL_SIZE;
+// 		const int32_t block_row = e.row / TM;
+// 		const int32_t block_col = e.col / TK;
+// 		const int32_t brick_row = e.row / brick_m;
+// 		const int32_t brick_col = e.col / brick_k;
+//
+// 		// Entered new row panel
+// 		// since ROW_PANEL_SIZE multiple of TM we have also
+// 		// entered a new block
+//
+// 		if (row_panel_idx != state.current_row_panel) {
+// 			hrpb_ptr->block_row_ptr[row_panel_idx] = hrpb_ptr->packed_blocks.size();
+// 			state.current_row_panel = row_panel_idx;
+// 		}
+//
+// 		if (block_row != state.current_block_row || block_col != state.current_block_col) {
+// 			// Block transitions
+// 			if (state.block_idx > -1) {
+// 				finalize_block(hrpb_ptr, state);
+// 			} else [[unlikely]] {
+// 				hrpb_ptr->size_ptr.push_back(0);  // the first block starts at 0 offset
+// 			}
+//
+// 			state.current_block_row = block_row;
+// 			state.current_block_col = block_col;
+// 			initialize_new_block(hrpb_ptr, state);
+// 		}
+//
+// 		if (brick_row != state.current_brick_row || brick_col != state.current_brick_col) {
+// 			// Brick transitions
+// 			const int32_t rel_brick_row = brick_row - (state.current_block_row * (TM / brick_m));
+// 			const int32_t rel_brick_col = brick_col - (state.current_block_col * (TK / brick_k));
+//
+// 			if (rel_brick_col < 0 || rel_brick_row < 0)
+// 				THROW_RUNTIME_ERROR("Relative row or block came back negative");
+//
+// 			hrpb_ptr->packed_blocks[state.block_idx].rows.push_back(rel_brick_row);
+//
+// 			if (brick_col != state.current_brick_col) {  // brick col changed
+// 				hrpb_ptr->packed_blocks[state.block_idx].col_ptr[state.brick_col_ptr_idx] = state.brick_idx;
+// 				state.brick_col_ptr_idx++;
+// 			}
+//
+// 			state.current_brick_row = brick_row;
+// 			state.current_brick_col = brick_col;
+// 			state.brick_idx++;
+// 		}
+//
+// 		const int32_t rel_elem_row = e.row % brick_m;
+// 		const int32_t rel_elem_col = e.col % brick_k;
+// 		const int32_t pattern_idx = rel_elem_row * brick_k + rel_elem_col;
+// 		hrpb_ptr->packed_blocks[state.block_idx].nnz_array.push_back(e.val);
+//
+// 		hrpb_ptr->packed_blocks[state.block_idx].patterns[state.brick_idx - 1] |= (1ull << pattern_idx);
+// 	}
+//
+// 	finalize_last_block(hrpb_ptr, state);  // final block
+//
+// 	return hrpb_ptr;
+// 	// delete hrpb_ptr;
+// }
 
 /*
  * Converts mtx from COO to CSR format
  * Writes to filename.csr binary
  */
 // TODO: Figure out how to make static
-void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
+// void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
+// {
+// 	std::vector<int>      row_ptr(static_cast<size_t>(mtx.rows) + 1, 0);
+// 	std::vector<uint32_t> col_idx(static_cast<size_t>(mtx.nnz));
+// 	// TODO: template the val?
+// 	std::vector<float> val(static_cast<size_t>(mtx.nnz));
+//
+// 	std::sort(mtx.elements.begin(), mtx.elements.end(), [](const auto& a, const auto& b) { return std::tie(a.row, a.col) < std::tie(b.row, b.col); });
+//
+// 	std::cout << "Populating row_ptr, col_idx, val..." << std::flush;
+//
+// 	for (size_t i = 0; i < mtx.elements.size(); ++i) {
+// 		const auto& e = mtx.elements[i];
+// 		row_ptr[static_cast<size_t>(e.row) + 1]++;
+// 		col_idx[i] = e.col;
+// 		val[i] = __float2half_rn(e.val);
+// 	}
+// 	std::cout << "Done!\n";
+// 	std::partial_sum(row_ptr.begin(), row_ptr.end(), row_ptr.data());
+//
+// 	return;
+// }
+
+__host__ void read_binary(const std::filesystem::path& filepath)
 {
-	std::vector<int>      row_ptr(static_cast<size_t>(mtx.rows) + 1, 0);
-	std::vector<uint32_t> col_idx(static_cast<size_t>(mtx.nnz));
-	// TODO: template the val?
-	std::vector<float> val(static_cast<size_t>(mtx.nnz));
+	/*
+  * 1. Host reads binary into pinned memory
+  * 2. Binary gets loaded into global memory
+  * 3. Deserialize
+  */
+	if (!std::filesystem::exists(filepath) || !std::filesystem::is_regular_file(filepath))
+		THROW_RUNTIME_ERROR("Invalid file given");
+	if (filepath.extension() != ".spmm")
+		THROW_RUNTIME_ERROR("Invalid file type given, expected: '.spmm'");
 
-	std::sort(mtx.elements.begin(), mtx.elements.end(), [](const auto& a, const auto& b) { return std::tie(a.row, a.col) < std::tie(b.row, b.col); });
-
-	std::cout << "Populating row_ptr, col_idx, val..." << std::flush;
-
-	for (size_t i = 0; i < mtx.elements.size(); ++i) {
-		const auto& e = mtx.elements[i];
-		row_ptr[static_cast<size_t>(e.row) + 1]++;
-		col_idx[i] = e.col;
-		val[i] = __float2half_rn(e.val);
-	}
-	std::cout << "Done!\n";
-	std::partial_sum(row_ptr.begin(), row_ptr.end(), row_ptr.data());
-
-	std::vector<float> dense = generate_dense(static_cast<size_t>(mtx.rows * mtx.cols));
-
-	CSRMatrixHeader header = {
-		mtx.rows,
-		mtx.cols,
-		mtx.nnz,
-		row_ptr.size() * sizeof(int),
-		col_idx.size() * sizeof(int),
-		val.size() * sizeof(int),
-		static_cast<size_t>(mtx.rows * mtx.cols) * sizeof(float)
-	};
-
-	write_binary_aligned(filepath, &header, sizeof(header), ALIGNMENT, ".csr");
-	write_binary_aligned(filepath, row_ptr.data(), header.row_ptr_bytes, ALIGNMENT, ".csr");
-	write_binary_aligned(filepath, col_idx.data(), header.col_idx_bytes, ALIGNMENT, ".csr");
-	write_binary_aligned(filepath, val.data(), header.val_bytes, ALIGNMENT, ".csr");
-	write_binary_aligned(filepath, dense.data(), header.dense_bytes, ALIGNMENT, ".csr");
-
-	return;
-}
-
-[[maybe_unused]] static void load_binary_to_host(const std::filesystem::path& filepath)
-{
-	void* host_ptr = nullptr;
-	// TODO: Check if its actually a file (???)
+	void*  host_ptr = nullptr;
 	size_t filesize = std::filesystem::file_size(filepath);
 
-	cudaMallocHost(&host_ptr, filesize);
+	printf("File %s with a filesize of %zu will be loaded into global memory\n", filepath.c_str(), filesize);
+	CUDA_CHECK(cudaMallocHost(&host_ptr, filesize));
 
-	// TODO: Add error handling
-	FILE* file = fopen(filepath.c_str(), "rb");
-	fread(host_ptr, filesize, 1, file);
-	fclose(file);
-
-	CSRMatrixHeader* header_ptr = reinterpret_cast<CSRMatrixHeader*>(host_ptr);
-
-	printf("rows: %d\n", header_ptr->rows);
-	printf("cols: %d\n", header_ptr->cols);
-	printf("nnz: %u\n", header_ptr->nnz);
+	std::ifstream ifs(filepath, std::ios::binary);
+	ifs.read(reinterpret_cast<char*>(host_ptr), filesize);
 
 	// WARNING: This should only happen once every
 	// matrix needed is loaded into device memory

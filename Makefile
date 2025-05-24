@@ -9,13 +9,9 @@ BUILD_DIR:=build
 SRC_DIR:=src
 EXT_DIR:=extern
 
-SOURCES:=$(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(EXT_DIR)/*.c) $(wildcard $(SRC_DIR)/*.cu)
-TEST_SOURCES:=$(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(EXT_DIR)/*.c)
-SERIALIZE_SROUCES:=$(SRC_DIR)/serialize.cpp $(EXT_DIR)/mmio.c
+SOURCES:=$(wildcard $(SRC_DIR)/*.cu)
 
-SOURCES_FILT = $(filter-out $(SRC_DIR)/test.cpp, $(SOURCES))
-OBJECTS:=$(SOURCES_FILT:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
-TEST_OBJECTS:=$(patsubst $(SRC_DIR)/%,$(BUILD_DIR)/%.o,$(patsubst $(EXT_DIR)/%,$(BUILD_DIR)/%.o,$(TEST_SOURCES)))
+OBJECTS:=$(SOURCES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
 SERIALIZE_OBJECTS:=$(BUILD_DIR)/serialize.cpp.o $(BUILD_DIR)/mmio.c.o
 
 CFLAGS=-g $(ERROR_FLAGS) $(OPT)
@@ -35,9 +31,6 @@ CUFLAGS += -I/opt/cuda/targets/x86_64-linux/include/
 
 all: $(BUILD_DIR)/cute
 
-unit: CUFLAGS+=-Xcompiler "-D_UNIT_TESTING"
-unit: $(BUILD_DIR)/unit_test_write_hrpb
-
 bounds: CUFLAGS+=-Xcompiler "-D_GLIBCXX_DEBUG"
 bounds: $(BUILD_DIR)/cute_bounds_checking
 
@@ -50,10 +43,6 @@ $(BUILD_DIR)/cute: $(OBJECTS)
 	@mkdir -p $(@D)
 	$(NVCC) $(OBJECTS) -o $@
 
-$(BUILD_DIR)/unit_test_write_hrpb: $(TEST_OBJECTS)
-	@mkdir -p $(@D)
-	$(NVCC) $(TEST_OBJECTS) -o $@
-
 $(BUILD_DIR)/cute_bounds_checking: $(OBJECTS)
 	@mkdir -p $(@D)
 	$(NVCC) $(OBJECTS) -o $@
@@ -62,17 +51,9 @@ $(BUILD_DIR)/serialize: $(SERIALIZE_OBJECTS)
 	@mkdir -p $(@D)
 	$(CXX) $(SERIALIZE_OBJECTS) -o $@
 
-$(BUILD_DIR)/serialize.cpp.o: $(SRC_DIR)/serialize.cpp
-	@mkdir -p $(@D)
-	$(CXX) $< $(CFLAGS) -c -o $@
-
-$(BUILD_DIR)/test.cpp.o: $(SRC_DIR)/test.cpp
-	@mkdir -p $(@D)
-	$(NVCC) $< $(CUFLAGS) -c -o $@
-
 $(BUILD_DIR)/%.cpp.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
-	$(NVCC) $< $(CUFLAGS) -c -o $@
+	$(CXX) $< $(CUFLAGS) -c -o $@
 
 $(BUILD_DIR)/%.cu.o: $(SRC_DIR)/%.cu
 	@mkdir -p $(@D)

@@ -3,7 +3,6 @@
 #include "../extern/mmio.h"
 
 #include <cassert>
-#include <filesystem>
 #include <fstream>
 #include <random>
 
@@ -253,7 +252,7 @@ static void batch_convert(const std::filesystem::recursive_directory_iterator& d
 /*
    * Expects a .mtx and looks for a .spmm with the same name
    * converts from coo to row major
-   * reads .spmmm
+   * reads .spmm
    * compares
  */
 static bool unit_test_serialization(const std::filesystem::path& filepath)

@@ -1,8 +1,8 @@
-#include <exception>
-
-#include "mma.h"
 
 #include "common.h"
+#include "matrix_ops.cuh"
+
+#include "mma.h"
 
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \
@@ -14,31 +14,6 @@
 		}                                                                                                \
 	} while (0)
 
-[[maybe_unused]] static void load_binary_to_host(const std::filesystem::path& filepath)
-{
-	void* host_ptr = nullptr;
-	// TODO: Check if its actually a file (???)
-	size_t filesize = std::filesystem::file_size(filepath);
-
-	cudaMallocHost(&host_ptr, filesize);
-
-	// TODO: Add error handling
-	FILE* file = fopen(filepath.c_str(), "rb");
-	fread(host_ptr, filesize, 1, file);
-	fclose(file);
-
-	CSRMatrixHeader* header_ptr = reinterpret_cast<CSRMatrixHeader*>(host_ptr);
-
-	printf("rows: %d\n", header_ptr->rows);
-	printf("cols: %d\n", header_ptr->cols);
-	printf("nnz: %u\n", header_ptr->nnz);
-
-	// WARNING: This should only happen once every
-	// matrix needed is loaded into device memory
-	// since its heavy
-	cudaFreeHost(host_ptr);
-}
-
 [[maybe_unused]] static void query_device()
 {
 	cudaDeviceProp device_prop;
@@ -46,25 +21,15 @@
 	printf("%d", device_prop.asyncEngineCount);
 }
 
-// TODO: Read binary file size
-// TODO: Decide on how to pass the input, filename
-// Header
-// Sparse Data
-// Dense Data
 int main()
 {
-	// load_binary_to_host("~/projects/sparse-attention/data/scircuit.csr");
-	// print_matrix_specs("/home/godot/projects/sparse-attention/data/fv1/fv1.mtx");
-	const auto path = std::filesystem::directory_iterator("/home/godot/projects/sparse-attention/data/fv1/");
+	const auto binary_path = std::filesystem::current_path() / DATA_DIRECTORY / "d50_s2048/d50_s2048.spmm";
 
-	// query_device();
 	try {
-		convert(path, &write_hrpb, ".hrpb");
+		read_binary(binary_path);
 	} catch (const std::exception& e) {
 		std::cerr << "Exception: " << e.what() << "\n";
 	}
-
-	// load_binary_to_host("/home/godot/projects/sparse-attention/data/fv1/fv1.csr");
 
 	return 0;
 }
