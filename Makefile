@@ -11,10 +11,12 @@ EXT_DIR:=extern
 
 SOURCES:=$(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(EXT_DIR)/*.c) $(wildcard $(SRC_DIR)/*.cu)
 TEST_SOURCES:=$(wildcard $(SRC_DIR)/*.cpp) $(wildcard $(EXT_DIR)/*.c)
+SERIALIZE_SROUCES:=$(SRC_DIR)/serialize.cpp $(EXT_DIR)/mmio.c
 
 SOURCES_FILT = $(filter-out $(SRC_DIR)/test.cpp, $(SOURCES))
 OBJECTS:=$(SOURCES_FILT:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
 TEST_OBJECTS:=$(patsubst $(SRC_DIR)/%,$(BUILD_DIR)/%.o,$(patsubst $(EXT_DIR)/%,$(BUILD_DIR)/%.o,$(TEST_SOURCES)))
+SERIALIZE_OBJECTS:=$(BUILD_DIR)/serialize.cpp.o $(BUILD_DIR)/mmio.c.o
 
 CFLAGS=-g $(ERROR_FLAGS) $(OPT)
 CFLAGS+=-fopenmp -mf16c -mavx2 -mfma
@@ -39,6 +41,11 @@ unit: $(BUILD_DIR)/unit_test_write_hrpb
 bounds: CUFLAGS+=-Xcompiler "-D_GLIBCXX_DEBUG"
 bounds: $(BUILD_DIR)/cute_bounds_checking
 
+serialize: $(BUILD_DIR)/serialize
+
+serialize_debug: CFLAGS+=-D_GLIBCXX_DEBUG
+serialize_debug: $(BUILD_DIR)/serialize
+
 $(BUILD_DIR)/cute: $(OBJECTS)
 	@mkdir -p $(@D)
 	$(NVCC) $(OBJECTS) -o $@
@@ -50,6 +57,14 @@ $(BUILD_DIR)/unit_test_write_hrpb: $(TEST_OBJECTS)
 $(BUILD_DIR)/cute_bounds_checking: $(OBJECTS)
 	@mkdir -p $(@D)
 	$(NVCC) $(OBJECTS) -o $@
+
+$(BUILD_DIR)/serialize: $(SERIALIZE_OBJECTS)
+	@mkdir -p $(@D)
+	$(CXX) $(SERIALIZE_OBJECTS) -o $@
+
+$(BUILD_DIR)/serialize.cpp.o: $(SRC_DIR)/serialize.cpp
+	@mkdir -p $(@D)
+	$(CXX) $< $(CFLAGS) -c -o $@
 
 $(BUILD_DIR)/test.cpp.o: $(SRC_DIR)/test.cpp
 	@mkdir -p $(@D)
@@ -74,4 +89,4 @@ debug:
 	@echo "TEST_SOURCES=$(TEST_SOURCES)"
 	@echo "TEST_OBJECTS=$(TEST_OBJECTS)"
 
-.PHONY: all unit bounds clean
+.PHONY: all unit bounds clean serialize serialize_debug

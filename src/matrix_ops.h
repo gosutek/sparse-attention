@@ -15,54 +15,15 @@
  * C is MxN
  */
 
-// TODO: Review structs
-struct CSRMatrixHeader
-{
-	uint32_t rows{};
-	uint32_t cols{};
-	uint32_t nnz{};
-
-	size_t row_ptr_bytes{};
-	size_t col_idx_bytes{};
-	size_t val_bytes{};
-	size_t dense_bytes{};
-};
-
-struct HRPBMatrixHeader
-{
-	uint32_t rows{};
-	uint32_t cols{};
-	uint32_t nnz{};
-
-	size_t packed_blocks_size{};
-	size_t block_row_ptr_size{};
-	size_t active_cols_size{};
-	size_t size_ptr_size{};
-	size_t dense_bytes{};
-};
-
-struct COOElement
-{
-	uint32_t row, col;
-
-	float val;
-};
-
-struct COOMatrix
-{
-	uint32_t rows, cols, nnz;
-
-	std::vector<COOElement> elements;
-};
-
 // TODO: This need to be converted to __half
+// 152 bytes
 struct Block
 {
 	// maybe leave the arrays I only write to uninitialized?
-	std::array<uint64_t, (TM / brick_m) * (TK / brick_k)> patterns{};  // cache-friendly, NOTE: can't this just be a vector, reserved for this size?
-	std::array<uint64_t, TK / brick_k + 1>                col_ptr{};
-	std::vector<uint64_t>                                 rows{};       // unknown at compile time, paper is wrong
-	std::vector<float>                                    nnz_array{};  // unknown at compile time
+	std::array<uint64_t, (TM / brick_m) * (TK / brick_k)> patterns{};   // 8 * 8b = 64 bytes | cache-friendly, NOTE: can't this just be a vector, reserved for this size?
+	std::array<uint64_t, TK / brick_k + 1>                col_ptr{};    // 5 * 8b = 40 bytes
+	std::vector<uint64_t>                                 rows{};       // metadata: should be 3 * 8b = 24b for 64-bit arch, data: unknown at compile time
+	std::vector<float>                                    nnz_array{};  // metadata: 24 bytes, data: unknown at compile time
 
 	uint32_t get_block_size()
 	{
@@ -89,12 +50,13 @@ struct Block
 	}
 };
 
+// 96 bytes
 struct HRPB
 {
-	std::vector<uint32_t> block_row_ptr{};
-	std::vector<uint32_t> active_cols{};
-	std::vector<uint32_t> size_ptr{};
-	std::vector<Block>    packed_blocks{};
+	std::vector<uint32_t> block_row_ptr{};  // 24 bytes
+	std::vector<uint32_t> active_cols{};    // 24 bytes
+	std::vector<uint32_t> size_ptr{};       // 24 bytes
+	std::vector<Block>    packed_blocks{};  // 24 bytes
 
 	bool operator==(const HRPB& other) const
 	{
@@ -115,10 +77,3 @@ struct HRPB
 		return out_stream;
 	}
 };
-
-// TODO: Write description
-void                  print_matrix_specs(const std::filesystem::path& filepath);
-std::shared_ptr<HRPB> write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath);
-void                  write_csr(COOMatrix& mtx, const std::filesystem::path& filepath);
-void                  convert(const std::filesystem::directory_iterator& target_dir, std::shared_ptr<HRPB> (*conversion_func_ptr)(COOMatrix& mtx, const std::filesystem::path& filepath), const char* ext);
-COOMatrix             read_mtx(const std::filesystem::path& filepath);

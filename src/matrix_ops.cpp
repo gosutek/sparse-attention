@@ -72,85 +72,6 @@ static bool row_panel_sort(const COOElement& a, const COOElement& b)
 	return std::tie(row_panel_idx_a, a.col, a.row) < std::tie(row_panel_idx_b, b.col, b.row);
 }
 
-// TODO: Parallelize?
-static void write_binary_aligned(const std::filesystem::path& filepath, const void* data, size_t size, size_t alignment, const char* ext)
-{
-	// NOTE: trunc flag should be redundant
-	std::ofstream file(filepath.parent_path() / filepath.filename().replace_extension(ext), std::ios::binary | std::ios::trunc);
-	file.write(reinterpret_cast<const char*>(data), static_cast<std::streamsize>(size));
-
-	// TODO: Review arithmetic
-	size_t            padding = (alignment - (size % alignment)) % alignment;
-	std::vector<char> zeros(padding, 0);
-	file.write(zeros.data(), static_cast<std::streamsize>(padding));
-	file.close();
-}
-
-COOMatrix read_mtx(const std::filesystem::path& filepath)
-{
-	FILE* f = fopen(filepath.c_str(), "r");
-	if (!f)
-		THROW_RUNTIME_ERROR("Failed to open file ~ " + filepath.filename().string());
-
-	MM_typecode matcode;
-	if (mm_read_banner(f, &matcode) != 0) {
-		fclose(f);
-		THROW_RUNTIME_ERROR("Error reading mtx banner");
-	}
-
-	if (!mm_is_sparse(matcode)) {
-		fclose(f);
-		THROW_RUNTIME_ERROR("Matrix is not sparse");
-	}
-
-	int rows, cols, nnz;
-	if (mm_read_mtx_crd_size(f, &rows, &cols, &nnz) != 0) {
-		fclose(f);
-		THROW_RUNTIME_ERROR("Failed to read matrix size");
-	}
-
-	std::vector<COOElement> elements;
-	elements.reserve(static_cast<size_t>(nnz));
-
-	for (int i = 0; i < nnz; ++i) {
-		COOElement e;
-		if (fscanf(f, "%u %u %f\n", &e.row, &e.col, &e.val) != 3) {
-			fclose(f);
-			THROW_RUNTIME_ERROR("Error reading element ~ " + std::to_string(i));
-		}
-		e.row--;
-		e.col--;
-		elements.push_back(e);
-	}
-	fclose(f);
-	return { static_cast<uint32_t>(rows), static_cast<uint32_t>(cols), static_cast<uint32_t>(nnz), std::move(elements) };
-}
-
-/*
- * Generates a dense matrix in column-major format
- * of size rows * cols filled with random values
- */
-// TODO: Parallelize?
-// TODO: Made static after testing
-static std::vector<__half> generate_dense(size_t size)
-{
-	std::random_device                    rd;
-	std::minstd_rand                      rng(rd());
-	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
-
-	std::vector<__half> dense_values;
-	std::cout << "Generating Dense Matrix..." << std::flush;
-	dense_values.reserve(size);
-	for (size_t i = 0; i < size; ++i) {
-		__half half_random_value = __float2half_rn(uni_real_dist(rng));
-		dense_values.push_back(half_random_value);
-	}
-	std::cout << "Done!" << std::endl;
-	;
-
-	return dense_values;
-}
-
 static void initialize_new_block(std::shared_ptr<HRPB> hrpb_ptr, ProcessingState& state)
 {
 	Block& block_ref = hrpb_ptr->packed_blocks.emplace_back();
@@ -290,27 +211,6 @@ std::shared_ptr<HRPB> write_hrpb(COOMatrix& mtx, const std::filesystem::path& fi
 
 	finalize_last_block(hrpb_ptr, state);  // final block
 
-	std::vector<__half> dense = generate_dense(static_cast<size_t>(mtx.rows * mtx.cols));
-
-	HRPBMatrixHeader header = {
-		mtx.rows,
-		mtx.cols,
-		mtx.nnz,
-		hrpb_ptr->packed_blocks.size() * sizeof(Block),
-		hrpb_ptr->block_row_ptr.size() * sizeof(uint32_t),
-		hrpb_ptr->active_cols.size() * sizeof(uint32_t),
-		hrpb_ptr->size_ptr.size() * sizeof(uint32_t),
-		static_cast<size_t>(mtx.rows * mtx.cols) * sizeof(__half)
-
-	};
-
-	// TODO: instead of calling x times, maybe I can PACK and SHIP
-	write_binary_aligned(filepath, &header, sizeof(header), ALIGNMENT, ".hrpb");
-	write_binary_aligned(filepath, hrpb_ptr->block_row_ptr.data(), header.block_row_ptr_size, ALIGNMENT, ".hrpb");
-	write_binary_aligned(filepath, hrpb_ptr->active_cols.data(), header.active_cols_size, ALIGNMENT, ".hrpb");
-	write_binary_aligned(filepath, hrpb_ptr->size_ptr.data(), header.size_ptr_size, ALIGNMENT, ".hrpb");
-	write_binary_aligned(filepath, hrpb_ptr->packed_blocks.data(), header.packed_blocks_size, ALIGNMENT, ".hrpb");
-	write_binary_aligned(filepath, dense.data(), header.dense_bytes, ALIGNMENT, ".hrpb");
 	return hrpb_ptr;
 	// delete hrpb_ptr;
 }
@@ -325,7 +225,7 @@ void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
 	std::vector<int>      row_ptr(static_cast<size_t>(mtx.rows) + 1, 0);
 	std::vector<uint32_t> col_idx(static_cast<size_t>(mtx.nnz));
 	// TODO: template the val?
-	std::vector<__half> val(static_cast<size_t>(mtx.nnz));
+	std::vector<float> val(static_cast<size_t>(mtx.nnz));
 
 	std::sort(mtx.elements.begin(), mtx.elements.end(), [](const auto& a, const auto& b) { return std::tie(a.row, a.col) < std::tie(b.row, b.col); });
 
@@ -340,7 +240,7 @@ void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
 	std::cout << "Done!\n";
 	std::partial_sum(row_ptr.begin(), row_ptr.end(), row_ptr.data());
 
-	std::vector<__half> dense = generate_dense(static_cast<size_t>(mtx.rows * mtx.cols));
+	std::vector<float> dense = generate_dense(static_cast<size_t>(mtx.rows * mtx.cols));
 
 	CSRMatrixHeader header = {
 		mtx.rows,
@@ -349,7 +249,7 @@ void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
 		row_ptr.size() * sizeof(int),
 		col_idx.size() * sizeof(int),
 		val.size() * sizeof(int),
-		static_cast<size_t>(mtx.rows * mtx.cols) * sizeof(__half)
+		static_cast<size_t>(mtx.rows * mtx.cols) * sizeof(float)
 	};
 
 	write_binary_aligned(filepath, &header, sizeof(header), ALIGNMENT, ".csr");
@@ -359,64 +259,4 @@ void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
 	write_binary_aligned(filepath, dense.data(), header.dense_bytes, ALIGNMENT, ".csr");
 
 	return;
-}
-
-/*
- * Checks if [path] has a .mtx extension 
- * and
- * if the same filename exists as a .csr
- */
-static bool requires_conversion(const std::filesystem::path& path, const char* ext)
-{
-	// TODO: Add a check for .bsr when it's implemented
-	// Add a check for KBSR when it's implemented
-	return path.extension().string() == ".mtx" &&
-	       !(std::filesystem::exists(path.parent_path() / path.filename().replace_extension(ext)));
-}
-
-/*
- * Will iterate over all data/ *.mtx matrices
- * and convert them to .bcsr format
- * WARNING: this func is utter garbagio
- */
-void convert(const std::filesystem::directory_iterator& target_dir, std::shared_ptr<HRPB> (*conversion_func_ptr)(COOMatrix& mtx, const std::filesystem::path& filepath), const char* ext)
-{
-	for (const auto& filepath : std::filesystem::directory_iterator(target_dir)) {
-		if (filepath.is_regular_file() && requires_conversion(filepath.path(), ext)) {
-			COOMatrix coo_matrix = read_mtx(filepath.path());
-			conversion_func_ptr(coo_matrix, filepath.path());
-		}
-	}
-}
-
-void print_matrix_specs(const std::filesystem::path& filepath)
-{
-	FILE* f = fopen(filepath.c_str(), "r");
-	int   rows = 0;
-	int   cols = 0;
-	int   nnz = 0;
-
-	if (!f)
-		THROW_RUNTIME_ERROR("Failed to open file ~ " + filepath.filename().string());
-
-	MM_typecode matcode;
-	if (mm_read_banner(f, &matcode) != 0) {
-		fclose(f);
-		THROW_RUNTIME_ERROR("Error reading mtx banner");
-	}
-
-	std::cout << filepath.filename() << "\n";
-	for (int i = 0; i < 4; ++i) {
-		std::cout << matcode[i];
-	}
-	std::cout << "\n";
-
-	if (mm_is_sparse(matcode)) {
-		mm_read_mtx_crd_size(f, &rows, &cols, &nnz);
-		std::cout << "Sparse with " << rows << " rows and " << cols << " cols and nnz " << nnz << "\n";
-		std::cout << "Data type " << matcode[2] << "\n";
-	} else {
-		mm_read_mtx_array_size(f, &rows, &cols);
-		std::cout << "Dense with " << rows << " rows and " << cols << " cols.\n";
-	}
 }
