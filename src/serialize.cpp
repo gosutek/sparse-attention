@@ -2,6 +2,7 @@
 
 #include "../extern/mmio.h"
 
+#include <cassert>
 #include <filesystem>
 #include <fstream>
 #include <random>
@@ -22,10 +23,10 @@ struct COOMatrix
 
 struct SerializationInput
 {
+	std::vector<float> sparse_elements{};
+	std::vector<float> dense_elements{};
 	uint32_t           rows{};
 	uint32_t           cols{};
-	std::vector<float> sparse_elements;
-	std::vector<float> dense_elements;
 };
 
 /*
@@ -154,19 +155,52 @@ static std::vector<float> coo_to_row_major(const COOMatrix& mtx)
 	return re;
 }
 
+static size_t calculate_padding(size_t size)
+{
+	size_t remainder = size % ALIGNMENT;
+	if (ALIGNMENT == 0 || remainder == 0) {
+		return 0;
+	} else {
+		return ALIGNMENT - remainder;
+	}
+}
+
+static void deserialize(const std::filesystem::path& path)
+{
+	// TODO
+}
+
 static void serialize(const std::filesystem::path& path, const SerializationInput& data)
 {
 	std::ofstream ofs(path, std::ios::binary);
 
+	size_t padding = 0;
+	size_t chunk_size = 0;
+
 	ofs.write(reinterpret_cast<const char*>(&data.rows), sizeof(data.rows));
 	ofs.write(reinterpret_cast<const char*>(&data.cols), sizeof(data.cols));
+
+	chunk_size = sizeof(data.rows) + sizeof(data.cols);
+	padding = calculate_padding(chunk_size);
+	printf("Metadata: Size equal to %lu, I need to pad %lu bytes\n", chunk_size, padding);
+	ofs.write(reinterpret_cast<const char*>(&padding), sizeof(padding));
+
 	ofs.write(reinterpret_cast<const char*>(data.sparse_elements.data()), data.sparse_elements.size() * sizeof(float));
+	chunk_size = data.sparse_elements.size() * sizeof(float);
+	padding = calculate_padding(chunk_size);
+	printf("Sparse Matrix: Size equal to %lu, I need to pad %lu bytes\n", chunk_size, padding);
+	ofs.write(reinterpret_cast<const char*>(&padding), sizeof(padding));
+
 	ofs.write(reinterpret_cast<const char*>(data.dense_elements.data()), data.dense_elements.size() * sizeof(float));
+	chunk_size = data.dense_elements.size() * sizeof(float);
+	padding = calculate_padding(chunk_size);
+	printf("Dense Matrix: Size equal to %lu, I need to pad %lu bytes\n", chunk_size, padding);
+	ofs.write(reinterpret_cast<const char*>(&padding), sizeof(padding));
 
 	ofs.close();
 }
 
-static void batch_convert(const std::filesystem::directory_iterator& data_dir)
+static void batch_convert(const std::filesystem::recursive_directory_iterator& data_dir)
 {
 	for (const auto& filepath : data_dir) {
 		if (filepath.is_regular_file() && requires_conversion(filepath.path())) {
@@ -174,69 +208,61 @@ static void batch_convert(const std::filesystem::directory_iterator& data_dir)
 			std::vector<float> sparse_vec = coo_to_row_major(mtx);
 			std::vector<float> dense_vec = generate_dense(mtx.rows * mtx.cols);
 
-			std::filesystem::path output_filepath = replace_extension(filepath, ".spmm");
-			serialize(output_filepath, { mtx.rows, mtx.cols, std::move(sparse_vec), std::move(dense_vec) });
+			const std::filesystem::path output_filepath = replace_extension(filepath, ".spmm");
+			serialize(output_filepath, {
+										   std::move(sparse_vec),
+										   std::move(dense_vec),
+										   mtx.rows,
+										   mtx.cols,
+									   });
 		}
 	}
 }
 
-static void unit_test_serialization(const std::filesystem::path& filepath)
+/*
+   * Expects a .mtx and looks for a .spmm with the same name
+   * converts from coo to row major
+   * reads .spmmm
+   * compares
+ */
+static bool unit_test_serialization(const std::filesystem::path& filepath)
 {
-	COOMatrix unit_coo = {
-		4, 4, 4,
-		{ { 1, 1, 2.0f },
-			{ 2,
-				3,
-				5.0f },
-			{ 2,
-				1,
-				6.0f },
-			{ 0, 3, 69.0f } }
-	};
-	std::vector<float> sparse = coo_to_row_major(unit_coo);
-	std::vector<float> dense = {
-		1.0f, 2.0f, 3.0f, 4.0f,
-		1.0f, 2.0f, 3.0f, 4.0f,
-		1.0f, 2.0f, 3.0f, 4.0f,
-		1.0f, 2.0f, 3.0f, 4.0f
-	};
+	if (filepath.extension() != ".mtx") {
+		THROW_RUNTIME_ERROR("Unexpected filepath extension, expected: '.mtx'");
+	}
 
-	const SerializationInput input = {
-		4, 4,
-		std::move(sparse),
-		std::move(dense)
-	};
+	const auto binary_filepath = replace_extension(filepath, ".spmm");
 
-	uint32_t in_rows{};
-	uint32_t in_cols{};
-	sparse = {};
-	dense = {};
+	if (!std::filesystem::exists(binary_filepath)) {
+		THROW_RUNTIME_ERROR("Corresponding .spmm not found");
+	}
 
-	serialize(filepath, input);
+	COOMatrix          mtx = read_mtx(filepath);
+	std::vector<float> expected = coo_to_row_major(std::move(mtx));
 
-	std::ifstream ifs(filepath, std::ios::binary);
+	SerializationInput actual;
 
-	ifs.read(reinterpret_cast<char*>(&in_rows), sizeof(in_rows));
-	printf("Read %lu bytes, rows are equal to %d\n", sizeof(in_rows), in_rows);
-	ifs.read(reinterpret_cast<char*>(&in_cols), sizeof(in_cols));
-	printf("Read %lu bytes, cols are equal to %d\n", sizeof(in_cols), in_cols);
-	printf("Reserving %lu bytes of memory for the vector of sparse elements (%u)\n", in_rows * in_cols * sizeof(float), in_rows * in_cols);
-	sparse.resize(in_rows * in_cols);
-	printf("Reserving %lu bytes of memory for the vector of dense elements (%u)\n", in_rows * in_cols * sizeof(float), in_rows * in_cols);
-	dense.resize(in_rows * in_cols);
+	std::ifstream ifs(binary_filepath, std::ios::binary);
 
-	printf("Reading %lu bytes, or %u elements of the vector of sparse elements\n", in_rows * in_cols * sizeof(float), in_rows * in_cols);
-	ifs.read(reinterpret_cast<char*>(sparse.data()), in_rows * in_cols * sizeof(float));
+	ifs.read(reinterpret_cast<char*>(&actual.rows), sizeof(actual.rows));
+	printf("Read %lu bytes, rows are equal to %d\n", sizeof(actual.rows), actual.rows);
+	ifs.read(reinterpret_cast<char*>(&actual.cols), sizeof(actual.cols));
+	printf("Read %lu bytes, cols are equal to %d\n", sizeof(actual.cols), actual.cols);
+	printf("Reserving %lu bytes of memory for the vector of sparse elements (%u)\n", actual.rows * actual.cols * sizeof(float), actual.rows * actual.cols);
+	actual.sparse_elements.resize(actual.rows * actual.cols);
+	printf("Reserving %lu bytes of memory for the vector of dense elements (%u)\n", actual.rows * actual.cols * sizeof(float), actual.rows * actual.cols);
+	actual.dense_elements.resize(actual.rows * actual.cols);
 
-	printf("Reading %lu bytes, or %u elements of the vector of dense elements\n", in_rows * in_cols * sizeof(float), in_rows * in_cols);
-	ifs.read(reinterpret_cast<char*>(dense.data()), in_rows * in_cols * sizeof(float));
+	printf("Reading %lu bytes, or %u elements of the vector of sparse elements\n", actual.rows * actual.cols * sizeof(float), actual.rows * actual.cols);
+	ifs.read(reinterpret_cast<char*>(actual.sparse_elements.data()), actual.rows * actual.cols * sizeof(float));
 
-	std::cout << "Sparse matrix\n"
-			  << sparse << "\n";
-	std::cout << "Dense matrix\n"
-			  << dense << "\n";
+	printf("Reading %lu bytes, or %u elements of the vector of dense elements\n", actual.rows * actual.cols * sizeof(float), actual.rows * actual.cols);
+	ifs.read(reinterpret_cast<char*>(actual.dense_elements.data()), actual.rows * actual.cols * sizeof(float));
+
+	std::cout << expected[0] << " " << actual.sparse_elements[0] << "\n";
+
+	return expected == actual.sparse_elements;
 }
-
 static void unit_test_coo_to_row_major()
 {
 	COOMatrix unit_coo = {
@@ -258,10 +284,11 @@ static void unit_test_coo_to_row_major()
 
 int main()
 {
-	const auto data_path = std::filesystem::current_path() / DATA_DIRECTORY / "fv1/";
-	const auto data_dir = std::filesystem::directory_iterator(std::move(data_path));
+	const auto data_path = std::filesystem::current_path() / DATA_DIRECTORY;
+	const auto data_dir = std::filesystem::recursive_directory_iterator(std::move(data_path));
 	try {
 		batch_convert(data_dir);
+		assert(unit_test_serialization(data_path / "d50_s2048/d50_s2048.mtx"));
 	} catch (const std::exception& e) {
 		std::cerr << "Exception: " << e.what() << "\n";
 	}

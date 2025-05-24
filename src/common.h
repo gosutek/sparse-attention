@@ -5,7 +5,6 @@
 #include <cstdio>
 #include <filesystem>
 #include <iostream>
-#include <ostream>
 #include <vector>
 
 constexpr char    DATA_DIRECTORY[] = "data/";

@@ -1,7 +1,9 @@
 #include <algorithm>
-#include <memory>
+#include <ostream>
 
 #include "common.h"
+
+#include "matrix_ops.h"
 
 // __float2half(const float a)
 // __float2half_rd(const float a) ~ round down
@@ -11,7 +13,15 @@
 //
 // float2float
 
-#include "matrix_ops.h"
+#define CUDA_CHECK(x)                                                                                    \
+	do {                                                                                                 \
+		cudaError_t err = x;                                                                             \
+		if (err != cudaSuccess) {                                                                        \
+			fprintf(stderr, "CUDA error in %s at %s:%d: %s (%s=%d)\n", __FUNCTION__, __FILE__, __LINE__, \
+				cudaGetErrorString(err), cudaGetErrorName(err), err);                                    \
+			abort();                                                                                     \
+		}                                                                                                \
+	} while (0)
 
 struct ProcessingState
 {
@@ -259,4 +269,29 @@ void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
 	write_binary_aligned(filepath, dense.data(), header.dense_bytes, ALIGNMENT, ".csr");
 
 	return;
+}
+
+[[maybe_unused]] static void load_binary_to_host(const std::filesystem::path& filepath)
+{
+	void* host_ptr = nullptr;
+	// TODO: Check if its actually a file (???)
+	size_t filesize = std::filesystem::file_size(filepath);
+
+	cudaMallocHost(&host_ptr, filesize);
+
+	// TODO: Add error handling
+	FILE* file = fopen(filepath.c_str(), "rb");
+	fread(host_ptr, filesize, 1, file);
+	fclose(file);
+
+	CSRMatrixHeader* header_ptr = reinterpret_cast<CSRMatrixHeader*>(host_ptr);
+
+	printf("rows: %d\n", header_ptr->rows);
+	printf("cols: %d\n", header_ptr->cols);
+	printf("nnz: %u\n", header_ptr->nnz);
+
+	// WARNING: This should only happen once every
+	// matrix needed is loaded into device memory
+	// since its heavy
+	cudaFreeHost(host_ptr);
 }
