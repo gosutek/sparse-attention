@@ -1,6 +1,8 @@
 
 #include "common.h"
 
+#include "matrix_ops.cuh"
+
 // __float2half(const float a)
 // __float2half_rd(const float a) ~ round down
 // __float2half_rn(const float a) ~ round nearest
@@ -249,13 +251,15 @@ struct ProcessingState
 // 	return;
 // }
 
+/*
+* 1. Host reads binary into pinned memory
+* 2. Deserialize
+* 2. Data gets loaded into global memory
+* 4. Convert to __half
+*/
+
 __host__ void read_binary(const std::filesystem::path& filepath)
 {
-	/*
-  * 1. Host reads binary into pinned memory
-  * 2. Binary gets loaded into global memory
-  * 3. Deserialize
-  */
 	if (!std::filesystem::exists(filepath) || !std::filesystem::is_regular_file(filepath))
 		THROW_RUNTIME_ERROR("Invalid file given");
 	if (filepath.extension() != ".spmm")
@@ -269,6 +273,23 @@ __host__ void read_binary(const std::filesystem::path& filepath)
 
 	std::ifstream ifs(filepath, std::ios::binary);
 	ifs.read(reinterpret_cast<char*>(host_ptr), filesize);
+
+	const size_t rows = *reinterpret_cast<size_t*>(host_ptr);
+	const size_t cols = *(reinterpret_cast<size_t*>(host_ptr) + 1);
+	void*        dev_ptr = nullptr;
+
+	void*  sparse_pitched_mem = nullptr;
+	size_t pitch = 0;
+
+	void* dense_pitched_mem = nullptr;
+
+	CUDA_CHECK(cudaMalloc(&dev_ptr, filesize));  // WARNING: This wastes space if we then copy the sparse+dense elements into pitched memory
+
+	CUDA_CHECK(cudaMallocPitch(&sparse_pitched_mem, &pitch, cols, 2 * rows));
+	dense_pitched_mem = reinterpret_cast<void*>(
+		(reinterpret_cast<char*>(sparse_pitched_mem) + rows * pitch));
+
+	CUDA_CHECK(cudaMemcpy(dev_ptr, host_ptr, filesize, cudaMemcpyHostToDevice));
 
 	// WARNING: This should only happen once every
 	// matrix needed is loaded into device memory
