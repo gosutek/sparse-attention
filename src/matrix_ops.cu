@@ -285,7 +285,7 @@ __host__ void read_binary(const std::filesystem::path& filepath)
 
 	CUDA_CHECK(cudaMalloc(&dev_ptr, filesize));  // WARNING: This wastes space if we then copy the sparse+dense elements into pitched memory
 
-	CUDA_CHECK(cudaMallocPitch(&sparse_pitched_mem, &pitch, cols, 2 * rows));
+	CUDA_CHECK(cudaMallocPitch(&sparse_pitched_mem, &pitch, cols * sizeof(float), 2 * rows));
 	dense_pitched_mem = reinterpret_cast<void*>(
 		(reinterpret_cast<char*>(sparse_pitched_mem) + rows * pitch));
 
