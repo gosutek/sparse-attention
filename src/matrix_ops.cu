@@ -258,6 +258,16 @@ struct ProcessingState
 * 4. Convert to __half
 */
 
+__global__ void deserialization_kernel(void* raw_data,
+	void* sparse_pitched_mem, void* dense_pitched_mem, size_t pitch,
+	size_t rows, size_t cols)
+{
+	SpmmDTO dto;
+	raw_data = reinterpret_cast<void*>(reinterpret_cast<uint32_t*>(raw_data) + 2);  // skip rows and cols, should point to sparse_elements
+	const void* src_sparse_ptr = raw_data;
+	// 1. Identify the ranges in raw_data (this has the rows and cols embedded still)
+}
+
 __host__ void read_binary(const std::filesystem::path& filepath)
 {
 	if (!std::filesystem::exists(filepath) || !std::filesystem::is_regular_file(filepath))
@@ -290,6 +300,10 @@ __host__ void read_binary(const std::filesystem::path& filepath)
 		(reinterpret_cast<char*>(sparse_pitched_mem) + rows * pitch));
 
 	CUDA_CHECK(cudaMemcpy(dev_ptr, host_ptr, filesize, cudaMemcpyHostToDevice));
+
+	const size_t     total_elements = rows * cols;
+	constexpr size_t threads_per_block = 256;
+	const size_t     thread_blocks = (total_elements + threads_per_block - 1) / threads_per_block;
 
 	// WARNING: This should only happen once every
 	// matrix needed is loaded into device memory

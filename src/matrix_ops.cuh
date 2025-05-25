@@ -11,6 +11,18 @@
  * C is MxN
  */
 
+struct SpmmDTO
+{
+	float* sparse_pitched = nullptr;
+	float* dense_pitched = nullptr;
+
+	size_t sparse_pitch{};
+	size_t dense_pitch{};
+
+	size_t rows{};
+	size_t cols{};
+};
+
 // TODO: This need to be converted to __half
 // 152 bytes
 struct Block
