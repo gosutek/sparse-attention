@@ -258,14 +258,38 @@ struct ProcessingState
 * 4. Convert to __half
 */
 
-__global__ void deserialization_kernel(void* raw_data,
+static size_t calculate_padding(size_t size)
+{
+	size_t remainder = size % ALIGNMENT;
+	if (ALIGNMENT == 0 || remainder == 0) {
+		return 0;
+	} else {
+		return ALIGNMENT - remainder;
+	}
+}
+
+__global__ void deserialization_kernel(float* src_sparse_ptr, float* src_dense_ptr,
 	void* sparse_pitched_mem, void* dense_pitched_mem, size_t pitch,
 	size_t rows, size_t cols)
 {
-	SpmmDTO dto;
-	raw_data = reinterpret_cast<void*>(reinterpret_cast<uint32_t*>(raw_data) + 2);  // skip rows and cols, should point to sparse_elements
-	const void* src_sparse_ptr = raw_data;
-	// 1. Identify the ranges in raw_data (this has the rows and cols embedded still)
+	// SpmmDTO dto;
+
+	const uint32_t thread_col = blockIdx.x * blockDim.x + threadIdx.x;
+	const uint32_t thread_row = blockIdx.y * blockDim.y + threadIdx.y;
+
+	// WARNING: Warp divergence shouldn't happen as long as no.threads is a multiple of 32
+	// I am generating neatly sized matrices. Figure out how to minimize warp divergence when matrix shape is not a multiple of 32
+	if (thread_col < cols && thread_row < rows) {
+		const float value = src_sparse_ptr[thread_row * cols + thread_col];
+
+		float* const thread_local_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(sparse_pitched_mem) + thread_row * pitch) + thread_col;
+		*thread_local_ptr = value;
+	} else if (thread_col < 2 * cols && thread_row < 2 * rows) {
+		const float value = src_dense_ptr[thread_row * cols + thread_col];
+
+		float* const thread_local_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(dense_pitched_mem) + thread_row * pitch) + thread_col;
+		*thread_local_ptr = value;
+	}
 }
 
 __host__ void read_binary(const std::filesystem::path& filepath)
@@ -275,38 +299,67 @@ __host__ void read_binary(const std::filesystem::path& filepath)
 	if (filepath.extension() != ".spmm")
 		THROW_RUNTIME_ERROR("Invalid file type given, expected: '.spmm'");
 
-	void*  host_ptr = nullptr;
+	void*  host_serialized_ptr = nullptr;
 	size_t filesize = std::filesystem::file_size(filepath);
 
 	printf("File %s with a filesize of %zu will be loaded into global memory\n", filepath.c_str(), filesize);
-	CUDA_CHECK(cudaMallocHost(&host_ptr, filesize));
+	CUDA_CHECK(cudaMallocHost(&host_serialized_ptr, filesize));
 
 	std::ifstream ifs(filepath, std::ios::binary);
-	ifs.read(reinterpret_cast<char*>(host_ptr), filesize);
+	ifs.read(reinterpret_cast<char*>(host_serialized_ptr), filesize);
 
-	const size_t rows = *reinterpret_cast<size_t*>(host_ptr);
-	const size_t cols = *(reinterpret_cast<size_t*>(host_ptr) + 1);
-	void*        dev_ptr = nullptr;
+	const size_t rows = *reinterpret_cast<size_t*>(host_serialized_ptr);
+	const size_t cols = *(reinterpret_cast<size_t*>(host_serialized_ptr) + 1);
+	void*        dev_serialized_ptr = nullptr;
 
+	void*  pitched_mem_start = nullptr;
+	void*  dense_pitched_mem = nullptr;
 	void*  sparse_pitched_mem = nullptr;
 	size_t pitch = 0;
 
-	void* dense_pitched_mem = nullptr;
+	CUDA_CHECK(cudaMalloc(&dev_serialized_ptr, filesize));  // WARNING: This wastes space if we then copy the sparse+dense elements into pitched memory
 
-	CUDA_CHECK(cudaMalloc(&dev_ptr, filesize));  // WARNING: This wastes space if we then copy the sparse+dense elements into pitched memory
-
-	CUDA_CHECK(cudaMallocPitch(&sparse_pitched_mem, &pitch, cols * sizeof(float), 2 * rows));
+	// Access with T* pElement = (T*)((char*)BaseAddress + Row * pitch) + Column
+	CUDA_CHECK(cudaMallocPitch(&pitched_mem_start, &pitch, cols * sizeof(float), 2 * rows));
+	sparse_pitched_mem = pitched_mem_start;
 	dense_pitched_mem = reinterpret_cast<void*>(
 		(reinterpret_cast<char*>(sparse_pitched_mem) + rows * pitch));
 
-	CUDA_CHECK(cudaMemcpy(dev_ptr, host_ptr, filesize, cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(dev_serialized_ptr, host_serialized_ptr, filesize, cudaMemcpyHostToDevice));
 
-	const size_t     total_elements = rows * cols;
-	constexpr size_t threads_per_block = 256;
-	const size_t     thread_blocks = (total_elements + threads_per_block - 1) / threads_per_block;
+	dim3           block_size(16, 16);                                               // 256 threads per block
+	const uint32_t blocks_to_cover_cols = (cols + block_size.x - 1) / block_size.x;  // ceil-ed
+	const uint32_t blocks_to_cover_rows = (rows + block_size.y - 1) / block_size.y;  // ceil-ed
+	dim3           grid_size(2 * blocks_to_cover_cols, 2 * blocks_to_cover_rows);    // there are two of them
+
+	size_t padding = 0;
+	size_t chunk_size = 0;
+
+	chunk_size = sizeof(rows) + sizeof(cols);  // the bytes occupied by the first two members (rows and cols)
+	padding = calculate_padding(chunk_size);   // padding applied to the first two members (rows and cols)
+
+	float* src_sparse_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(dev_serialized_ptr) + chunk_size + padding);  // skip rows and cols, should point to sparse_elements
+
+	chunk_size = rows * cols * sizeof(float);  // the size of sparse_elements in bytes
+	padding = calculate_padding(chunk_size);   // padding applied to sparse_elements
+
+	float* src_dense_ptr = src_sparse_ptr + chunk_size + padding;  // should point to dense_elements
+
+	deserialization_kernel<<<grid_size, block_size>>>(src_sparse_ptr, src_dense_ptr, sparse_pitched_mem, dense_pitched_mem, pitch, rows, cols);
+	cudaDeviceSynchronize();
+
+	// Gimme (0,0) of sparse_elements
+	float              h_test_value;
+	constexpr uint8_t  t_row = 0;
+	constexpr uint8_t  t_col = 0;
+	const float* const test_value = reinterpret_cast<float*>(reinterpret_cast<char*>(src_sparse_ptr) + t_row * pitch) + t_col;
+	CUDA_CHECK(cudaMemcpy(&h_test_value, test_value, sizeof(float), cudaMemcpyDeviceToHost));
+
+	std::cout << h_test_value << "\n";
 
 	// WARNING: This should only happen once every
 	// matrix needed is loaded into device memory
 	// since its heavy
-	cudaFreeHost(host_ptr);
+	cudaFreeHost(host_serialized_ptr);
+	cudaFree(pitched_mem_start);
 }
