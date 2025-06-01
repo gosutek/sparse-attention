@@ -4,3 +4,4 @@ extern/
 test/
 tools/venv/
 valgrind*
+sanitizer*
