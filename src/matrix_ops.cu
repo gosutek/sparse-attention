@@ -282,8 +282,9 @@ __global__ void deserialization_kernel(float* sparse_ptr, size_t offset, void* p
 		thread_local_ptr[thread_col] = value;
 	} else if (thread_col < 2 * cols && thread_row < 2 * rows) {  // Dense threads go here
 		const uint32_t local_row = thread_row - rows;
-		float* const   dense_ptr = sparse_ptr + offset;
-		const float    value = dense_ptr[local_row * cols + thread_col];
+		const uint32_t local_col = thread_col - cols;
+		float* const   dense_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(sparse_ptr) + offset);
+		const float    value = dense_ptr[local_row * cols + local_col];
 
 		float* thread_local_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(pitched_ptr) + rows + local_row * pitch);
 		thread_local_ptr[thread_col] = value;
@@ -329,17 +330,16 @@ __host__ void read_binary(const std::filesystem::path& filepath)
 
 	chunk_size = rows * cols * sizeof(float);           // the size of sparse_elements in bytes
 	padding = calculate_padding(chunk_size);            // padding applied to sparse_elements
-	size_t dense_matrix_offset = chunk_size + padding;  // global_ptr+dense_matrix_offset = start of dense matrix in global memory
+	size_t dense_matrix_offset = chunk_size + padding;  // global_ptr+dense_matrix_offset = start of dense matrix in global memory IN BYTES
 
 	deserialization_kernel<<<grid_size, block_size>>>(global_ptr, dense_matrix_offset, pitched_ptr, pitch, rows, cols);
 	cudaDeviceSynchronize();
 
 	// Gimme (0,0) of sparse_elements
 	float h_test_sparse;
-	std::cout << pitched_ptr << std::endl;
 	CUDA_CHECK(cudaMemcpy(&h_test_sparse, pitched_ptr, sizeof(float), cudaMemcpyDeviceToHost));
 
-	std::cout << h_test_sparse << "\n";
+	std::cout << h_test_sparse << std::endl;
 
 	// WARNING: This should only happen once every
 	// matrix needed is loaded into device memory
