@@ -280,7 +280,7 @@ __global__ void deserialization_kernel(float* sparse_ptr, size_t offset, void* p
 
 		float* thread_local_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(pitched_ptr) + thread_row * pitch);
 		thread_local_ptr[thread_col] = value;
-	} else if (thread_col < 2 * cols && thread_row < 2 * rows) {  // Dense threads go here
+	} else if (thread_col >= cols && thread_col < 2 * cols && thread_row >= rows && thread_row < 2 * rows) {  // Dense threads go here
 		const uint32_t local_row = thread_row - rows;
 		const uint32_t local_col = thread_col - cols;
 		float* const   dense_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(sparse_ptr) + offset);
