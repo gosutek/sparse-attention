@@ -286,7 +286,8 @@ __global__ void deserialization_kernel(float* sparse_ptr, size_t offset, void* p
 		float* const   dense_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(sparse_ptr) + offset);
 		const float    value = dense_ptr[local_row * cols + local_col];
 
-		float* thread_local_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(pitched_ptr) + rows + local_row * pitch);
+		float* thread_local_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(pitched_ptr) + rows * pitch) + cols;
+		thread_local_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(pitched_ptr) + local_row * pitch);
 		thread_local_ptr[thread_col] = value;
 	}
 }
