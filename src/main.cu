@@ -26,7 +26,7 @@ int main()
 	const auto binary_path = std::filesystem::current_path() / DATA_DIRECTORY / "d50_s2048/d50_s2048.spmm";
 
 	try {
-		read_binary(binary_path);
+		deserialize(binary_path);
 	} catch (const std::exception& e) {
 		std::cerr << "Exception: " << e.what() << "\n";
 	}

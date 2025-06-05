@@ -11,14 +11,28 @@
  * C is MxN
  */
 
-struct SpmmDTO
+struct PitchedRowMajorMatrix
 {
-	float* sparse_pitched = nullptr;
-	float* dense_pitched = nullptr;
+	float* data = nullptr;
+	size_t rows{};
+	size_t cols{};
+	size_t pitch{};
 
-	size_t sparse_pitch{};
-	size_t dense_pitch{};
+	__host__ __device__ PitchedRowMajorMatrix() {}
 
+	__host__ __device__ PitchedRowMajorMatrix(float* _data, size_t _rows, size_t _cols, size_t _pitch) :
+		data(_data), rows(_rows), cols(_cols), pitch(_pitch) {}
+};
+
+struct SpmmPair
+{
+	PitchedRowMajorMatrix d_prm_sparse;
+	PitchedRowMajorMatrix d_prm_dense;
+};
+
+struct LoadBinaryOutput
+{
+	void*  global_ptr = nullptr;
 	size_t rows{};
 	size_t cols{};
 };
@@ -86,4 +100,4 @@ struct HRPB
 	}
 };
 
-__host__ void read_binary(const std::filesystem::path& filepath);
+__host__ void deserialize(const std::filesystem::path& filepath);
