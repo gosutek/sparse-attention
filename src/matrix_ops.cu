@@ -273,14 +273,14 @@ static __host__ void unit_test(PitchedRowMajorMatrix* d_prm_sparse, PitchedRowMa
 	CUDA_CHECK(cudaMemcpy(&h_sparse_res, d_prm_sparse, sizeof(PitchedRowMajorMatrix), cudaMemcpyDeviceToHost));
 	CUDA_CHECK(cudaMemcpy(&h_dense_res, d_prm_dense, sizeof(PitchedRowMajorMatrix), cudaMemcpyDeviceToHost));
 
-	float h_sparse_first_element;
-	float h_dense_first_element;
+	__half h_sparse_first_element;
+	__half h_dense_first_element;
 
-	CUDA_CHECK(cudaMemcpy(&h_sparse_first_element, h_sparse_res.data, sizeof(float), cudaMemcpyDeviceToHost));
-	CUDA_CHECK(cudaMemcpy(&h_dense_first_element, h_dense_res.data, sizeof(float), cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(&h_sparse_first_element, h_sparse_res.data, sizeof(__half), cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(&h_dense_first_element, h_dense_res.data, sizeof(__half), cudaMemcpyDeviceToHost));
 
-	std::cout << "Sparse [0,0]: " << h_sparse_first_element << "\n";
-	std::cout << "Dense [0,0]: " << h_dense_first_element << std::endl;
+	std::cout << "Sparse [0,0]: " << __half2float(h_sparse_first_element) << "\n";
+	std::cout << "Dense [0,0]: " << __half2float(h_dense_first_element) << std::endl;
 }
 
 static __global__ void deserialization_kernel(float* const h_sparse_ptr, float* const h_dense_ptr,
@@ -295,15 +295,15 @@ static __global__ void deserialization_kernel(float* const h_sparse_ptr, float* 
 	if (thread_col < cols && thread_row < rows) {  // Sparse threads go here
 		const float value = h_sparse_ptr[thread_row * cols + thread_col];
 
-		float* thread_local_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(d_prm_sparse_ptr->data) + thread_row * pitch);
-		thread_local_ptr[thread_col] = value;
+		__half* thread_local_ptr = reinterpret_cast<__half*>(reinterpret_cast<char*>(d_prm_sparse_ptr->data) + thread_row * pitch);
+		thread_local_ptr[thread_col] = __float2half(value);
 	} else if (thread_col >= cols && thread_col < 2 * cols && thread_row >= rows && thread_row < 2 * rows) {  // Dense threads go here
 		const uint32_t local_row = thread_row - rows;
 		const uint32_t local_col = thread_col - cols;
 		const float    value = h_dense_ptr[local_row * cols + local_col];
 
-		float* const thread_local_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(d_prm_dense_ptr->data) + local_row * pitch);
-		thread_local_ptr[local_col] = value;
+		__half* const thread_local_ptr = reinterpret_cast<__half*>(reinterpret_cast<char*>(d_prm_dense_ptr->data) + local_row * pitch);
+		thread_local_ptr[local_col] = __float2half(value);
 	}
 }
 
@@ -356,23 +356,23 @@ __host__ SpmmInput deserialize(const std::filesystem::path& filepath)
 	size_t           pitch = 0;
 
 	// Access with T* pElement = (T*)((char*)BaseAddress + Row * pitch) + Column
-	CUDA_CHECK(cudaMallocPitch(&pitched_ptr, &pitch, binary.cols * sizeof(float), 2 * binary.rows));
+	CUDA_CHECK(cudaMallocPitch(&pitched_ptr, &pitch, binary.cols * sizeof(__half), 2 * binary.rows));
 
 	dim3           block_size(16, 16);                                                      // 256 threads per block
 	const uint32_t blocks_to_cover_cols = (binary.cols + block_size.x - 1) / block_size.x;  // ceil-ed
 	const uint32_t blocks_to_cover_rows = (binary.rows + block_size.y - 1) / block_size.y;  // ceil-ed
 	dim3           grid_size(2 * blocks_to_cover_cols, 2 * blocks_to_cover_rows);           // there are two of them
 
-	size_t       chunk_size = binary.rows * binary.cols * sizeof(float);  // the size of sparse_elements in bytes
-	size_t       padding = calculate_padding(chunk_size);                 // padding applied to sparse_elements
-	size_t       dense_matrix_offset = chunk_size + padding;              // global_ptr+dense_matrix_offset = start of dense matrix in global memory IN BYTES
-	float* const dense_global_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(binary.global_ptr) + dense_matrix_offset);
-	float* const dense_pitched_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(pitched_ptr) + binary.rows * pitch);
+	size_t        chunk_size = binary.rows * binary.cols * sizeof(float);  // the size of sparse_elements in bytes
+	size_t        padding = calculate_padding(chunk_size);                 // padding applied to sparse_elements
+	size_t        dense_matrix_offset = chunk_size + padding;              // global_ptr+dense_matrix_offset = start of dense matrix in global memory IN BYTES
+	float* const  dense_global_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(binary.global_ptr) + dense_matrix_offset);
+	__half* const dense_pitched_ptr = reinterpret_cast<__half*>(reinterpret_cast<char*>(pitched_ptr) + binary.rows * pitch);
 
 	PitchedRowMajorMatrix* d_prm_sparse = nullptr;
 	PitchedRowMajorMatrix* d_prm_dense = nullptr;
 
-	PitchedRowMajorMatrix h_prm_sparse = { reinterpret_cast<float*>(pitched_ptr), binary.rows, binary.cols, pitch };
+	PitchedRowMajorMatrix h_prm_sparse = { reinterpret_cast<__half*>(pitched_ptr), binary.rows, binary.cols, pitch };
 	PitchedRowMajorMatrix h_prm_dense = { dense_pitched_ptr, binary.rows, binary.cols, pitch };
 
 	CUDA_CHECK(cudaMalloc(&d_prm_sparse, 2 * sizeof(PitchedRowMajorMatrix)));

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "cuda_fp16.h"
 
 /*
  * C = A*B
@@ -13,14 +14,14 @@
 
 struct PitchedRowMajorMatrix
 {
-	float* data = nullptr;
-	size_t rows{};
-	size_t cols{};
-	size_t pitch{};
+	__half* data = nullptr;
+	size_t  rows{};
+	size_t  cols{};
+	size_t  pitch{};
 
 	__host__ __device__ PitchedRowMajorMatrix() {}
 
-	__host__ __device__ PitchedRowMajorMatrix(float* _data, size_t _rows, size_t _cols, size_t _pitch) :
+	__host__ __device__ PitchedRowMajorMatrix(__half* _data, size_t _rows, size_t _cols, size_t _pitch) :
 		data(_data), rows(_rows), cols(_cols), pitch(_pitch) {}
 };
 
