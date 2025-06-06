@@ -24,10 +24,11 @@ struct PitchedRowMajorMatrix
 		data(_data), rows(_rows), cols(_cols), pitch(_pitch) {}
 };
 
-struct SpmmPair
+struct SpmmInput
 {
-	PitchedRowMajorMatrix d_prm_sparse;
-	PitchedRowMajorMatrix d_prm_dense;
+	PitchedRowMajorMatrix* d_prm_sparse{};
+	PitchedRowMajorMatrix* d_prm_dense{};
+	void*                  pitched_ptr = nullptr;  // used to free data, d_prm_sparse->data is INVALID (accesing device memory from host)
 };
 
 struct LoadBinaryOutput
@@ -100,4 +101,4 @@ struct HRPB
 	}
 };
 
-__host__ void deserialize(const std::filesystem::path& filepath);
+__host__ SpmmInput deserialize(const std::filesystem::path& filepath);

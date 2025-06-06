@@ -26,7 +26,9 @@ int main()
 	const auto binary_path = std::filesystem::current_path() / DATA_DIRECTORY / "d50_s2048/d50_s2048.spmm";
 
 	try {
-		deserialize(binary_path);
+		SpmmInput spmm_input = deserialize(binary_path);
+		cudaFree(spmm_input.pitched_ptr);
+		cudaFree(spmm_input.d_prm_sparse);
 	} catch (const std::exception& e) {
 		std::cerr << "Exception: " << e.what() << "\n";
 	}

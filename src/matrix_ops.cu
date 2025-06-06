@@ -391,7 +391,9 @@ __host__ SpmmInput deserialize(const std::filesystem::path& filepath)
 	// PERF: This should only happen once every
 	// matrix needed is loaded into device memory
 	// since its heavy
-	cudaFree(pitched_ptr);  // WARNING: This frees both sparse_pitched and dense_pitched
+	// cudaFree(pitched_ptr);  // NOTE: This frees both sparse_pitched and dense_pitched | DATA LIVES HERE
 	cudaFree(binary.global_ptr);
-	cudaFree(d_prm_sparse);  // WARNING: This frees both structs for prm_sparse and prm_dense
+	// cudaFree(d_prm_sparse);  // NOTE: This frees both structs for prm_sparse and prm_dense | META DATA LIVES HERE
+
+	return { d_prm_sparse, d_prm_dense, pitched_ptr };
 }
