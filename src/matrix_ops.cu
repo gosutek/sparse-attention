@@ -1,6 +1,4 @@
 
-#include "common.h"
-
 #include "matrix_ops.cuh"
 
 // __float2half(const float a)
@@ -131,9 +129,9 @@ struct ProcessingState
 //
 // 	std::sort(mtx.elements.begin(), mtx.elements.end(), &row_panel_sort);
 //
-// 	uint32_t current_panel = static_cast<uint32_t>(-1);  // WARNING: intended overflow
-// 	uint32_t current_col = static_cast<uint32_t>(-1);    // WARNING: intended overflow
-// 	uint32_t where_i_should_go = 0;                      // Rename this shit
+// 	uint32_t current_panel = static_cast<uint32_t>(-1);  // NOTE: intended overflow
+// 	uint32_t current_col = static_cast<uint32_t>(-1);    // NOTE: intended overflow
+// 	uint32_t where_i_should_go = 0;                      // TODO: Rename this shit
 //
 // 	/*
 //      * Iterate first by row panel then by col
@@ -268,7 +266,7 @@ static size_t calculate_padding(size_t size)
 	}
 }
 
-__host__ void unit_test(PitchedRowMajorMatrix* d_prm_sparse, PitchedRowMajorMatrix* d_prm_dense)
+static __host__ void unit_test(PitchedRowMajorMatrix* d_prm_sparse, PitchedRowMajorMatrix* d_prm_dense)
 {
 	PitchedRowMajorMatrix h_sparse_res;
 	PitchedRowMajorMatrix h_dense_res;
@@ -285,14 +283,14 @@ __host__ void unit_test(PitchedRowMajorMatrix* d_prm_sparse, PitchedRowMajorMatr
 	std::cout << "Dense [0,0]: " << h_dense_first_element << std::endl;
 }
 
-__global__ void deserialization_kernel(float* const h_sparse_ptr, float* const h_dense_ptr,
+static __global__ void deserialization_kernel(float* const h_sparse_ptr, float* const h_dense_ptr,
 	PitchedRowMajorMatrix* d_prm_sparse_ptr, PitchedRowMajorMatrix* d_prm_dense_ptr,
 	size_t pitch, size_t rows, size_t cols)
 {
 	size_t thread_col = blockIdx.x * blockDim.x + threadIdx.x;
 	size_t thread_row = blockIdx.y * blockDim.y + threadIdx.y;
 
-	// WARNING: Warp divergence shouldn't happen as long as no.threads is a multiple of 32
+	// NOTE: Warp divergence shouldn't happen as long as no.threads is a multiple of 32
 	// I am generating neatly sized matrices. Figure out how to minimize warp divergence when matrix shape is not a multiple of 32
 	if (thread_col < cols && thread_row < rows) {  // Sparse threads go here
 		const float value = h_sparse_ptr[thread_row * cols + thread_col];
@@ -309,7 +307,7 @@ __global__ void deserialization_kernel(float* const h_sparse_ptr, float* const h
 	}
 }
 
-__host__ LoadBinaryOutput load_binary_into_global_mem(const std::filesystem::path& filepath)
+static __host__ LoadBinaryOutput load_binary_into_global_mem(const std::filesystem::path& filepath)
 {
 	if (!std::filesystem::exists(filepath) || !std::filesystem::is_regular_file(filepath))
 		THROW_RUNTIME_ERROR("Invalid file given");
@@ -320,7 +318,7 @@ __host__ LoadBinaryOutput load_binary_into_global_mem(const std::filesystem::pat
 	void*            host_serialized_ptr = nullptr;
 	size_t           filesize = std::filesystem::file_size(filepath);
 
-	printf("File %s with a filesize of %zu will be loaded into global memory\n", filepath.c_str(), filesize);
+	printf("File %s with a filesize of %zu bytes will be loaded into global memory\n", filepath.c_str(), filesize);
 	CUDA_CHECK(cudaMallocHost(&host_serialized_ptr, filesize));
 
 	std::ifstream ifs(filepath, std::ios::binary);
@@ -343,7 +341,15 @@ __host__ LoadBinaryOutput load_binary_into_global_mem(const std::filesystem::pat
 	return res;
 }
 
-__host__ void deserialize(const std::filesystem::path& filepath)
+/*
+ * Loads the binary sparse and dense matrix into global memory,
+ * deserializes them, and loads them into pitched memory.
+ * Returns an SpmmInput, which is pointers to PitchedRowMajorMatrix
+ * in device memory
+ * WARN: THE CALLEE IS OBLIGATED TO FREE PITCHED_PTR AND D_PRM_SPARSE
+ * PERF: Combine allocations and copies into a single allocation and a single merge
+*/
+__host__ SpmmInput deserialize(const std::filesystem::path& filepath)
 {
 	LoadBinaryOutput binary = load_binary_into_global_mem(filepath);
 	void*            pitched_ptr = nullptr;
@@ -372,7 +378,7 @@ __host__ void deserialize(const std::filesystem::path& filepath)
 	CUDA_CHECK(cudaMalloc(&d_prm_sparse, 2 * sizeof(PitchedRowMajorMatrix)));
 	d_prm_dense = d_prm_sparse + 1;
 
-	// TODO: Merge or get rid of altogether
+	// PERF: Merge or get rid of altogether
 	CUDA_CHECK(cudaMemcpy(d_prm_sparse, &h_prm_sparse, sizeof(PitchedRowMajorMatrix), cudaMemcpyHostToDevice));
 	CUDA_CHECK(cudaMemcpy(d_prm_dense, &h_prm_dense, sizeof(PitchedRowMajorMatrix), cudaMemcpyHostToDevice));
 
@@ -382,7 +388,7 @@ __host__ void deserialize(const std::filesystem::path& filepath)
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	unit_test(d_prm_sparse, d_prm_dense);
-	// WARNING: This should only happen once every
+	// PERF: This should only happen once every
 	// matrix needed is loaded into device memory
 	// since its heavy
 	cudaFree(pitched_ptr);  // WARNING: This frees both sparse_pitched and dense_pitched
