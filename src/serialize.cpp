@@ -154,6 +154,18 @@ static std::vector<float> coo_to_row_major(const COOMatrix& mtx)
 	return re;
 }
 
+static std::vector<float> coo_to_col_major(const COOMatrix& mtx)
+{
+	std::vector<float> re;
+	re.resize(mtx.rows * mtx.cols, 0);
+
+	for (const COOElement& e : mtx.elements) {
+		re[e.col * mtx.rows + e.row] = e.val;
+	}
+
+	return re;
+}
+
 static size_t calculate_padding(size_t size)
 {
 	size_t remainder = size % ALIGNMENT;
@@ -196,6 +208,8 @@ static MatrixDTO deserialize(const std::filesystem::path& path)
 	return actual;
 }
 
+// BUG: This works only for square matrices
+// Check line 208,209
 static void serialize(const std::filesystem::path& path, const MatrixDTO& data)
 {
 	std::ofstream ofs(path, std::ios::binary);
@@ -235,7 +249,7 @@ static void batch_convert(const std::filesystem::recursive_directory_iterator& d
 	for (const auto& filepath : data_dir) {
 		if (filepath.is_regular_file() && requires_conversion(filepath.path())) {
 			COOMatrix          mtx = read_mtx(filepath);
-			std::vector<float> sparse_vec = coo_to_row_major(mtx);
+			std::vector<float> sparse_vec = coo_to_col_major(mtx);
 			std::vector<float> dense_vec = generate_dense(mtx.rows * mtx.cols);
 
 			const std::filesystem::path output_filepath = replace_extension(filepath, ".spmm");
@@ -268,7 +282,7 @@ static bool unit_test_serialization(const std::filesystem::path& filepath)
 	}
 
 	COOMatrix          mtx = read_mtx(filepath);
-	std::vector<float> expected = coo_to_row_major(std::move(mtx));
+	std::vector<float> expected = coo_to_col_major(std::move(mtx));
 	MatrixDTO          actual = deserialize(binary_filepath);
 
 	return expected == actual.sparse_elements;
@@ -287,6 +301,25 @@ static void unit_test_coo_to_row_major()
 			{ 0, 3, 69 } }
 	};
 	const auto& re = coo_to_row_major(unit_coo);
+	for (const auto& e : re) {
+		std::cout << e << std::endl;
+	}
+}
+
+static void unit_test_coo_to_col_major()
+{
+	COOMatrix unit_coo = {
+		4, 4, 4,
+		{ { 1, 1, 2 },
+			{ 2,
+				3,
+				5 },
+			{ 2,
+				1,
+				6 },
+			{ 0, 3, 69 } }
+	};
+	const auto& re = coo_to_col_major(unit_coo);
 	for (const auto& e : re) {
 		std::cout << e << std::endl;
 	}
