@@ -53,7 +53,7 @@ $(BUILD_DIR)/serialize: $(SERIALIZE_OBJECTS)
 
 $(BUILD_DIR)/%.cpp.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
-	$(CXX) $< $(CUFLAGS) -c -o $@
+	$(CXX) $< $(CFLAGS) -c -o $@
 
 $(BUILD_DIR)/%.cu.o: $(SRC_DIR)/%.cu
 	@mkdir -p $(@D)
