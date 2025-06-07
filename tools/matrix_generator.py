@@ -24,7 +24,7 @@ def generate_strided_mask(n, density_percent):
             break
 
     data = np.random.uniform(0.0, 1.0, size=len(rows)).astype(np.float32)
-    return coo_matrix((data, (rows, cols)), shape=(n, n))
+    return coo_matrix((data, (cols, rows)), shape=(n, n))
 
 
 def main():
