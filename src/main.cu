@@ -27,8 +27,8 @@ int main()
 
 	try {
 		SpmmInput spmm_input = deserialize(binary_path);
-		cudaFree(spmm_input.pitched_ptr);
-		cudaFree(spmm_input.d_prm_sparse);
+		cudaFree(spmm_input.pitched_ptr);   // NOTE: This frees both sparse_pitched and dense_pitched | DATA LIVES HERE
+		cudaFree(spmm_input.d_prm_sparse);  // NOTE: This frees both structs for prm_sparse and prm_dense | META DATA LIVES HERE
 	} catch (const std::exception& e) {
 		std::cerr << "Exception: " << e.what() << "\n";
 	}

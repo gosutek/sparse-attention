@@ -32,13 +32,6 @@ struct SpmmInput
 	void*                  pitched_ptr = nullptr;  // used to free data, d_prm_sparse->data is INVALID (accesing device memory from host)
 };
 
-struct LoadBinaryOutput
-{
-	void*  global_ptr = nullptr;
-	size_t rows{};
-	size_t cols{};
-};
-
 // TODO: This need to be converted to __half
 // 152 bytes
 struct Block

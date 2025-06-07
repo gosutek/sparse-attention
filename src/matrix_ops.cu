@@ -19,6 +19,13 @@
 		}                                                                                                \
 	} while (0)
 
+struct LoadBinaryOutput
+{
+	void*  global_ptr = nullptr;
+	size_t rows{};
+	size_t cols{};
+};
+
 struct ProcessingState
 {
 	int32_t current_row_panel = -1;
@@ -37,6 +44,34 @@ struct ProcessingState
 	size_t block_row_ptr_idx = 0;
 	size_t block_row_ptr_count = 0;
 };
+
+/*
+ * Converts mtx from COO to CSR format
+ * Writes to filename.csr binary
+ */
+//TODO: Figure out how to make static
+// void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
+// {
+// 	std::vector<int>      row_ptr(static_cast<size_t>(mtx.rows) + 1, 0);
+// 	std::vector<uint32_t> col_idx(static_cast<size_t>(mtx.nnz));
+// 	// TODO: template the val?
+// 	std::vector<float> val(static_cast<size_t>(mtx.nnz));
+//
+// 	std::sort(mtx.elements.begin(), mtx.elements.end(), [](const auto& a, const auto& b) { return std::tie(a.row, a.col) < std::tie(b.row, b.col); });
+//
+// 	std::cout << "Populating row_ptr, col_idx, val..." << std::flush;
+//
+// 	for (size_t i = 0; i < mtx.elements.size(); ++i) {
+// 		const auto& e = mtx.elements[i];
+// 		row_ptr[static_cast<size_t>(e.row) + 1]++;
+// 		col_idx[i] = e.col;
+// 		val[i] = __float2half_rn(e.val);
+// 	}
+// 	std::cout << "Done!\n";
+// 	std::partial_sum(row_ptr.begin(), row_ptr.end(), row_ptr.data());
+//
+// 	return;
+// }
 
 // static bool block_brick_sort(const COOElement& a, const COOElement& b)
 // {
@@ -104,8 +139,8 @@ struct ProcessingState
 // 	hrpb_ptr->block_row_ptr.back() = hrpb_ptr->packed_blocks.size();
 // 	hrpb_ptr->size_ptr.push_back(block.get_block_size() + hrpb_ptr->size_ptr.back());  // This blocks starting address is that previous block's starting address plus its size in bytes
 // }
-
-// TODO: Merge this and above
+//
+// // TODO: Merge this and above
 // static void finalize_last_block(std::shared_ptr<HRPB> hrpb_ptr, ProcessingState& state)
 // {
 // 	Block& block = hrpb_ptr->packed_blocks[static_cast<size_t>(state.block_idx)];
@@ -116,9 +151,30 @@ struct ProcessingState
 // 	}
 // 	hrpb_ptr->block_row_ptr.back() = hrpb_ptr->packed_blocks.size();
 // }
-
-// TODO: Should be static
-// TODO: Handle case where mtx.rows % ROW_PANEL_SIZE != 0
+//
+// /*
+//  * Most likely has load balancing problems
+//  */
+// static __global__ void hrpb_kernel(PitchedRowMajorMatrix* prm_sparse, bool* predicate)
+// {
+// 	int col = blockIdx.x * blockDim.x + threadIdx.x;
+// 	if (col >= prm_sparse->cols)
+// 		return;
+//
+// 	bool has_nonzero = false;
+// 	for (int row = 0; row < prm_sparse->rows; row++) {
+// 		__half* row_ptr = reinterpret_cast<__half*>(reinterpret_cast<char*>(prm_sparse->data) + row * prm_sparse->pitch);
+// 		// NOTE: Warp divergence here is insignificant (is it?)
+// 		if (row_ptr[col] != __float2half(0.0f)) {
+// 			has_nonzero = true;
+// 			break;
+// 		}
+// 	}
+// 	predicate[col] = has_nonzero;
+// }
+//
+// // TODO: Should be static
+// // TODO: Handle case where mtx.rows % ROW_PANEL_SIZE != 0
 // std::shared_ptr<HRPB> write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
 // {
 // 	std::shared_ptr<HRPB> hrpb_ptr = std::make_shared<HRPB>();  // NOTE: maybe don't allocate this on the heap?
@@ -221,41 +277,6 @@ struct ProcessingState
 // 	// delete hrpb_ptr;
 // }
 
-/*
- * Converts mtx from COO to CSR format
- * Writes to filename.csr binary
- */
-//TODO: Figure out how to make static
-// void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
-// {
-// 	std::vector<int>      row_ptr(static_cast<size_t>(mtx.rows) + 1, 0);
-// 	std::vector<uint32_t> col_idx(static_cast<size_t>(mtx.nnz));
-// 	// TODO: template the val?
-// 	std::vector<float> val(static_cast<size_t>(mtx.nnz));
-//
-// 	std::sort(mtx.elements.begin(), mtx.elements.end(), [](const auto& a, const auto& b) { return std::tie(a.row, a.col) < std::tie(b.row, b.col); });
-//
-// 	std::cout << "Populating row_ptr, col_idx, val..." << std::flush;
-//
-// 	for (size_t i = 0; i < mtx.elements.size(); ++i) {
-// 		const auto& e = mtx.elements[i];
-// 		row_ptr[static_cast<size_t>(e.row) + 1]++;
-// 		col_idx[i] = e.col;
-// 		val[i] = __float2half_rn(e.val);
-// 	}
-// 	std::cout << "Done!\n";
-// 	std::partial_sum(row_ptr.begin(), row_ptr.end(), row_ptr.data());
-//
-// 	return;
-// }
-
-/*
-* 1. Host reads binary into pinned memory
-* 2. Deserialize
-* 2. Data gets loaded into global memory
-* 4. Convert to __half
-*/
-
 static size_t calculate_padding(size_t size)
 {
 	size_t remainder = size % ALIGNMENT;
@@ -266,7 +287,7 @@ static size_t calculate_padding(size_t size)
 	}
 }
 
-static __host__ void unit_test(PitchedRowMajorMatrix* d_prm_sparse, PitchedRowMajorMatrix* d_prm_dense)
+static __host__ void unit_test_deserialization_kernel(PitchedRowMajorMatrix* d_prm_sparse, PitchedRowMajorMatrix* d_prm_dense)
 {
 	PitchedRowMajorMatrix h_sparse_res;
 	PitchedRowMajorMatrix h_dense_res;
@@ -274,12 +295,18 @@ static __host__ void unit_test(PitchedRowMajorMatrix* d_prm_sparse, PitchedRowMa
 	CUDA_CHECK(cudaMemcpy(&h_dense_res, d_prm_dense, sizeof(PitchedRowMajorMatrix), cudaMemcpyDeviceToHost));
 
 	__half h_sparse_first_element;
+	__half h_sparse_second_element;
+
 	__half h_dense_first_element;
 
 	CUDA_CHECK(cudaMemcpy(&h_sparse_first_element, h_sparse_res.data, sizeof(__half), cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(&h_sparse_second_element, h_sparse_res.data + 1, sizeof(__half), cudaMemcpyDeviceToHost));
+
 	CUDA_CHECK(cudaMemcpy(&h_dense_first_element, h_dense_res.data, sizeof(__half), cudaMemcpyDeviceToHost));
 
 	std::cout << "Sparse [0,0]: " << __half2float(h_sparse_first_element) << "\n";
+	std::cout << "Sparse [1,0]: " << __half2float(h_sparse_second_element) << "\n";
+
 	std::cout << "Dense [0,0]: " << __half2float(h_dense_first_element) << std::endl;
 }
 
@@ -293,10 +320,10 @@ static __global__ void deserialization_kernel(float* const h_sparse_ptr, float* 
 	// NOTE: Warp divergence shouldn't happen as long as no.threads is a multiple of 32
 	// I am generating neatly sized matrices. Figure out how to minimize warp divergence when matrix shape is not a multiple of 32
 	if (thread_col < cols && thread_row < rows) {  // Sparse threads go here
-		const float value = h_sparse_ptr[thread_row * cols + thread_col];
+		const float value = h_sparse_ptr[thread_col * rows + thread_row];
 
-		__half* thread_local_ptr = reinterpret_cast<__half*>(reinterpret_cast<char*>(d_prm_sparse_ptr->data) + thread_row * pitch);
-		thread_local_ptr[thread_col] = __float2half(value);
+		__half* thread_local_ptr = reinterpret_cast<__half*>(reinterpret_cast<char*>(d_prm_sparse_ptr->data) + thread_col * pitch);
+		thread_local_ptr[thread_row] = __float2half(value);
 	} else if (thread_col >= cols && thread_col < 2 * cols && thread_row >= rows && thread_row < 2 * rows) {  // Dense threads go here
 		const uint32_t local_row = thread_row - rows;
 		const uint32_t local_col = thread_col - cols;
@@ -387,13 +414,12 @@ __host__ SpmmInput deserialize(const std::filesystem::path& filepath)
 		pitch, binary.rows, binary.cols);
 	CUDA_CHECK(cudaDeviceSynchronize());
 
-	unit_test(d_prm_sparse, d_prm_dense);
+	unit_test_deserialization_kernel(d_prm_sparse, d_prm_dense);
+	//
 	// PERF: This should only happen once every
 	// matrix needed is loaded into device memory
 	// since its heavy
-	// cudaFree(pitched_ptr);  // NOTE: This frees both sparse_pitched and dense_pitched | DATA LIVES HERE
 	cudaFree(binary.global_ptr);
-	// cudaFree(d_prm_sparse);  // NOTE: This frees both structs for prm_sparse and prm_dense | META DATA LIVES HERE
 
 	return { d_prm_sparse, d_prm_dense, pitched_ptr };
 }
