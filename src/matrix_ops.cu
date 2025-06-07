@@ -48,8 +48,8 @@ struct ProcessingState
 /*
  * Converts mtx from COO to CSR format
  * Writes to filename.csr binary
+ * TODO: Figure out how to make static
  */
-//TODO: Figure out how to make static
 // void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
 // {
 // 	std::vector<int>      row_ptr(static_cast<size_t>(mtx.rows) + 1, 0);
@@ -151,28 +151,29 @@ struct ProcessingState
 // 	}
 // 	hrpb_ptr->block_row_ptr.back() = hrpb_ptr->packed_blocks.size();
 // }
-//
-// /*
-//  * Most likely has load balancing problems
-//  */
-// static __global__ void hrpb_kernel(PitchedRowMajorMatrix* prm_sparse, bool* predicate)
-// {
-// 	int col = blockIdx.x * blockDim.x + threadIdx.x;
-// 	if (col >= prm_sparse->cols)
-// 		return;
-//
-// 	bool has_nonzero = false;
-// 	for (int row = 0; row < prm_sparse->rows; row++) {
-// 		__half* row_ptr = reinterpret_cast<__half*>(reinterpret_cast<char*>(prm_sparse->data) + row * prm_sparse->pitch);
-// 		// NOTE: Warp divergence here is insignificant (is it?)
-// 		if (row_ptr[col] != __float2half(0.0f)) {
-// 			has_nonzero = true;
-// 			break;
-// 		}
-// 	}
-// 	predicate[col] = has_nonzero;
-// }
-//
+
+/*
+ * Say I have "cols" columns to cover. Split cols to 2D thread blocks where each column of the thread block is assigned blockDim.y elements of the matrix column.
+ * Basically split the matrix into 2D threadblocks.
+ * Only when a thread happens upon a non-zero value do we write to the predicate, that way no hazards happen.
+ * Once the predicate matrix is calculated we split it and assign it to 1D thread blocks. Each thread block calculates the exclusive sum independently of others.
+ * To fix the offset problem, when we move the columns to their intended places (packed on the left) we increment the column indicated by predicate[] like this
+ * col_to_end_up_to = predicate[i] + blockIdx.x * blockDim.x
+ */
+static __global__ void predicate_kernel(PitchedMatrix* pcm_sparse, bool* predicate)
+{
+	int col = blockIdx.x * blockDim.x + threadIdx.x;
+	int row = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (col >= pcm_sparse->cols)
+		return;
+
+	__half* col_ptr = reinterpret_cast<__half*>(reinterpret_cast<char*>(pcm_sparse->data) + col * pcm_sparse->pitch);
+	if (col_ptr[row] != __float2half(0.0f)) {
+		predicate[col] = true;
+	}
+}
+
 // // TODO: Should be static
 // // TODO: Handle case where mtx.rows % ROW_PANEL_SIZE != 0
 // std::shared_ptr<HRPB> write_hrpb(COOMatrix& mtx, const std::filesystem::path& filepath)
@@ -190,9 +191,9 @@ struct ProcessingState
 // 	uint32_t where_i_should_go = 0;                      // TODO: Rename this shit
 //
 // 	/*
-//      * Iterate first by row panel then by col
-//      * aggregate all columns containing at least one non-zero
-//      */
+//       * Iterate first by row panel then by col
+//       * aggregate all columns containing at least one non-zero
+//       */
 // 	// TODO: Refactor this
 // 	for (COOElement& e : mtx.elements) {
 // 		uint32_t panel_idx = e.row / ROW_PANEL_SIZE;
@@ -287,12 +288,12 @@ static size_t calculate_padding(size_t size)
 	}
 }
 
-static __host__ void unit_test_deserialization_kernel(PitchedRowMajorMatrix* d_prm_sparse, PitchedRowMajorMatrix* d_prm_dense)
+static __host__ void unit_test_deserialization_kernel(PitchedMatrix* d_pcm_sparse, PitchedMatrix* d_prm_dense)
 {
-	PitchedRowMajorMatrix h_sparse_res;
-	PitchedRowMajorMatrix h_dense_res;
-	CUDA_CHECK(cudaMemcpy(&h_sparse_res, d_prm_sparse, sizeof(PitchedRowMajorMatrix), cudaMemcpyDeviceToHost));
-	CUDA_CHECK(cudaMemcpy(&h_dense_res, d_prm_dense, sizeof(PitchedRowMajorMatrix), cudaMemcpyDeviceToHost));
+	PitchedMatrix h_sparse_res;
+	PitchedMatrix h_dense_res;
+	CUDA_CHECK(cudaMemcpy(&h_sparse_res, d_pcm_sparse, sizeof(PitchedMatrix), cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(&h_dense_res, d_prm_dense, sizeof(PitchedMatrix), cudaMemcpyDeviceToHost));
 
 	__half h_sparse_first_element;
 	__half h_sparse_second_element;
@@ -311,7 +312,7 @@ static __host__ void unit_test_deserialization_kernel(PitchedRowMajorMatrix* d_p
 }
 
 static __global__ void deserialization_kernel(float* const h_sparse_ptr, float* const h_dense_ptr,
-	PitchedRowMajorMatrix* d_prm_sparse_ptr, PitchedRowMajorMatrix* d_prm_dense_ptr,
+	PitchedMatrix* d_pcm_sparse_ptr, PitchedMatrix* d_prm_dense_ptr,
 	size_t pitch, size_t rows, size_t cols)
 {
 	size_t thread_col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -322,7 +323,7 @@ static __global__ void deserialization_kernel(float* const h_sparse_ptr, float* 
 	if (thread_col < cols && thread_row < rows) {  // Sparse threads go here
 		const float value = h_sparse_ptr[thread_col * rows + thread_row];
 
-		__half* thread_local_ptr = reinterpret_cast<__half*>(reinterpret_cast<char*>(d_prm_sparse_ptr->data) + thread_col * pitch);
+		__half* thread_local_ptr = reinterpret_cast<__half*>(reinterpret_cast<char*>(d_pcm_sparse_ptr->data) + thread_col * pitch);
 		thread_local_ptr[thread_row] = __float2half(value);
 	} else if (thread_col >= cols && thread_col < 2 * cols && thread_row >= rows && thread_row < 2 * rows) {  // Dense threads go here
 		const uint32_t local_row = thread_row - rows;
@@ -373,7 +374,7 @@ static __host__ LoadBinaryOutput load_binary_into_global_mem(const std::filesyst
  * deserializes them, and loads them into pitched memory.
  * Returns an SpmmInput, which is pointers to PitchedRowMajorMatrix
  * in device memory
- * WARN: THE CALLEE IS OBLIGATED TO FREE PITCHED_PTR AND D_PRM_SPARSE
+ * WARN: THE CALLEE IS OBLIGATED TO FREE PITCHED_PTR AND D_PCM_SPARSE
  * PERF: Combine allocations and copies into a single allocation and a single merge
 */
 __host__ SpmmInput deserialize(const std::filesystem::path& filepath)
@@ -396,30 +397,54 @@ __host__ SpmmInput deserialize(const std::filesystem::path& filepath)
 	float* const  dense_global_ptr = reinterpret_cast<float*>(reinterpret_cast<char*>(binary.global_ptr) + dense_matrix_offset);
 	__half* const dense_pitched_ptr = reinterpret_cast<__half*>(reinterpret_cast<char*>(pitched_ptr) + binary.rows * pitch);
 
-	PitchedRowMajorMatrix* d_prm_sparse = nullptr;
-	PitchedRowMajorMatrix* d_prm_dense = nullptr;
+	PitchedMatrix* d_pcm_sparse = nullptr;
+	PitchedMatrix* d_prm_dense = nullptr;
 
-	PitchedRowMajorMatrix h_prm_sparse = { reinterpret_cast<__half*>(pitched_ptr), binary.rows, binary.cols, pitch };
-	PitchedRowMajorMatrix h_prm_dense = { dense_pitched_ptr, binary.rows, binary.cols, pitch };
+	PitchedMatrix h_pcm_sparse = { reinterpret_cast<__half*>(pitched_ptr), binary.rows, binary.cols, pitch };
+	PitchedMatrix h_prm_dense = { dense_pitched_ptr, binary.rows, binary.cols, pitch };
 
-	CUDA_CHECK(cudaMalloc(&d_prm_sparse, 2 * sizeof(PitchedRowMajorMatrix)));
-	d_prm_dense = d_prm_sparse + 1;
+	CUDA_CHECK(cudaMalloc(&d_pcm_sparse, 2 * sizeof(PitchedMatrix)));
+	d_prm_dense = d_pcm_sparse + 1;
 
 	// PERF: Merge or get rid of altogether
-	CUDA_CHECK(cudaMemcpy(d_prm_sparse, &h_prm_sparse, sizeof(PitchedRowMajorMatrix), cudaMemcpyHostToDevice));
-	CUDA_CHECK(cudaMemcpy(d_prm_dense, &h_prm_dense, sizeof(PitchedRowMajorMatrix), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(d_pcm_sparse, &h_pcm_sparse, sizeof(PitchedMatrix), cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(d_prm_dense, &h_prm_dense, sizeof(PitchedMatrix), cudaMemcpyHostToDevice));
 
 	deserialization_kernel<<<grid_size, block_size>>>(reinterpret_cast<float*>(binary.global_ptr), dense_global_ptr,
-		d_prm_sparse, d_prm_dense,
+		d_pcm_sparse, d_prm_dense,
 		pitch, binary.rows, binary.cols);
 	CUDA_CHECK(cudaDeviceSynchronize());
 
-	unit_test_deserialization_kernel(d_prm_sparse, d_prm_dense);
+	unit_test_deserialization_kernel(d_pcm_sparse, d_prm_dense);
 	//
 	// PERF: This should only happen once every
 	// matrix needed is loaded into device memory
 	// since its heavy
-	cudaFree(binary.global_ptr);
+	CUDA_CHECK(cudaFree(binary.global_ptr));
 
-	return { d_prm_sparse, d_prm_dense, pitched_ptr };
+	return { d_pcm_sparse, d_prm_dense, pitched_ptr, binary.rows, binary.cols };
+}
+
+__host__ void get_non_zero_col_predicate(PitchedMatrix* pcm_sparse, size_t rows, size_t cols)
+{
+	dim3         block_size(16, 16);
+	const size_t blocks_to_cover_cols = (cols + block_size.x - 1) / block_size.x;
+	const size_t blocks_to_cover_rows = (rows + block_size.y - 1) / block_size.y;
+	dim3         grid_size(blocks_to_cover_cols, blocks_to_cover_rows);
+
+	bool* d_predicate = nullptr;
+
+	CUDA_CHECK(cudaMalloc(&d_predicate, cols * sizeof(bool)));
+	predicate_kernel<<<grid_size, block_size>>>(pcm_sparse, d_predicate);
+	CUDA_CHECK(cudaDeviceSynchronize());
+	bool* h_predicate = nullptr;
+	CUDA_CHECK(cudaMallocHost(&h_predicate, cols * sizeof(bool)));
+	CUDA_CHECK(cudaMemcpy(h_predicate, d_predicate, cols * sizeof(bool), cudaMemcpyDeviceToHost));
+	for (size_t i = 0; i < 2048; i++) {
+		const bool val = h_predicate[i];
+		if (val == 0) {
+			printf("Found at %zu\n", i);
+		}
+	}
+	CUDA_CHECK(cudaFree(d_predicate));
 }
