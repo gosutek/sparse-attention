@@ -12,6 +12,20 @@
  * C is MxN
  */
 
+struct COOElement
+{
+	uint32_t row, col;
+
+	float val;
+};
+
+struct COOMatrix
+{
+	uint32_t rows, cols, nnz;
+
+	std::vector<COOElement> elements;
+};
+
 /*
  * On the device, with a pointer to another memory chunk on the device
  */

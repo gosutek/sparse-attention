@@ -1,5 +1,6 @@
 
 #include "matrix_ops.cuh"
+#include <numeric>
 
 // __float2half(const float a)
 // __float2half_rd(const float a) ~ round down
@@ -47,31 +48,27 @@ struct ProcessingState
 
 /*
  * Converts mtx from COO to CSR format
- * Writes to filename.csr binary
  * TODO: Figure out how to make static
  */
-// void write_csr(COOMatrix& mtx, const std::filesystem::path& filepath)
-// {
-// 	std::vector<int>      row_ptr(static_cast<size_t>(mtx.rows) + 1, 0);
-// 	std::vector<uint32_t> col_idx(static_cast<size_t>(mtx.nnz));
-// 	// TODO: template the val?
-// 	std::vector<float> val(static_cast<size_t>(mtx.nnz));
-//
-// 	std::sort(mtx.elements.begin(), mtx.elements.end(), [](const auto& a, const auto& b) { return std::tie(a.row, a.col) < std::tie(b.row, b.col); });
-//
-// 	std::cout << "Populating row_ptr, col_idx, val..." << std::flush;
-//
-// 	for (size_t i = 0; i < mtx.elements.size(); ++i) {
-// 		const auto& e = mtx.elements[i];
-// 		row_ptr[static_cast<size_t>(e.row) + 1]++;
-// 		col_idx[i] = e.col;
-// 		val[i] = __float2half_rn(e.val);
-// 	}
-// 	std::cout << "Done!\n";
-// 	std::partial_sum(row_ptr.begin(), row_ptr.end(), row_ptr.data());
-//
-// 	return;
-// }
+void coo_to_csr(COOMatrix& mtx)
+{
+	std::vector<int>      row_ptr(static_cast<size_t>(mtx.rows) + 1, 0);
+	std::vector<uint32_t> col_idx(static_cast<size_t>(mtx.nnz));
+
+	std::vector<float> val(static_cast<size_t>(mtx.nnz));
+
+	std::sort(mtx.elements.begin(), mtx.elements.end(), [](const auto& a, const auto& b) { return std::tie(a.row, a.col) < std::tie(b.row, b.col); });
+
+	for (size_t i = 0; i < mtx.elements.size(); ++i) {
+		const auto& e = mtx.elements[i];
+		row_ptr[static_cast<size_t>(e.row) + 1]++;
+		col_idx[i] = e.col;
+		val[i] = e.val;
+	}
+	std::partial_sum(row_ptr.begin(), row_ptr.end(), row_ptr.data());
+
+	return;
+}
 
 // static bool block_brick_sort(const COOElement& a, const COOElement& b)
 // {
