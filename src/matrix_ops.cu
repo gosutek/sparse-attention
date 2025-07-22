@@ -51,6 +51,7 @@ struct ProcessingState
 /*
  * Converts mtx from COO to CSR format
  * TODO: Figure out how to make static
+ * TODO: Actually return something
  */
 void coo_to_csr(COOMatrix& mtx)
 {
@@ -72,7 +73,7 @@ void coo_to_csr(COOMatrix& mtx)
 	return;
 }
 
-DLMCFormat read_dlmc(const std::filesystem::path& filepath)
+CSRMatrix dlmc_to_csr(const std::filesystem::path& filepath)
 {
 	std::ifstream file_stream(filepath, std::ios_base::in);
 
@@ -80,26 +81,44 @@ DLMCFormat read_dlmc(const std::filesystem::path& filepath)
 		THROW_RUNTIME_ERROR("Error opening file.\n");
 	}
 
-	DLMCFormat dlmc_matrix;
+	CSRMatrix csr_matrix;
 
-	std::string header_line{}, token{};
+	std::random_device                    rd;
+	std::minstd_rand                      rng(rd());
+	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+
+	std::string header_line{}, line{}, token{};
 
 	std::getline(file_stream, header_line);
-	std::stringstream header_stream(header_line);
+	std::istringstream header_stream(header_line);
 	std::getline(header_stream, token, ',');
-	dlmc_matrix.ncols = std::stoi(token);
+	csr_matrix.cols = std::stoi(token);
 	std::getline(header_stream, token, ',');
-	dlmc_matrix.nrows = std::stoi(token);
+	csr_matrix.rows = std::stoi(token);
 	std::getline(header_stream, token, ',');
-	dlmc_matrix.nnz = std::stoi(token);
+	csr_matrix.nnz = std::stoi(token);
 
-	dlmc_matrix.col_idx.reserve(dlmc_matrix.nnz);
+	csr_matrix.row_ptr.reserve(csr_matrix.rows + 1);
+	csr_matrix.row_ptr[0] = 0;
 
-	while (file_stream >> token) {
-		dlmc_matrix.col_idx.push_back(std::stoi(token));
+	csr_matrix.col_idx.reserve(csr_matrix.nnz);
+	csr_matrix.val.reserve(csr_matrix.nnz);
+
+	uint32_t line_no = 1;
+	while (std::getline(file_stream, line)) {
+		std::istringstream line_stream(line);
+		uint32_t           count = 0;
+
+		while (line_stream >> token) {
+			csr_matrix.col_idx.push_back(std::stoi(token));
+			csr_matrix.val.push_back(uni_real_dist(rng));
+			count++;
+		}
+		csr_matrix.row_ptr[line_no] = count;
+		line_no++;
 	}
 
-	return dlmc_matrix;
+	return csr_matrix;
 }
 
 // static bool block_brick_sort(const COOElement& a, const COOElement& b)

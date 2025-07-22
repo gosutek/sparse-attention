@@ -33,7 +33,13 @@ int main()
 		// cudaFree(spmm_input.pitched_ptr);   // NOTE: This frees both sparse_pitched and dense_pitched | DATA LIVES HERE
 		// cudaFree(spmm_input.d_pcm_sparse);  // NOTE: This frees both structs for prm_sparse and prm_dense | META DATA LIVES HERE
 
-		dlmc_format_to_csr(data_path);
+		CSRMatrix csr_matrix = dlmc_to_csr(data_path);
+
+		std::cout << "Rows: " << csr_matrix.rows << "\nCols: "
+				  << csr_matrix.cols << "\nNNZ: " << csr_matrix.nnz
+				  << "\nFirst 2 elements of col_idx: " << csr_matrix.col_idx[0] << ", " << csr_matrix.col_idx[1]
+				  << "\nFirst 2 elements of row_ptr: " << csr_matrix.row_ptr[0] << ", " << csr_matrix.row_ptr[1]
+				  << "\nFirst 2 elements of val: " << csr_matrix.val[0] << ", " << csr_matrix.val[1] << "\n";
 	} catch (const std::exception& e) {
 		std::cerr << "Exception: " << e.what() << "\n";
 	}

@@ -26,10 +26,12 @@ struct COOMatrix
 	std::vector<COOElement> elements;
 };
 
-struct DLMCFormat
+struct CSRMatrix
 {
-	uint32_t              nrows{}, ncols{}, nnz{};
+	uint32_t              rows{}, cols{}, nnz{};
+	std::vector<uint32_t> row_ptr{};
 	std::vector<uint32_t> col_idx{};
+	std::vector<float>    val{};
 };
 
 /*
@@ -125,4 +127,4 @@ struct HRPB
 
 __host__ SpmmInput deserialize(const std::filesystem::path& filepath);
 __host__ void      get_non_zero_col_predicate(PitchedMatrix* pcm_sparse, size_t rows, size_t cols);
-DLMCFormat         read_dlmc(const std::filesystem::path& filepath);
+CSRMatrix          dlmc_to_csr(const std::filesystem::path& filepath);
