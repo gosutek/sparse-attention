@@ -1,11 +1,8 @@
 
-#include "common.h"
 #include "matrix_ops.cuh"
 #include <algorithm>
-#include <fstream>
 #include <numeric>
-#include <sstream>
-#include <string>
+#include <random>
 
 // __float2half(const float a)
 // __float2half_rd(const float a) ~ round down

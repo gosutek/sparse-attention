@@ -3,7 +3,6 @@
 #include "../extern/mmio.h"
 
 #include <cassert>
-#include <fstream>
 #include <random>
 
 struct COOElement
