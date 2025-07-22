@@ -1,6 +1,11 @@
 
+#include "common.h"
 #include "matrix_ops.cuh"
+#include <algorithm>
+#include <fstream>
 #include <numeric>
+#include <sstream>
+#include <string>
 
 // __float2half(const float a)
 // __float2half_rd(const float a) ~ round down
@@ -68,6 +73,36 @@ void coo_to_csr(COOMatrix& mtx)
 	std::partial_sum(row_ptr.begin(), row_ptr.end(), row_ptr.data());
 
 	return;
+}
+
+DLMCFormat read_dlmc(const std::filesystem::path& filepath)
+{
+	std::ifstream file_stream(filepath, std::ios_base::in);
+
+	if (!file_stream) {
+		THROW_RUNTIME_ERROR("Error opening file.\n");
+	}
+
+	DLMCFormat dlmc_matrix;
+
+	std::string header_line{}, token{};
+
+	std::getline(file_stream, header_line);
+	std::stringstream header_stream(header_line);
+	std::getline(header_stream, token, ',');
+	dlmc_matrix.ncols = std::stoi(token);
+	std::getline(header_stream, token, ',');
+	dlmc_matrix.nrows = std::stoi(token);
+	std::getline(header_stream, token, ',');
+	dlmc_matrix.nnz = std::stoi(token);
+
+	dlmc_matrix.col_idx.reserve(dlmc_matrix.nnz);
+
+	while (file_stream >> token) {
+		dlmc_matrix.col_idx.push_back(std::stoi(token));
+	}
+
+	return dlmc_matrix;
 }
 
 // static bool block_brick_sort(const COOElement& a, const COOElement& b)
