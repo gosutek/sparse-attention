@@ -99,23 +99,22 @@ CSRMatrix dlmc_to_csr(const std::filesystem::path& filepath)
 	csr_matrix.nnz = std::stoi(token);
 
 	csr_matrix.row_ptr.reserve(csr_matrix.rows + 1);
-	csr_matrix.row_ptr[0] = 0;
-
 	csr_matrix.col_idx.reserve(csr_matrix.nnz);
 	csr_matrix.val.reserve(csr_matrix.nnz);
 
-	uint32_t line_no = 1;
-	while (std::getline(file_stream, line)) {
-		std::istringstream line_stream(line);
-		uint32_t           count = 0;
+	std::getline(file_stream, line);
+	std::istringstream row_ptr_line(line);
 
-		while (line_stream >> token) {
-			csr_matrix.col_idx.push_back(std::stoi(token));
-			csr_matrix.val.push_back(uni_real_dist(rng));
-			count++;
-		}
-		csr_matrix.row_ptr[line_no] = count;
-		line_no++;
+	while (row_ptr_line >> token) {
+		csr_matrix.row_ptr.push_back(std::stoi(token));
+	}
+
+	std::getline(file_stream, line);
+	std::istringstream col_idx_line(line);
+
+	while (col_idx_line >> token) {
+		csr_matrix.col_idx.push_back(std::stoi(token));
+		csr_matrix.val.push_back(uni_real_dist(rng));
 	}
 
 	return csr_matrix;
