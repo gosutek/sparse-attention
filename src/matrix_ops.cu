@@ -2,7 +2,6 @@
 #include "matrix_ops.cuh"
 #include <algorithm>
 #include <numeric>
-#include <random>
 
 // __float2half(const float a)
 // __float2half_rd(const float a) ~ round down
@@ -71,53 +70,6 @@ void coo_to_csr(COOMatrix& mtx)
 	std::partial_sum(row_ptr.begin(), row_ptr.end(), row_ptr.data());
 
 	return;
-}
-
-CSRMatrix dlmc_to_csr(const std::filesystem::path& filepath)
-{
-	std::ifstream file_stream(filepath, std::ios_base::in);
-
-	if (!file_stream) {
-		THROW_RUNTIME_ERROR("Error opening file.\n");
-	}
-
-	CSRMatrix csr_matrix;
-
-	std::random_device                    rd;
-	std::minstd_rand                      rng(rd());
-	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
-
-	std::string header_line{}, line{}, token{};
-
-	std::getline(file_stream, header_line);
-	std::istringstream header_stream(header_line);
-	std::getline(header_stream, token, ',');
-	csr_matrix.cols = std::stoi(token);
-	std::getline(header_stream, token, ',');
-	csr_matrix.rows = std::stoi(token);
-	std::getline(header_stream, token, ',');
-	csr_matrix.nnz = std::stoi(token);
-
-	csr_matrix.row_ptr.reserve(csr_matrix.rows + 1);
-	csr_matrix.col_idx.reserve(csr_matrix.nnz);
-	csr_matrix.val.reserve(csr_matrix.nnz);
-
-	std::getline(file_stream, line);
-	std::istringstream row_ptr_line(line);
-
-	while (row_ptr_line >> token) {
-		csr_matrix.row_ptr.push_back(std::stoi(token));
-	}
-
-	std::getline(file_stream, line);
-	std::istringstream col_idx_line(line);
-
-	while (col_idx_line >> token) {
-		csr_matrix.col_idx.push_back(std::stoi(token));
-		csr_matrix.val.push_back(uni_real_dist(rng));
-	}
-
-	return csr_matrix;
 }
 
 // static bool block_brick_sort(const COOElement& a, const COOElement& b)
