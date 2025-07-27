@@ -16,6 +16,8 @@ int main()
 				  << "\nFirst 2 elements of row_ptr: " << input.weights[0].row_ptr[0] << ", " << input.weights[0].row_ptr[1]
 				  << "\nFirst 2 elements of val: " << input.weights[0].val[0] << ", " << input.weights[0].val[1] << "\n";
 
+		std::cout << "First 2 elements of embeddings: " << input.embeddings[0] << ", " << input.embeddings[1];
+
 		dealloc_host(input.data);
 
 	} catch (const std::exception& e) {

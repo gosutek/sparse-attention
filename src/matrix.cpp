@@ -37,15 +37,20 @@ Input read_input(const std::filesystem::path& filepath)
 	q_weights.val_size = q_weights.nnz;
 	input.embeddings_size = q_weights.rows * q_weights.rows;
 
-	size_t total_size = q_weights.row_ptr_size + q_weights.col_idx_size + q_weights.val_size + input.embeddings_size;
-	input.data = malloc_host(total_size);
+	size_t b_total_size =
+		q_weights.row_ptr_size * sizeof(uint32_t) +
+		q_weights.col_idx_size * sizeof(uint32_t) +
+		q_weights.val_size * sizeof(float) +
+		input.embeddings_size * sizeof(float);
+
+	input.data = malloc_host(b_total_size);
 	if (!input.data) {
 		THROW_RUNTIME_ERROR("failed to allocate");
 	}
 	q_weights.row_ptr = reinterpret_cast<uint32_t*>(input.data);
-	q_weights.col_idx = q_weights.row_ptr + q_weights.rows + 1;
-	q_weights.val = reinterpret_cast<float*>(q_weights.col_idx + q_weights.nnz);
-	input.embeddings = q_weights.val + q_weights.nnz;
+	q_weights.col_idx = q_weights.row_ptr + q_weights.row_ptr_size;
+	q_weights.val = reinterpret_cast<float*>(q_weights.col_idx + q_weights.col_idx_size);
+	input.embeddings = q_weights.val + q_weights.val_size;
 
 	std::getline(file_stream, line);
 	std::istringstream row_ptr_line(line);
