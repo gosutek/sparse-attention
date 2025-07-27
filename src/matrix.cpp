@@ -13,9 +13,8 @@ Input read_input(const std::filesystem::path& filepath)
 		THROW_RUNTIME_ERROR("Error opening file.\n");
 	}
 
-	Input     input;
-	CSRMatrix q_weights;
-	input.weights[0] = q_weights;  // TODO: fix copy
+	Input      input;
+	CSRMatrix& q_weights = input.weights[0];
 
 	std::random_device                    rd;
 	std::minstd_rand                      rng(rd());
