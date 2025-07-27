@@ -27,10 +27,10 @@ struct CSRMatrix
 struct Input
 {
 	void*     data;
+	uint32_t  b_size;
 	CSRMatrix weights[1];
 
 	float* embeddings = nullptr;
-	size_t embeddings_size = MAT_SIZE * MAT_SIZE;
 };
 
 Input  read_input(const std::filesystem::path& filepath);

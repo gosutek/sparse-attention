@@ -3,7 +3,7 @@
 
 #include <random>
 
-void* malloc_host(size_t size);
+void* cuda_malloc_host(size_t size);
 
 Input read_input(const std::filesystem::path& filepath)
 {
@@ -34,15 +34,15 @@ Input read_input(const std::filesystem::path& filepath)
 	q_weights.row_ptr_size = q_weights.rows + 1;
 	q_weights.col_idx_size = q_weights.nnz;
 	q_weights.val_size = q_weights.nnz;
-	input.embeddings_size = q_weights.rows * q_weights.rows;
+	uint32_t embeddings_size = q_weights.rows * q_weights.rows;
 
-	size_t b_total_size =
+	input.b_size =
 		q_weights.row_ptr_size * sizeof(uint32_t) +
 		q_weights.col_idx_size * sizeof(uint32_t) +
 		q_weights.val_size * sizeof(float) +
-		input.embeddings_size * sizeof(float);
+		embeddings_size * sizeof(float);
 
-	input.data = malloc_host(b_total_size);
+	input.data = cuda_malloc_host(input.b_size);
 	if (!input.data) {
 		THROW_RUNTIME_ERROR("failed to allocate");
 	}
@@ -68,7 +68,7 @@ Input read_input(const std::filesystem::path& filepath)
 		q_weights.val[idx++] = uni_real_dist(rng);
 	}
 
-	for (size_t i = 0; i < input.embeddings_size; ++i) {
+	for (size_t i = 0; i < embeddings_size; ++i) {
 		input.embeddings[i] = uni_real_dist(rng);
 	}
 

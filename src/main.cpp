@@ -1,7 +1,9 @@
 #include "common.h"
 #include "matrix.h"
 
-void dealloc_host(void* ptr);
+void  cuda_dealloc_host(void* ptr);
+void  cuda_dealloc_device(void* ptr);
+void* prepare(Input& input);
 
 int main()
 {
@@ -9,6 +11,7 @@ int main()
 
 	try {
 		Input input = read_input(data_path);
+		void* dev = prepare(input);
 
 		std::cout << "Rows: " << input.weights[0].rows << "\nCols: "
 				  << input.weights[0].cols << "\nNNZ: " << input.weights[0].nnz
@@ -18,7 +21,8 @@ int main()
 
 		std::cout << "First 2 elements of embeddings: " << input.embeddings[0] << ", " << input.embeddings[1];
 
-		dealloc_host(input.data);
+		cuda_dealloc_host(input.data);
+		cuda_dealloc_device(dev);
 
 	} catch (const std::exception& e) {
 		std::cerr << "Exception: " << e.what() << "\n";
