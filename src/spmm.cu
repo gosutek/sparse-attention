@@ -64,7 +64,7 @@ __global__ void spmm_kernel(
 
 	if (y < nrows) {
 		float acc = 0;
-		for (size_t i = row_ptr[y]; i < row_ptr[y + 1];) {
+		for (size_t i = row_ptr[y]; i < row_ptr[y + 1]; ++i) {
 			acc += val[i] * dense[x * nrows + y];
 		}
 		res[ncols * y + x] = acc;
