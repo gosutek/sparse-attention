@@ -75,3 +75,20 @@ Input read_input(const std::filesystem::path& filepath)
 
 	return input;
 }
+
+float* csr_to_row_major(CSRMatrix& mat)
+{
+	float* res = static_cast<float*>(std::malloc(sizeof(float) * mat.rows * mat.cols));
+	if (!res) {
+		THROW_RUNTIME_ERROR("Failed to allcoate");
+	}
+
+	std::fill(res, res + mat.rows * mat.cols, 0.0f);
+
+	for (size_t i = 0; i < mat.rows; ++i) {
+		for (size_t i = mat.row_ptr[i]; i < mat.row_ptr[i + 1]; ++i) {
+			res[i * mat.cols + mat.col_idx[i]] = mat.val[i];
+		}
+	}
+	return res;
+}

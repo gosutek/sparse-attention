@@ -2,10 +2,6 @@
 
 #include "common.h"
 
-#ifndef MAT_SIZE
-#	define MAT_SIZE 512
-#endif
-
 /*
  * C = A*B
  * MxNxK
@@ -30,6 +26,7 @@ struct Input
 	uint32_t  b_size;
 	CSRMatrix weights[1];
 
+	/* X in col major format */
 	float* embeddings = nullptr;
 };
 
