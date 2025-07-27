@@ -42,6 +42,7 @@ Input read_input(const std::filesystem::path& filepath)
 		q_weights.val_size * sizeof(float) +
 		embeddings_size * sizeof(float);
 
+	// TODO: This should allocate for the result aswell
 	input.data = cuda_malloc_host(input.b_size);
 	if (!input.data) {
 		THROW_RUNTIME_ERROR("failed to allocate");

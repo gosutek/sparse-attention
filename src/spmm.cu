@@ -11,7 +11,7 @@
 		}                                                                                                \
 	} while (0)
 
-[[maybe_unused]] static void* cuda_malloc_device(size_t b_size)
+static void* cuda_malloc_device(size_t b_size)
 {
 	void* ptr = nullptr;
 	CUDA_CHECK(cudaMalloc(&ptr, b_size));
@@ -35,17 +35,56 @@ void* cuda_malloc_host(size_t b_size)
 
 void cuda_dealloc_host(void* ptr)
 {
-	cudaFreeHost(ptr);
+	CUDA_CHECK(cudaFreeHost(ptr));
 }
 
 void cuda_dealloc_device(void* ptr)
 {
-	cudaFree(ptr);
+	CUDA_CHECK(cudaFree(ptr));
 }
 
-void* prepare(Input& input)
+static void* prepare(Input& input)
 {
 	// TODO: Streams go here
 	void* dev = cuda_device_copy(input.data, input.b_size);
 	return dev;
+}
+
+__global__ void spmm_kernel(
+	const uint32_t* const row_ptr,
+	const uint32_t* const col_idx,
+	const float* const    val,
+	const float* const    dense,  // expect col-major for coalesced access
+	const uint32_t        nrows,
+	const uint32_t        ncols,
+	float* const          res)  // expect row-major for coalesced access
+{
+	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if (y < nrows) {
+		float acc = 0;
+		for (size_t i = row_ptr[y]; i < row_ptr[y + 1];) {
+			acc += val[i] * dense[x * nrows + y];
+		}
+		res[ncols * y + x] = acc;
+	}
+}
+
+void run(Input input)
+{
+	CSRMatrix& q_weights = input.weights[0];
+	float*     res = static_cast<float*>(cuda_malloc_device(sizeof(float) * MAT_SIZE * MAT_SIZE));
+
+	void* dev = prepare(input);
+
+	uint32_t* d_row_ptr = reinterpret_cast<uint32_t*>(dev);
+	uint32_t* d_col_idx = d_row_ptr + q_weights.row_ptr_size;
+	float*    d_val = reinterpret_cast<float*>(d_col_idx + q_weights.col_idx_size);
+	float*    d_embeddings = d_val + q_weights.val_size;
+
+	spmm_kernel<<<1, 1>>>(d_row_ptr, d_col_idx, d_val, d_embeddings, q_weights.rows, q_weights.cols, res);
+
+	cuda_dealloc_device(res);
+	cuda_dealloc_device(dev);
 }
