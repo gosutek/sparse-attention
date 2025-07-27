@@ -84,6 +84,7 @@ void run(Input input)
 	float*    d_embeddings = d_val + q_weights.val_size;
 
 	spmm_kernel<<<1, 1>>>(d_row_ptr, d_col_idx, d_val, d_embeddings, q_weights.rows, q_weights.cols, res);
+	CUDA_CHECK(cudaDeviceSynchronize());
 
 	cuda_dealloc_device(res);
 	cuda_dealloc_device(dev);
