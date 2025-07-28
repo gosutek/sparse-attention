@@ -20,6 +20,7 @@ Input read_input(const std::filesystem::path& filepath)
 	std::minstd_rand                      rng(rd());
 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
 
+	//TODO: Make this into a function
 	std::string header_line{}, line{}, token{};
 
 	std::getline(file_stream, header_line);
@@ -66,7 +67,12 @@ Input read_input(const std::filesystem::path& filepath)
 	idx = 0;
 	while (col_idx_line >> token) {
 		q_weights.col_idx[idx] = static_cast<uint32_t>(std::stoi(token));
+
+#if defined(__TEST__)
+		q_weights.val[idx++] = idx + 1;
+#else
 		q_weights.val[idx++] = uni_real_dist(rng);
+#endif
 	}
 
 	for (size_t i = 0; i < embeddings_size; ++i) {
@@ -86,8 +92,8 @@ float* csr_to_row_major(CSRMatrix& mat)
 	std::fill(res, res + mat.rows * mat.cols, 0.0f);
 
 	for (size_t i = 0; i < mat.rows; ++i) {
-		for (size_t i = mat.row_ptr[i]; i < mat.row_ptr[i + 1]; ++i) {
-			res[i * mat.cols + mat.col_idx[i]] = mat.val[i];
+		for (size_t j = mat.row_ptr[i]; j < mat.row_ptr[i + 1]; ++j) {
+			res[i * mat.cols + mat.col_idx[j]] = mat.val[j];
 		}
 	}
 	return res;

@@ -32,3 +32,4 @@ struct Input
 
 Input  read_input(const std::filesystem::path& filepath);
 float* generate_embeddings(size_t size);
+float* csr_to_row_major(CSRMatrix& mat);

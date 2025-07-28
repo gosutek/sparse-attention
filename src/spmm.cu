@@ -1,6 +1,10 @@
 #include "common.h"
 #include "matrix.h"
 
+#ifndef MAT_SIZE
+#	define MAT_SIZE 512
+#endif
+
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \
 		cudaError_t err = x;                                                                             \

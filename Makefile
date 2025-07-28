@@ -10,12 +10,15 @@ SRC_DIR:=src
 EXT_DIR:=extern
 
 SOURCES:=$(wildcard $(SRC_DIR)/*.cu) $(wildcard $(SRC_DIR)/*.cpp)
+TEST_SOURCES:=src/test.cpp src/matrix.cpp src/spmm.cu
 
 OBJECTS:=$(SOURCES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
+TEST_OBJECTS:=$(TEST_SOURCES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
 
 CFLAGS=-g $(ERROR_FLAGS) $(OPT)
 CFLAGS+=-fopenmp -mf16c -mavx2 -mfma
 CFLAGS+=-I/opt/cuda/targets/x86_64-linux/include/
+CFLAGS+=-D__TEST__
 
 CUFLAGS=-g $(OPT) -lineinfo
 CUFLAGS+=-std=c++20
@@ -34,6 +37,8 @@ CUFLAGS+=-Xcompiler "-DMAT_SIZE=512"
 
 all: $(BUILD_DIR)/cute
 
+test: $(BUILD_DIR)/test_cute
+
 bounds: CUFLAGS+=-Xcompiler "-D_GLIBCXX_DEBUG"
 bounds: $(BUILD_DIR)/cute_bounds_checking
 
@@ -41,9 +46,13 @@ $(BUILD_DIR)/cute: $(OBJECTS)
 	@mkdir -p $(@D)
 	$(NVCC) $(CUFLAGS) $(OBJECTS) -o $@
 
+$(BUILD_DIR)/test_cute: $(TEST_OBJECTS)
+	@mkdir -p $(@D)
+	$(NVCC) $(CUFLAGS) $(TEST_OBJECTS) -o $@
+
 $(BUILD_DIR)/cute_bounds_checking: $(OBJECTS)
 	@mkdir -p $(@D)
-	$(NVCC) $(OBJECTS) -o $@
+	$(NVCC) $(CUFLAGS) $(OBJECTS) -o $@
 
 $(BUILD_DIR)/%.cpp.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
