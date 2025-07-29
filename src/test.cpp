@@ -2,6 +2,7 @@
 
 #include "common.h"
 #include "matrix.h"
+#include <filesystem>
 
 #define ASSERT_EQ(expected, actual, message)                           \
 	do {                                                               \
@@ -110,7 +111,7 @@ static void test_csr_to_row_major(const std::filesystem::path& filepath)
 	}
 }
 
-static std::vector<float> host_spmm(float* a, float* b, size_t rows, size_t cols)
+static std::vector<float> host_spmm(std::vector<float> a, std::vector<float> b, size_t rows, size_t cols)
 {
 	std::vector<float> res;
 	res.reserve(rows * cols);
@@ -128,9 +129,36 @@ static std::vector<float> host_spmm(float* a, float* b, size_t rows, size_t cols
 	return res;
 }
 
+static void test_host_spmm(const std::filesystem::path& filepath)
+{
+	if (std::filesystem::is_regular_file(filepath) && filepath.extension() == ".rm") {
+		const auto a_matrix_file = filepath.parent_path() / filepath.stem().replace_filename(filepath.stem().string().append("_a.rm"));
+		const auto b_matrix_file = filepath.parent_path() / filepath.stem().replace_filename(filepath.stem().string().append("_b.rm"));
+		if (!std::filesystem::exists(a_matrix_file)) {
+			THROW_RUNTIME_ERROR("Expected file not found for testing: " + a_matrix_file.string());
+		}
+		if (!std::filesystem::exists(b_matrix_file)) {
+			THROW_RUNTIME_ERROR("Expected file not found for testing: " + b_matrix_file.string());
+		}
+		std::cout << "Testing 'host_spmm' with file: " << filepath << "\n";
+		// WARN: change hardcoded 9
+		std::vector<float> a = read_row_major_from_rm(a_matrix_file, 9);
+		std::vector<float> b = read_row_major_from_rm(b_matrix_file, 9);
+		std::vector<float> actual = host_spmm(a, b, 3, 3);
+		std::vector<float> expected = read_row_major_from_rm(filepath, 9);
+
+		ASSERT_EQ(expected, actual, "The matrices differ in values.\n");
+
+		printf("Test successful\n");
+	}
+	std::ifstream file_stream(filepath, std::ios_base::in);
+}
+
 int main()
 {
-	const auto path = std::filesystem::current_path() / "test/3x3.smtx";
+	auto path = std::filesystem::current_path() / "test/3x3.smtx";
 	test_csr_to_row_major(path);
+	path = std::filesystem::current_path() / "test/3x3_host_spmm.rm";
+	test_host_spmm(path);
 	return 0;
 }
