@@ -110,6 +110,24 @@ static void test_csr_to_row_major(const std::filesystem::path& filepath)
 	}
 }
 
+static std::vector<float> host_spmm(float* a, float* b, size_t rows, size_t cols)
+{
+	std::vector<float> res;
+	res.reserve(rows * cols);
+
+	for (size_t a_row = 0; a_row < rows; ++a_row) {
+		for (size_t b_col = 0; b_col < cols; ++b_col) {
+			float acc = 0;
+			for (size_t i = 0; i < cols; ++i) {
+				acc += a[a_row * cols + i] * b[b_col * rows + i];
+			}
+			res.push_back(acc);
+		}
+	}
+
+	return res;
+}
+
 int main()
 {
 	const auto path = std::filesystem::current_path() / "test/3x3.smtx";
