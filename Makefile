@@ -9,7 +9,7 @@ BUILD_DIR:=build
 SRC_DIR:=src
 EXT_DIR:=extern
 
-SOURCES:=$(wildcard $(SRC_DIR)/*.cu) $(wildcard $(SRC_DIR)/*.cpp)
+SOURCES:=$(filter-out src/test.cpp, $(wildcard $(SRC_DIR)/*.cu) $(wildcard $(SRC_DIR)/*.cpp))
 TEST_SOURCES:=src/test.cpp src/matrix.cpp src/spmm.cu
 
 OBJECTS:=$(SOURCES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)

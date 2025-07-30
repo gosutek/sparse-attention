@@ -90,6 +90,8 @@ void run(Input input)
 	spmm_kernel<<<1, 1>>>(d_row_ptr, d_col_idx, d_val, d_embeddings, q_weights.rows, q_weights.cols, res);
 	CUDA_CHECK(cudaDeviceSynchronize());
 
+	CUDA_CHECK(cudaMemcpy(input.data, res, sizeof(float) * MAT_SIZE * MAT_SIZE, cudaMemcpyDeviceToHost));
+
 	cuda_dealloc_device(res);
 	cuda_dealloc_device(dev);
 }
