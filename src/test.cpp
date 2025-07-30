@@ -14,6 +14,9 @@
 		}                                                              \
 	} while (0)
 
+void run(Input input);
+void cuda_dealloc_host(void* ptr);
+
 // struct ReadExpectedOutput
 // {
 // 	int32_t no_blocks = -1;
@@ -154,11 +157,47 @@ static void test_host_spmm(const std::filesystem::path& filepath)
 	std::ifstream file_stream(filepath, std::ios_base::in);
 }
 
+static void test_dev_spmm(const std::filesystem::path& filepath, const float* const dev_res)
+{
+	if (std::filesystem::is_regular_file(filepath) && filepath.extension() == ".rm") {
+		const auto a_matrix_file = filepath.parent_path() / filepath.stem().replace_filename(filepath.stem().string().append("_a.rm"));
+		const auto b_matrix_file = filepath.parent_path() / filepath.stem().replace_filename(filepath.stem().string().append("_b.rm"));
+		if (!std::filesystem::exists(a_matrix_file)) {
+			THROW_RUNTIME_ERROR("Expected file not found for testing: " + a_matrix_file.string());
+		}
+		if (!std::filesystem::exists(b_matrix_file)) {
+			THROW_RUNTIME_ERROR("Expected file not found for testing: " + b_matrix_file.string());
+		}
+		std::cout << "Testing 'dev_spmm' with file: " << filepath << "\n";
+		// WARN: change hardcoded 9
+		std::vector<float> a = read_row_major_from_rm(a_matrix_file, 9);
+		std::vector<float> b = read_row_major_from_rm(b_matrix_file, 9);
+		std::vector<float> actual;
+		actual.reserve(9);
+
+		for (size_t i = 0; i < 9; ++i) {
+			actual.push_back(dev_res[i]);
+		}
+		std::vector<float> expected = host_spmm(a, b, 3, 3);
+		ASSERT_EQ(expected, actual, "The matrices differ in values.\n");
+
+		printf("Test successful\n");
+	}
+	std::ifstream file_stream(filepath, std::ios_base::in);
+}
+
 int main()
 {
-	auto path = std::filesystem::current_path() / "test/3x3.smtx";
-	test_csr_to_row_major(path);
-	path = std::filesystem::current_path() / "test/3x3_host_spmm.rm";
-	test_host_spmm(path);
+	auto  path = std::filesystem::current_path() / "test/3x3_dev_spmm.smtx";
+	Input input = read_input(path);
+	// std::cout << reinterpret_cast<uint32_t*>(input.data)[1] << std::endl;
+	run(input);
+
+	for (size_t i = 0; i < 9; ++i) {
+		std::cout << reinterpret_cast<float*>(input.data)[i] << "\n";
+	}
+
+	cuda_dealloc_host(input.data);
+
 	return 0;
 }

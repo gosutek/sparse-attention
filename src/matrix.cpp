@@ -79,6 +79,10 @@ Input read_input(const std::filesystem::path& filepath)
 		input.embeddings[i] = uni_real_dist(rng);
 	}
 
+	for (size_t i = 0; i < 9; ++i) {
+		std::cout << "embeddings[" << i << "] = " << input.embeddings[i] << std::endl;
+	}
+
 	return input;
 }
 
@@ -86,7 +90,7 @@ float* csr_to_row_major(CSRMatrix& mat)
 {
 	float* res = static_cast<float*>(std::malloc(sizeof(float) * mat.rows * mat.cols));
 	if (!res) {
-		THROW_RUNTIME_ERROR("Failed to allcoate");
+		THROW_RUNTIME_ERROR("Failed to allocate");
 	}
 
 	std::fill(res, res + mat.rows * mat.cols, 0.0f);

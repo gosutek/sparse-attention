@@ -2,7 +2,6 @@
 #include "matrix.h"
 
 void cuda_dealloc_host(void* ptr);
-void cuda_dealloc_device(void* ptr);
 void run(Input input);
 
 int main()
