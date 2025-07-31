@@ -12,7 +12,9 @@ int main()
 		Input input = read_input(data_path);
 		run(input);
 
-		std::cout << reinterpret_cast<float*>(input.data)[0] << "\n";
+		for (size_t i = 0; i < 9; ++i) {
+			std::cout << reinterpret_cast<float*>(input.data)[i] << "\n";
+		}
 
 		cuda_dealloc_host(input.data);
 

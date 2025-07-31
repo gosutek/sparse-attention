@@ -3,6 +3,11 @@
 #include "common.h"
 #include "matrix.h"
 #include <filesystem>
+#include <unistd.h>
+
+#ifndef MAT_SIZE
+#	define MAT_SIZE 512
+#endif
 
 #define ASSERT_EQ(expected, actual, message)                           \
 	do {                                                               \
@@ -157,47 +162,32 @@ static void test_host_spmm(const std::filesystem::path& filepath)
 	std::ifstream file_stream(filepath, std::ios_base::in);
 }
 
-static void test_dev_spmm(const std::filesystem::path& filepath, const float* const dev_res)
+static void test_dev_spmm(const std::filesystem::path& filepath)
 {
-	if (std::filesystem::is_regular_file(filepath) && filepath.extension() == ".rm") {
-		const auto a_matrix_file = filepath.parent_path() / filepath.stem().replace_filename(filepath.stem().string().append("_a.rm"));
-		const auto b_matrix_file = filepath.parent_path() / filepath.stem().replace_filename(filepath.stem().string().append("_b.rm"));
-		if (!std::filesystem::exists(a_matrix_file)) {
-			THROW_RUNTIME_ERROR("Expected file not found for testing: " + a_matrix_file.string());
-		}
-		if (!std::filesystem::exists(b_matrix_file)) {
-			THROW_RUNTIME_ERROR("Expected file not found for testing: " + b_matrix_file.string());
-		}
+	if (std::filesystem::is_regular_file(filepath) && filepath.extension() == ".smtx") {
 		std::cout << "Testing 'dev_spmm' with file: " << filepath << "\n";
-		// WARN: change hardcoded 9
-		std::vector<float> a = read_row_major_from_rm(a_matrix_file, 9);
-		std::vector<float> b = read_row_major_from_rm(b_matrix_file, 9);
-		std::vector<float> actual;
-		actual.reserve(9);
+		Input input = read_input(filepath);
 
-		for (size_t i = 0; i < 9; ++i) {
-			actual.push_back(dev_res[i]);
-		}
-		std::vector<float> expected = host_spmm(a, b, 3, 3);
+		float*             a_ptr = csr_to_row_major(input.weights[0]);
+		std::vector<float> a(a_ptr, a_ptr + MAT_SIZE * MAT_SIZE);
+		std::free(a_ptr);
+		float*             b_ptr = input.embeddings;
+		std::vector<float> b(b_ptr, b_ptr + MAT_SIZE * MAT_SIZE);
+
+		std::vector<float> expected = host_spmm(a, b, MAT_SIZE, MAT_SIZE);
+		run(input);
+		std::vector<float> actual(reinterpret_cast<float*>(input.data), reinterpret_cast<float*>(input.data) + MAT_SIZE * MAT_SIZE);
 		ASSERT_EQ(expected, actual, "The matrices differ in values.\n");
 
 		printf("Test successful\n");
+		cuda_dealloc_host(input.data);
 	}
-	std::ifstream file_stream(filepath, std::ios_base::in);
 }
 
 int main()
 {
-	auto  path = std::filesystem::current_path() / "test/3x3_dev_spmm.smtx";
-	Input input = read_input(path);
-	// std::cout << reinterpret_cast<uint32_t*>(input.data)[1] << std::endl;
-	run(input);
-
-	for (size_t i = 0; i < 9; ++i) {
-		std::cout << reinterpret_cast<float*>(input.data)[i] << "\n";
-	}
-
-	cuda_dealloc_host(input.data);
+	auto path = std::filesystem::current_path() / DATA_DIRECTORY / "dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx";
+	test_dev_spmm(path);
 
 	return 0;
 }

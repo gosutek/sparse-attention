@@ -69,7 +69,6 @@ __global__ void spmm_kernel(
 	if (y < nrows) {
 		float acc = 0;
 		for (size_t i = row_ptr[y]; i < row_ptr[y + 1]; ++i) {
-			printf("val[i] = %f mulled by dense[x * nrows + col_idx[i]] = %f\n", val[i], dense[x * nrows + col_idx[i]]);
 			acc += val[i] * dense[x * nrows + col_idx[i]];
 		}
 		res[ncols * y + x] = acc;
@@ -79,7 +78,8 @@ __global__ void spmm_kernel(
 void run(Input input)
 {
 	CSRMatrix& q_weights = input.weights[0];
-	float*     res = static_cast<float*>(cuda_malloc_device(sizeof(float) * 3 * 3));
+	// TODO: change MAT_SIZE
+	float* res = static_cast<float*>(cuda_malloc_device(sizeof(float) * MAT_SIZE * MAT_SIZE));
 	// TODO: Merge these two ^ v allocations
 	void* dev = prepare(input);
 
@@ -88,13 +88,13 @@ void run(Input input)
 	float*    d_val = reinterpret_cast<float*>(d_col_idx + q_weights.col_idx_size);
 	float*    d_embeddings = d_val + q_weights.val_size;
 
-	dim3 dimBlock(3, 3);
-	dim3 dimGrid(1, 1, 1);
+	dim3 dimBlock(16, 16);
+	dim3 dimGrid(32, 32);
 
 	spmm_kernel<<<dimGrid, dimBlock>>>(d_row_ptr, d_col_idx, d_val, d_embeddings, q_weights.rows, q_weights.cols, res);
 	CUDA_CHECK(cudaDeviceSynchronize());
 
-	CUDA_CHECK(cudaMemcpy(input.data, res, sizeof(float) * 3 * 3, cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(input.data, res, sizeof(float) * MAT_SIZE * MAT_SIZE, cudaMemcpyDeviceToHost));
 
 	cuda_dealloc_device(res);
 	cuda_dealloc_device(dev);

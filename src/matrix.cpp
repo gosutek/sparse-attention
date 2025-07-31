@@ -79,10 +79,6 @@ Input read_input(const std::filesystem::path& filepath)
 		input.embeddings[i] = uni_real_dist(rng);
 	}
 
-	for (size_t i = 0; i < 9; ++i) {
-		std::cout << "embeddings[" << i << "] = " << input.embeddings[i] << std::endl;
-	}
-
 	return input;
 }
 
