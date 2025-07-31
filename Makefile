@@ -37,10 +37,13 @@ CUFLAGS+=-Xcompiler "-DMAT_SIZE=512"
 
 all: $(BUILD_DIR)/cute
 
-test: $(BUILD_DIR)/test_cute
+chrono: CUFLAGS+=-Xcompiler "-D__CHRONO__"
+chrono: $(BUILD_DIR)/cute
+
+test: $(BUILD_DIR)/cute_test
 
 bounds: CUFLAGS+=-Xcompiler "-D_GLIBCXX_DEBUG"
-bounds: $(BUILD_DIR)/cute_bounds_checking
+bounds: $(BUILD_DIR)/cute
 
 $(BUILD_DIR)/cute: $(OBJECTS)
 	@mkdir -p $(@D)
@@ -49,10 +52,6 @@ $(BUILD_DIR)/cute: $(OBJECTS)
 $(BUILD_DIR)/test_cute: $(TEST_OBJECTS)
 	@mkdir -p $(@D)
 	$(NVCC) $(CUFLAGS) $(TEST_OBJECTS) -o $@
-
-$(BUILD_DIR)/cute_bounds_checking: $(OBJECTS)
-	@mkdir -p $(@D)
-	$(NVCC) $(CUFLAGS) $(OBJECTS) -o $@
 
 $(BUILD_DIR)/%.cpp.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)

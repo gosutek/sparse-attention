@@ -26,6 +26,7 @@ void* cuda_device_copy(void* host, size_t b_size)
 {
 	void* device = nullptr;
 	CUDA_CHECK(cudaMalloc(&device, b_size));
+	// TODO: can this be async?
 	CUDA_CHECK(cudaMemcpy(device, host, b_size, cudaMemcpyHostToDevice));
 	return device;
 }
@@ -91,9 +92,25 @@ void run(Input input)
 	dim3 dimBlock(16, 16);
 	dim3 dimGrid(32, 32);
 
+#if defined(__CHRONO__)
+	cudaEvent_t start, stop;
+
+	CUDA_CHECK(cudaEventCreate(&start));
+	CUDA_CHECK(cudaEventCreate(&stop));
+
+	CUDA_CHECK(cudaEventRecord(start, 0));
+#endif
+
 	spmm_kernel<<<dimGrid, dimBlock>>>(d_row_ptr, d_col_idx, d_val, d_embeddings, q_weights.rows, q_weights.cols, res);
+
+#if defined(__CHRONO__)
+	CUDA_CHECK(cudaEventRecord(stop, 0));
+	CUDA_CHECK(cudaEventSynchronize(stop));
+#endif
+
 	CUDA_CHECK(cudaDeviceSynchronize());
 
+	// TODO: can this be async?
 	CUDA_CHECK(cudaMemcpy(input.data, res, sizeof(float) * MAT_SIZE * MAT_SIZE, cudaMemcpyDeviceToHost));
 
 	cuda_dealloc_device(res);
