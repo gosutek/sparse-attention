@@ -49,7 +49,7 @@ $(BUILD_DIR)/cute: $(OBJECTS)
 	@mkdir -p $(@D)
 	$(NVCC) $(CUFLAGS) $(OBJECTS) -o $@
 
-$(BUILD_DIR)/test_cute: $(TEST_OBJECTS)
+$(BUILD_DIR)/cute_test: $(TEST_OBJECTS)
 	@mkdir -p $(@D)
 	$(NVCC) $(CUFLAGS) $(TEST_OBJECTS) -o $@
 

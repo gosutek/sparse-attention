@@ -94,6 +94,7 @@ void run(Input input)
 
 #if defined(__CHRONO__)
 	cudaEvent_t start, stop;
+	float       time;
 
 	CUDA_CHECK(cudaEventCreate(&start));
 	CUDA_CHECK(cudaEventCreate(&stop));
@@ -106,6 +107,12 @@ void run(Input input)
 #if defined(__CHRONO__)
 	CUDA_CHECK(cudaEventRecord(stop, 0));
 	CUDA_CHECK(cudaEventSynchronize(stop));
+
+	CUDA_CHECK(cudaEventElapsedTime(&time, start, stop));
+	CUDA_CHECK(cudaEventDestroy(start));
+	CUDA_CHECK(cudaEventDestroy(stop));
+
+	std::cout << "Clock: " << time << "ms" << std::endl;
 #endif
 
 	CUDA_CHECK(cudaDeviceSynchronize());
