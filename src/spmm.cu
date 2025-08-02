@@ -76,6 +76,17 @@ __global__ void spmm_kernel(
 	}
 }
 
+__global__ void spmm_shared(
+	const uint32_t* const row_ptr,
+	const uint32_t* const col_idx,
+	const float* const    val,
+	const float* const    dense,
+	const uint32_t        nrows,
+	const uint32_t        ncols,
+	float* const          res)
+{
+}
+
 void run(Input input)
 {
 	CSRMatrix& q_weights = input.weights[0];
