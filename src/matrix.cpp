@@ -26,6 +26,61 @@ static void parse_dlmc_header(CSRMatrix& mat, std::ifstream& file_stream)
 	mat.val_size = mat.nnz;
 }
 
+CSRMatrix parse_dlmc(void* dst, const std::filesystem::path& filepath)
+{
+	std::ifstream file_stream(filepath, std::ios_base::in);
+
+	if (!file_stream) {
+		THROW_RUNTIME_ERROR("Error opening file.\n");
+	}
+
+	CSRMatrix res;
+	parse_dlmc_header(res, file_stream);
+
+	char* ptr = reinterpret_cast<char*>(dst);
+
+	res.row_ptr = reinterpret_cast<uint32_t*>(ptr);
+	ptr += res.row_ptr_size * sizeof(uint32_t);
+
+	res.col_idx = reinterpret_cast<uint32_t*>(ptr);
+	ptr += res.col_idx_size * sizeof(uint32_t);
+
+	res.val = reinterpret_cast<float*>(ptr);
+	ptr += res.val_size * sizeof(float);
+
+	std::string line, token;
+	std::getline(file_stream, line);
+	std::istringstream row_ptr_stream(line);
+	for (size_t i = 0; i < res.row_ptr_size; ++i) {
+		row_ptr_stream >> token;
+		res.row_ptr[i] = static_cast<uint32_t>(std::stoi(token));
+	}
+
+	std::getline(file_stream, line);
+	std::istringstream col_idx_stream(line);
+	for (size_t i = 0; i < res.col_idx_size; ++i) {
+		col_idx_stream >> token;
+		res.col_idx[i] = static_cast<uint32_t>(std::stoi(token));
+	}
+
+	std::getline(file_stream, line);
+
+#if defined(__TEST__)
+	for (size_t i = 0; i < res.val_size; ++i) {
+		res.val[i] = static_cast<float>(i + 1);
+	}
+#else
+	std::random_device                    rd;
+	std::minstd_rand                      rng(rd());
+	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+	for (size_t i = 0; i < res.val_size; ++i) {
+		res.val[i] = uni_real_dist(rng);
+	}
+#endif
+
+	return res;
+}
+
 Input read_input(const std::filesystem::path& filepath)
 {
 	std::ifstream file_stream(filepath, std::ios_base::in);
@@ -54,32 +109,7 @@ Input read_input(const std::filesystem::path& filepath)
 	if (!input.data) {
 		THROW_RUNTIME_ERROR("failed to allocate");
 	}
-	q_weights.row_ptr = reinterpret_cast<uint32_t*>(input.data);
-	q_weights.col_idx = q_weights.row_ptr + q_weights.row_ptr_size;
-	q_weights.val = reinterpret_cast<float*>(q_weights.col_idx + q_weights.col_idx_size);
 	input.embeddings = q_weights.val + q_weights.val_size;
-
-	std::getline(file_stream, line);
-	std::istringstream row_ptr_line(line);
-
-	uint32_t idx = 0;
-	while (row_ptr_line >> token) {
-		q_weights.row_ptr[idx++] = static_cast<uint32_t>(std::stoi(token));
-	}
-
-	std::getline(file_stream, line);
-	std::istringstream col_idx_line(line);
-
-	idx = 0;
-	while (col_idx_line >> token) {
-		q_weights.col_idx[idx] = static_cast<uint32_t>(std::stoi(token));
-
-#if defined(__TEST__)
-		q_weights.val[idx++] = idx + 1;
-#else
-		q_weights.val[idx++] = uni_real_dist(rng);
-#endif
-	}
 
 	for (size_t i = 0; i < embeddings_size; ++i) {
 		input.embeddings[i] = uni_real_dist(rng);
