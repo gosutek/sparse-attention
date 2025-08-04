@@ -13,7 +13,8 @@
 
 struct CSRMatrix
 {
-	uint32_t rows{}, cols{}, nnz{}, row_ptr_size{}, col_idx_size{}, val_size{};
+	size_t rows{}, cols{}, nnz{};
+	size_t row_ptr_size{}, col_idx_size{}, val_size{};
 
 	uint32_t* row_ptr = nullptr;
 	uint32_t* col_idx = nullptr;

@@ -5,6 +5,27 @@
 
 void* cuda_malloc_host(size_t size);
 
+static void parse_dlmc_header(CSRMatrix& mat, std::ifstream& file_stream)
+{
+	std::string token;
+	std::string header_line;
+	std::getline(file_stream, header_line);
+
+	std::istringstream header_stream(header_line);
+	std::getline(header_stream, token, ',');
+	mat.cols = static_cast<size_t>(std::stoi(token));
+
+	std::getline(header_stream, token, ',');
+	mat.rows = static_cast<size_t>(std::stoi(token));
+
+	std::getline(header_stream, token, ',');
+	mat.nnz = static_cast<size_t>(std::stoi(token));
+
+	mat.row_ptr_size = mat.rows + 1;
+	mat.col_idx_size = mat.nnz;
+	mat.val_size = mat.nnz;
+}
+
 Input read_input(const std::filesystem::path& filepath)
 {
 	std::ifstream file_stream(filepath, std::ios_base::in);
@@ -20,21 +41,6 @@ Input read_input(const std::filesystem::path& filepath)
 	std::minstd_rand                      rng(rd());
 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
 
-	//TODO: Make this into a function
-	std::string header_line{}, line{}, token{};
-
-	std::getline(file_stream, header_line);
-	std::istringstream header_stream(header_line);
-	std::getline(header_stream, token, ',');
-	q_weights.cols = static_cast<uint32_t>(std::stoi(token));
-	std::getline(header_stream, token, ',');
-	q_weights.rows = static_cast<uint32_t>(std::stoi(token));
-	std::getline(header_stream, token, ',');
-	q_weights.nnz = static_cast<uint32_t>(std::stoi(token));
-
-	q_weights.row_ptr_size = q_weights.rows + 1;
-	q_weights.col_idx_size = q_weights.nnz;
-	q_weights.val_size = q_weights.nnz;
 	uint32_t embeddings_size = q_weights.rows * q_weights.rows;
 
 	input.b_size =
