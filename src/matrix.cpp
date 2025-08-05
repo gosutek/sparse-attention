@@ -5,7 +5,17 @@
 
 void* cuda_malloc_host(size_t size);
 
-static void parse_dlmc_header(CSRMatrix& mat, std::ifstream& file_stream)
+/*
+ * w_q
+ * w_k
+ * w_v
+ * w_o
+ * x
+ */
+
+size_t get_mhsa_allocation_size()
+
+	static void parse_dlmc_header(CSRMatrix& mat, std::ifstream& file_stream)
 {
 	std::string token;
 	std::string header_line;

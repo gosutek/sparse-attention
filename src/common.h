@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-constexpr char    DATA_DIRECTORY[] = "data/";
 constexpr uint8_t ALIGNMENT = 128;
 constexpr uint8_t ROW_PANEL_SIZE = 32;  // I think this should be the same as TM
 
