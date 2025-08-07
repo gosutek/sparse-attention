@@ -1,41 +1,19 @@
 #include "common.h"
 #include "matrix.h"
 #include "model.h"
-#include <cstdlib>
-
-void cuda_dealloc_host(void* ptr);
-void run(Input input);
-
-void generate_metadata(std::filesystem::path filepath)
-{
-}
 
 int main(int argc, char* argv[])
 {
+	MHSA mhsa;
+
 	std::string base_data_path = "data/dlmc/transformer/";
 	std::string s_pruning_method = "l0_regularization/";
 	std::string sparsity = "0.5/";
+	std::string body = "body_decoder_";
+	std::string attention_mechanism = "self_attention_multihead_attention_";
 	int         n_layers = 0;
 
-	if (argc < 2) {
-		std::cout << "Running with default data path:\n"
-				  << base_data_path
-				  << s_pruning_method
-				  << sparsity
-				  << std::endl;
-	} else {
-		for (size_t i = 1; i < argc; i += 2) {
-			if (argv[i][0] != '-') {
-				std::cout << "Flag must be preceded by a dash '-'\n";
-			}
-
-			if (argv[i][1] == 'g') {
-				generate_metadata({ base_data_path + s_pruning_method + sparsity });
-			}
-		}
-	}
-
-	// TODO: implement passing paths
+	read_input(mhsa, mhsa.weights, base_data_path, s_pruning_method, sparsity, body, attention_mechanism, n_layers);
 
 	try {
 	} catch (const std::exception& e) {

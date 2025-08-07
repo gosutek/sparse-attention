@@ -1,6 +1,9 @@
 #include "matrix.h"
 #include "common.h"
+#include "model.h"
 
+#include <fstream>
+#include <ios>
 #include <random>
 
 void* cuda_malloc_host(size_t size);
@@ -13,9 +16,7 @@ void* cuda_malloc_host(size_t size);
  * x
  */
 
-size_t get_mhsa_allocation_size()
-
-	static void parse_dlmc_header(CSRMatrix& mat, std::ifstream& file_stream)
+static void parse_dlmc_header(CSRMatrix& mat, std::ifstream& file_stream)
 {
 	std::string token;
 	std::string header_line;
@@ -36,7 +37,7 @@ size_t get_mhsa_allocation_size()
 	mat.val_size = mat.nnz;
 }
 
-CSRMatrix parse_dlmc(void* dst, const std::filesystem::path& filepath)
+CSRMatrix parse_dlmc(void*& dst, const std::filesystem::path& filepath)
 {
 	std::ifstream file_stream(filepath, std::ios_base::in);
 
@@ -57,6 +58,8 @@ CSRMatrix parse_dlmc(void* dst, const std::filesystem::path& filepath)
 
 	res.val = reinterpret_cast<float*>(ptr);
 	ptr += res.val_size * sizeof(float);
+
+	dst = reinterpret_cast<void*>(ptr);
 
 	std::string line, token;
 	std::getline(file_stream, line);
@@ -91,41 +94,56 @@ CSRMatrix parse_dlmc(void* dst, const std::filesystem::path& filepath)
 	return res;
 }
 
-Input read_input(const std::filesystem::path& filepath)
+void read_input(
+	MHSA&              mhsa,
+	Weights&           weights,
+	const std::string& base_data_path,
+	const std::string& s_pruning_method,
+	const std::string& sparsity,
+	const std::string& body,
+	const std::string& attention_mechanism,
+	const int          layer)
 {
-	std::ifstream file_stream(filepath, std::ios_base::in);
+	const std::string s_path = base_data_path +
+	                           s_pruning_method +
+	                           sparsity +
+	                           body +
+	                           "layer_" + std::to_string(layer) + "_" +
+	                           attention_mechanism;
 
-	if (!file_stream) {
-		THROW_RUNTIME_ERROR("Error opening file.\n");
-	}
+	const std::string q_path = s_path + "q.smtx";
+	const std::string k_path = s_path + "k.smtx";
+	const std::string v_path = s_path + "v.smtx";
+	const std::string o_path = s_path + "outupt_transform.smtx";
+	const std::string x_path = base_data_path +
+	                           s_pruning_method +
+	                           sparsity +
+	                           "symbol_modality_33288_512_shared_weights_0_aux.smtx";
 
-	Input      input;
-	CSRMatrix& q_weights = input.weights[0];
+	/*
+     * Allocate for
+     * x (33288, 512) float
+     * w_q (512, 512) float
+     * w_k (512, 512) float
+     * w_v (512, 512) float
+     * w_o (512, 512) float
+     */
 
-	std::random_device                    rd;
-	std::minstd_rand                      rng(rd());
-	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+	// 33288 * 512 = token_embeddings_matrix
+	// 4 matrices of 512 * 512 maximum size each
+	// for 'layer + 1' layers
+	mhsa.b_size = sizeof(float) * (33288 * 512) * ((layer + 1) * (4 * 512 * 512));
+	void* host = cuda_malloc_host(mhsa.b_size);
 
-	uint32_t embeddings_size = q_weights.rows * q_weights.rows;
-
-	input.b_size =
-		q_weights.row_ptr_size * sizeof(uint32_t) +
-		q_weights.col_idx_size * sizeof(uint32_t) +
-		q_weights.val_size * sizeof(float) +
-		embeddings_size * sizeof(float);
-
-	// TODO: This should allocate for the result aswell
-	input.data = cuda_malloc_host(input.b_size);
-	if (!input.data) {
+	if (!host) {
 		THROW_RUNTIME_ERROR("failed to allocate");
 	}
-	input.embeddings = q_weights.val + q_weights.val_size;
 
-	for (size_t i = 0; i < embeddings_size; ++i) {
-		input.embeddings[i] = uni_real_dist(rng);
-	}
-
-	return input;
+	weights.w_q = parse_dlmc(host, q_path);
+	weights.w_k = parse_dlmc(host, k_path);
+	weights.w_v = parse_dlmc(host, v_path);
+	weights.w_o = parse_dlmc(host, o_path);
+	weights.x = parse_dlmc(host, x_path);
 }
 
 float* csr_to_row_major(CSRMatrix& mat)
