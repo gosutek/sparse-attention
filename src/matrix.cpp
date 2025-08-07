@@ -22,6 +22,15 @@ void  cuda_dealloc_host(void* ptr);
  * x
  */
 
+static size_t get_byte_size(const CSRMatrix& mat)
+{
+	size_t b_row_ptr_size = mat.row_ptr_size * sizeof(uint32_t);
+	size_t b_col_idx_size = mat.col_idx_size * sizeof(uint32_t);
+	size_t b_val_size = mat.val_size * sizeof(float);
+
+	return b_row_ptr_size + b_col_idx_size + b_val_size;
+}
+
 static void parse_dlmc_header(CSRMatrix& mat, std::ifstream& file_stream)
 {
 	std::string token;
@@ -138,23 +147,33 @@ void read_input(
 	// 33288 * 512 = token_embeddings_matrix
 	// 4 matrices of 512 * 512 maximum size each
 	// for 'layer + 1' layers
-	mhsa.b_size = MAX_ALLOCATION_SIZE;
-	void* host = cuda_malloc_host(mhsa.b_size);
+	mhsa.host = cuda_malloc_host(MAX_ALLOCATION_SIZE);
 
-	if (!host) {
+	if (!mhsa.host) {
 		THROW_RUNTIME_ERROR("failed to allocate");
 	}
 
-	void* ptr = host;
+	void* ptr = mhsa.host;
 
 	try {
 		weights.w_q = parse_dlmc(ptr, q_path);
+		size_t b_size = get_byte_size(weights.w_q);
+
 		weights.w_k = parse_dlmc(ptr, k_path);
+		b_size += get_byte_size(weights.w_k);
+
 		weights.w_v = parse_dlmc(ptr, v_path);
+		b_size += get_byte_size(weights.w_v);
+
 		weights.w_o = parse_dlmc(ptr, o_path);
+		b_size += get_byte_size(weights.w_o);
+
 		weights.x = parse_dlmc(ptr, x_path);
+		b_size += get_byte_size(weights.x);
+
+		mhsa.b_size = b_size;
 	} catch (const std::exception& e) {
-		cuda_dealloc_host(host);
+		cuda_dealloc_host(mhsa.host);
 		throw;
 	}
 }

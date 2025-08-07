@@ -15,5 +15,6 @@ struct Weights
 struct MHSA
 {
 	Weights weights;
-	size_t  b_size;
+	void*   host = nullptr;
+	size_t  b_size = 0;
 };
