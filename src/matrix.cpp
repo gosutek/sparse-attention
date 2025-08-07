@@ -7,6 +7,7 @@
 #include <random>
 
 void* cuda_malloc_host(size_t size);
+void  cuda_dealloc_host(void* ptr);
 
 /*
  * w_q
@@ -42,7 +43,7 @@ CSRMatrix parse_dlmc(void*& dst, const std::filesystem::path& filepath)
 	std::ifstream file_stream(filepath, std::ios_base::in);
 
 	if (!file_stream) {
-		THROW_RUNTIME_ERROR("Error opening file.\n");
+		THROW_RUNTIME_ERROR(filepath.string());
 	}
 
 	CSRMatrix res;
@@ -139,11 +140,18 @@ void read_input(
 		THROW_RUNTIME_ERROR("failed to allocate");
 	}
 
-	weights.w_q = parse_dlmc(host, q_path);
-	weights.w_k = parse_dlmc(host, k_path);
-	weights.w_v = parse_dlmc(host, v_path);
-	weights.w_o = parse_dlmc(host, o_path);
-	weights.x = parse_dlmc(host, x_path);
+	void* ptr = host;
+
+	try {
+		weights.w_q = parse_dlmc(ptr, q_path);
+		weights.w_k = parse_dlmc(ptr, k_path);
+		weights.w_v = parse_dlmc(ptr, v_path);
+		weights.w_o = parse_dlmc(ptr, o_path);
+		weights.x = parse_dlmc(ptr, x_path);
+	} catch (const std::exception& e) {
+		cuda_dealloc_host(host);
+		throw;
+	}
 }
 
 float* csr_to_row_major(CSRMatrix& mat)
