@@ -6,6 +6,11 @@
 #include <ios>
 #include <random>
 
+// 33288 * 512 = token_embeddings_matrix
+// 4 matrices of 512 * 512 maximum size each
+// for 'layer + 1' layers
+#define MAX_ALLOCATION_SIZE sizeof(float) * (33288 * 512) + ((layer + 1) * (4 * 512 * 512));
+
 void* cuda_malloc_host(size_t size);
 void  cuda_dealloc_host(void* ptr);
 
@@ -133,7 +138,7 @@ void read_input(
 	// 33288 * 512 = token_embeddings_matrix
 	// 4 matrices of 512 * 512 maximum size each
 	// for 'layer + 1' layers
-	mhsa.b_size = sizeof(float) * (33288 * 512) * ((layer + 1) * (4 * 512 * 512));
+	mhsa.b_size = MAX_ALLOCATION_SIZE;
 	void* host = cuda_malloc_host(mhsa.b_size);
 
 	if (!host) {
