@@ -1,5 +1,6 @@
 #include "common.h"
 #include "matrix.h"
+#include "model.h"
 
 #ifndef MAT_SIZE
 #	define MAT_SIZE 512
@@ -48,10 +49,10 @@ void cuda_dealloc_device(void* ptr)
 	CUDA_CHECK(cudaFree(ptr));
 }
 
-static void* prepare(Input& input)
+static void* prepare(MHSA& mhsa)
 {
 	// TODO: Streams go here
-	void* dev = cuda_device_copy(input.data, input.b_size);
+	void* dev = cuda_device_copy(mhsa.host, mhsa.b_size);
 	return dev;
 }
 
@@ -76,13 +77,13 @@ __global__ void spmm_kernel(
 	}
 }
 
-void run(Input input)
+void run(MHSA mhsa)
 {
-	CSRMatrix& q_weights = input.weights[0];
+	CSRMatrix& w_q = mhsa.weights.w_q;
 	// TODO: change MAT_SIZE
 	float* res = static_cast<float*>(cuda_malloc_device(sizeof(float) * MAT_SIZE * MAT_SIZE));
 	// TODO: Merge these two ^ v allocations
-	void* dev = prepare(input);
+	void* dev = prepare(mhsa);
 
 	uint32_t* d_row_ptr = reinterpret_cast<uint32_t*>(dev);
 	uint32_t* d_col_idx = d_row_ptr + q_weights.row_ptr_size;
@@ -102,7 +103,7 @@ void run(Input input)
 	CUDA_CHECK(cudaEventRecord(start, 0));
 #endif
 
-	spmm_kernel<<<dimGrid, dimBlock>>>(d_row_ptr, d_col_idx, d_val, d_embeddings, q_weights.rows, q_weights.cols, res);
+	spmm_kernel<<<dimGrid, dimBlock>>>(d_row_ptr, d_col_idx, d_val, d_embeddings, w_q.rows, w_q.cols, res);
 
 #if defined(__CHRONO__)
 	CUDA_CHECK(cudaEventRecord(stop, 0));
@@ -118,7 +119,7 @@ void run(Input input)
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	// TODO: can this be async?
-	CUDA_CHECK(cudaMemcpy(input.data, res, sizeof(float) * MAT_SIZE * MAT_SIZE, cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(mhsa.host, res, sizeof(float) * MAT_SIZE * MAT_SIZE, cudaMemcpyDeviceToHost));
 
 	cuda_dealloc_device(res);
 	cuda_dealloc_device(dev);
