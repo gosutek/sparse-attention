@@ -2,8 +2,7 @@
 
 #include "common.h"
 #include "matrix.h"
-#include <filesystem>
-#include <unistd.h>
+#include "model.h"
 
 #ifndef MAT_SIZE
 #	define MAT_SIZE 512
@@ -21,6 +20,22 @@
 
 void run(Input input);
 void cuda_dealloc_host(void* ptr);
+
+MHSA default_run()
+{
+	MHSA mhsa;
+
+	std::string base_data_path = "data/dlmc/transformer/";
+	std::string s_pruning_method = "l0_regularization/";
+	std::string sparsity = "0.5/";
+	std::string body = "body_decoder_";
+	std::string attention_mechanism = "self_attention_multihead_attention_";
+	int         n_layers = 0;
+
+	read_input(mhsa, mhsa.weights, base_data_path, s_pruning_method, sparsity, body, attention_mechanism, n_layers);
+
+	return mhsa;
+}
 
 // struct ReadExpectedOutput
 // {
@@ -93,7 +108,7 @@ static std::vector<float> read_row_major_from_rm(const std::filesystem::path& fi
 	return res;
 }
 
-static void test_csr_to_row_major(const std::filesystem::path& filepath)
+[[maybe_unused]] static void test_csr_to_row_major(const std::filesystem::path& filepath)
 {
 	if (std::filesystem::is_regular_file(filepath) && filepath.extension() == ".smtx") {
 		const auto expected_file = filepath.parent_path() / filepath.filename().replace_extension(".rm");
@@ -137,7 +152,7 @@ static std::vector<float> host_spmm(std::vector<float> a, std::vector<float> b, 
 	return res;
 }
 
-static void test_host_spmm(const std::filesystem::path& filepath)
+[[maybe_unused]] static void test_host_spmm(const std::filesystem::path& filepath)
 {
 	if (std::filesystem::is_regular_file(filepath) && filepath.extension() == ".rm") {
 		const auto a_matrix_file = filepath.parent_path() / filepath.stem().replace_filename(filepath.stem().string().append("_a.rm"));

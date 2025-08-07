@@ -2,7 +2,7 @@
 #include "matrix.h"
 #include "model.h"
 
-int main(int argc, char* argv[])
+MHSA default_run()
 {
 	MHSA mhsa;
 
@@ -15,7 +15,13 @@ int main(int argc, char* argv[])
 
 	read_input(mhsa, mhsa.weights, base_data_path, s_pruning_method, sparsity, body, attention_mechanism, n_layers);
 
+	return mhsa;
+}
+
+int main(int argc, char* argv[])
+{
 	try {
+		default_run();
 	} catch (const std::exception& e) {
 		std::cerr << "Exception: " << e.what() << "\n";
 	}
