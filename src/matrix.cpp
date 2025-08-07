@@ -120,7 +120,7 @@ void read_input(
 	const std::string q_path = s_path + "q.smtx";
 	const std::string k_path = s_path + "k.smtx";
 	const std::string v_path = s_path + "v.smtx";
-	const std::string o_path = s_path + "outupt_transform.smtx";
+	const std::string o_path = s_path + "output_transform.smtx";
 	const std::string x_path = base_data_path +
 	                           s_pruning_method +
 	                           sparsity +
