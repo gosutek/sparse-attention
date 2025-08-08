@@ -14,6 +14,16 @@ struct Weights;
  * C is MxN
  */
 
+struct DLMC
+{
+	std::filesystem::path filepath;
+
+	DLMC(const std::string& s_path)
+	{
+		filepath = std::filesystem::path(s_path);
+	}
+};
+
 struct CSRMatrix
 {
 	size_t rows{}, cols{}, nnz{};
