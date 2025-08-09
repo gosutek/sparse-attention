@@ -9,6 +9,7 @@
 // 33288 * 512 = token_embeddings_matrix
 // 4 matrices of 512 * 512 maximum size each
 // for 'layer + 1' layers
+// TODO: Obviously change this crap
 #define MAX_ALLOCATION_SIZE sizeof(float) * (33288 * 512) + ((layer + 1) * (4 * 512 * 512))
 
 void* cuda_malloc_host(size_t size);
@@ -31,25 +32,24 @@ static size_t get_byte_size(const CSRMatrix& mat)
 	return b_row_ptr_size + b_col_idx_size + b_val_size;
 }
 
-static void parse_dlmc_header(CSRMatrix& mat, std::ifstream& file_stream)
+static DLMCHeader parse_dlmc_header(std::ifstream& file_stream)
 {
+	DLMCHeader  res;
 	std::string token;
 	std::string header_line;
 	std::getline(file_stream, header_line);
 
 	std::istringstream header_stream(header_line);
 	std::getline(header_stream, token, ',');
-	mat.cols = static_cast<size_t>(std::stoi(token));
+	res.n_rows = static_cast<size_t>(std::stoi(token));
 
 	std::getline(header_stream, token, ',');
-	mat.rows = static_cast<size_t>(std::stoi(token));
+	res.n_cols = static_cast<size_t>(std::stoi(token));
 
 	std::getline(header_stream, token, ',');
-	mat.nnz = static_cast<size_t>(std::stoi(token));
+	res.nnz = static_cast<size_t>(std::stoi(token));
 
-	mat.row_ptr_size = mat.rows + 1;
-	mat.col_idx_size = mat.nnz;
-	mat.val_size = mat.nnz;
+	return res;
 }
 
 CSRMatrix parse_dlmc(void*& dst, const std::filesystem::path& filepath)
@@ -60,8 +60,12 @@ CSRMatrix parse_dlmc(void*& dst, const std::filesystem::path& filepath)
 		THROW_RUNTIME_ERROR(filepath.string());
 	}
 
-	CSRMatrix res;
-	parse_dlmc_header(res, file_stream);
+	CSRMatrix  res;
+	DLMCHeader header = parse_dlmc_header(file_stream);
+	res.rows = header.n_rows;
+	res.cols = header.n_cols;
+	res.nnz = header.nnz;
+	// parse_dlmc_header(res, file_stream);
 
 	char* ptr = reinterpret_cast<char*>(dst);
 

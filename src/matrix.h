@@ -14,6 +14,11 @@ struct Weights;
  * C is MxN
  */
 
+struct DLMCHeader
+{
+	size_t n_rows, n_cols, nnz;
+};
+
 struct DLMC
 {
 	std::filesystem::path filepath;
