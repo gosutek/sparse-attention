@@ -2,15 +2,7 @@
 #include "common.h"
 #include "model.h"
 
-#include <fstream>
-#include <ios>
 #include <random>
-
-// 33288 * 512 = token_embeddings_matrix
-// 4 matrices of 512 * 512 maximum size each
-// for 'layer + 1' layers
-// TODO: Obviously change this crap
-#define MAX_ALLOCATION_SIZE sizeof(float) * (33288 * 512) + ((layer + 1) * (4 * 512 * 512))
 
 void* cuda_malloc_host(size_t size);
 void  cuda_dealloc_host(void* ptr);
@@ -141,17 +133,14 @@ void read_input(
 
 	/*
      * Allocate for
-     * x (33288, 512) float
      * w_q (512, 512) float
      * w_k (512, 512) float
      * w_v (512, 512) float
      * w_o (512, 512) float
+     * x (512, 512) float
      */
 
-	// 33288 * 512 = token_embeddings_matrix
-	// 4 matrices of 512 * 512 maximum size each
-	// for 'layer + 1' layers
-	mhsa.host = cuda_malloc_host(MAX_ALLOCATION_SIZE);
+	mhsa.host = cuda_malloc_host(MAX_ALLOC);
 
 	if (!mhsa.host) {
 		THROW_RUNTIME_ERROR("failed to allocate");
