@@ -15,11 +15,11 @@ void  cuda_dealloc_host(void* ptr);
  * x
  */
 
-static size_t get_byte_size(const CSRMatrix& mat)
+static size_t get_byte_size(const size_t row_ptr_size, const size_t col_idx_size, const size_t val_size)
 {
-	size_t b_row_ptr_size = mat.row_ptr_size * sizeof(uint32_t);
-	size_t b_col_idx_size = mat.col_idx_size * sizeof(uint32_t);
-	size_t b_val_size = mat.val_size * sizeof(float);
+	size_t b_row_ptr_size = row_ptr_size * sizeof(uint32_t);
+	size_t b_col_idx_size = col_idx_size * sizeof(uint32_t);
+	size_t b_val_size = val_size * sizeof(float);
 
 	return b_row_ptr_size + b_col_idx_size + b_val_size;
 }
@@ -163,16 +163,16 @@ void read_input(
 
 	try {
 		weights.w_q = parse_dlmc(ptr, q_path);
-		size_t b_size = get_byte_size(weights.w_q);
+		size_t b_size = get_byte_size(weights.w_q.row_ptr_size, weights.w_q.col_idx_size, weights.w_q.val_size);
 
 		weights.w_k = parse_dlmc(ptr, k_path);
-		b_size += get_byte_size(weights.w_k);
+		b_size += get_byte_size(weights.w_k.row_ptr_size, weights.w_k.col_idx_size, weights.w_k.val_size);
 
 		weights.w_v = parse_dlmc(ptr, v_path);
-		b_size += get_byte_size(weights.w_v);
+		b_size += get_byte_size(weights.w_v.row_ptr_size, weights.w_v.col_idx_size, weights.w_v.val_size);
 
 		weights.w_o = parse_dlmc(ptr, o_path);
-		b_size += get_byte_size(weights.w_o);
+		b_size += get_byte_size(weights.w_o.row_ptr_size, weights.w_o.col_idx_size, weights.w_o.val_size);
 
 		// TODO: Pass the main host ptr and get a copy of a ptr that start at the embeddings table
 		// weights.x = alloc_token_embeddings(ptr, config.input_sequence_size * MAT_SIZE);
