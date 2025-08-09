@@ -24,6 +24,23 @@ static size_t get_byte_size(const CSRMatrix& mat)
 	return b_row_ptr_size + b_col_idx_size + b_val_size;
 }
 
+static void alloc_token_embeddings(float* ptr, size_t size = MAT_SIZE * MAT_SIZE)
+{
+	if (!ptr) {
+		THROW_RUNTIME_ERROR("Passed nullptr\n");
+	}
+	std::random_device                    rd;
+	std::minstd_rand                      rng(rd());
+	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+
+	for (size_t i = 0; i < size; ++i) {
+		ptr[i] = uni_real_dist(rng);
+	}
+}
+
+/*
+ * WARN: This moves the filestream pointer
+ */
 static DLMCHeader parse_dlmc_header(std::ifstream& file_stream)
 {
 	DLMCHeader  res;
@@ -44,7 +61,7 @@ static DLMCHeader parse_dlmc_header(std::ifstream& file_stream)
 	return res;
 }
 
-CSRMatrix parse_dlmc(void*& dst, const std::filesystem::path& filepath)
+static CSRMatrix parse_dlmc(void*& dst, const std::filesystem::path& filepath)
 {
 	std::ifstream file_stream(filepath, std::ios_base::in);
 
@@ -57,7 +74,6 @@ CSRMatrix parse_dlmc(void*& dst, const std::filesystem::path& filepath)
 	res.rows = header.n_rows;
 	res.cols = header.n_cols;
 	res.nnz = header.nnz;
-	// parse_dlmc_header(res, file_stream);
 
 	char* ptr = reinterpret_cast<char*>(dst);
 
@@ -107,6 +123,7 @@ CSRMatrix parse_dlmc(void*& dst, const std::filesystem::path& filepath)
 
 void read_input(
 	MHSA&              mhsa,
+	Config&            config,
 	Weights&           weights,
 	const std::string& base_data_path,
 	const std::string& s_pruning_method,
@@ -126,10 +143,6 @@ void read_input(
 	const std::string k_path = s_path + "k.smtx";
 	const std::string v_path = s_path + "v.smtx";
 	const std::string o_path = s_path + "output_transform.smtx";
-	const std::string x_path = base_data_path +
-	                           s_pruning_method +
-	                           sparsity +
-	                           "symbol_modality_33288_512_shared_weights_0_aux.smtx";
 
 	/*
      * Allocate for
@@ -161,8 +174,8 @@ void read_input(
 		weights.w_o = parse_dlmc(ptr, o_path);
 		b_size += get_byte_size(weights.w_o);
 
-		weights.x = parse_dlmc(ptr, x_path);
-		b_size += get_byte_size(weights.x);
+		// TODO: Pass the main host ptr and get a copy of a ptr that start at the embeddings table
+		// weights.x = alloc_token_embeddings(ptr, config.input_sequence_size * MAT_SIZE);
 
 		mhsa.b_size = b_size;
 	} catch (const std::exception& e) {

@@ -4,8 +4,20 @@
 
 int main(int argc, char* argv[])
 {
-	DLMC dlmc = { "data/dlmc/transformer/l0_regularization/0.5/" };
-	MHSA mhsa = { { 1, 1, 32, dlmc.filepath } };
+	MHSA mhsa;
+
+	const char* base_data_path = "/data/dlmc/transformer/";
+	const char* s_pruning_method = "l0_regularization/";
+	const char* sparsity = "0.5/";
+	const char* body = "body_decoder_";
+	const char* attention_mechanism = "self_attention_multihead_attention_";
+	const int   layer = 0;
+
+	read_input(mhsa, mhsa.config, mhsa.weights, base_data_path,
+		s_pruning_method, sparsity, body, attention_mechanism, layer);
+
+	std::free(mhsa.host);
+
 	try {
 	} catch (const std::exception& e) {
 		std::cerr << "Exception: " << e.what() << "\n";

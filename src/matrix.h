@@ -4,6 +4,7 @@
 
 struct MHSA;
 struct Weights;
+struct Config;
 
 /*
  * C = A*B
@@ -19,16 +20,6 @@ struct DLMCHeader
 	size_t n_rows, n_cols, nnz;
 };
 
-struct DLMC
-{
-	std::filesystem::path filepath;
-
-	DLMC(const std::string& s_path)
-	{
-		filepath = std::filesystem::path(s_path);
-	}
-};
-
 struct CSRMatrix
 {
 	size_t rows{}, cols{}, nnz{};
@@ -39,6 +30,14 @@ struct CSRMatrix
 	float*    val = nullptr;
 };
 
-void   read_input(MHSA& mhsa, Weights& weights, const std::string& base_data_path, const std::string& s_pruning_method, const std::string& sparsity, const std::string& body, const std::string& attention_mechanism, const int layer);
-float* generate_embeddings(size_t size);
+void read_input(
+	MHSA&              mhsa,
+	Config&            config,
+	Weights&           weights,
+	const std::string& base_data_path,
+	const std::string& s_pruning_method,
+	const std::string& sparsity,
+	const std::string& body,
+	const std::string& attention_mechanism,
+	const int          layer);
 float* csr_to_row_major(CSRMatrix& mat);
