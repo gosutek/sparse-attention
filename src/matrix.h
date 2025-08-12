@@ -56,6 +56,13 @@ struct DLMC
 	std::array<Tensor, MAX_N_LAYERS> enc_self_attention_tensors;
 
 	std::array<Tensor, MAX_N_LAYERS> dec_self_attention_tensors;
+
+	DLMC(const std::string& _base_data_path,
+		const std::string&  _pruning_method,
+		const std::string&  _sparsity) :
+		base_path(_base_data_path),
+		pruning_method(_pruning_method),
+		sparsity(_sparsity) {}
 };
 
 struct CSRMatrix
@@ -73,9 +80,7 @@ void read_input(
 	Config&            config,
 	Weights&           weights,
 	const std::string& base_data_path,
-	const std::string& s_pruning_method,
+	const std::string& pruning_method,
 	const std::string& sparsity,
-	const std::string& body,
-	const std::string& attention_mechanism,
-	const int          layer);
+	AttentionMechanism attention_mechanism);
 std::vector<float> csr_to_row_major(const CSRMatrix& mat);

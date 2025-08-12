@@ -2,6 +2,7 @@
 #include "common.h"
 #include "model.h"
 
+#include <cassert>
 #include <random>
 
 void* cuda_malloc_host(size_t size);
@@ -167,23 +168,20 @@ void read_input(
 	Config&            config,
 	Weights&           weights,
 	const std::string& base_data_path,
-	const std::string& s_pruning_method,
+	const std::string& pruning_method,
 	const std::string& sparsity,
-	const std::string& body,
-	const std::string& attention_mechanism,
-	const int          layer)
+	AttentionMechanism am)
 {
-	const std::string s_path = base_data_path +
-	                           s_pruning_method +
-	                           sparsity +
-	                           body +
-	                           "layer_" + std::to_string(layer) + "_" +
-	                           attention_mechanism;
+	DLMC dlmc = { base_data_path, pruning_method, sparsity };
 
-	const std::string q_path = s_path + "q.smtx";
-	const std::string k_path = s_path + "k.smtx";
-	const std::string v_path = s_path + "v.smtx";
-	const std::string o_path = s_path + "output_transform.smtx";
+	assert(config.n_layers < MAX_N_LAYERS);
+	size_t b_alloc_size = 0;
+	for (size_t i = 0; i < config.n_layers; ++i) {
+		// WARN: Doing only decoder for now
+		// dlmc.enc_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Encoder, am, i);
+		dlmc.dec_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Decoder, am, i);
+		b_alloc_size += dlmc.dec_self_attention_tensors[i].b_size;
+	}
 
 	/*
      * Allocate for
@@ -194,10 +192,11 @@ void read_input(
      * x (512, 512) float
      */
 
-	mhsa.host = cuda_malloc_host(MAX_ALLOC);
+	assert(b_alloc_size < MAX_ALLOC);
+	mhsa.host = cuda_malloc_host(b_alloc_size);
 
 	if (!mhsa.host) {
-		THROW_RUNTIME_ERROR("failed to allocate");
+		THROW_RUNTIME_ERROR("Failed to allocate page-locked host memory\n");
 	}
 
 	void* ptr = mhsa.host;
