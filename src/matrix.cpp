@@ -24,18 +24,22 @@ static size_t get_byte_size(const size_t row_ptr_size, const size_t col_idx_size
 	return b_row_ptr_size + b_col_idx_size + b_val_size;
 }
 
-static std::vector<float> generate_token_embeddings(size_t size = MAT_SIZE * MAT_SIZE)
+static float* generate_token_embeddings(void*& dst, size_t input_sequence)
 {
+	size_t total_size = input_sequence * MAT_SIZE;
+	float* ptr = reinterpret_cast<float*>(dst);
+
 	std::random_device                    rd;
 	std::minstd_rand                      rng(rd());
 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
 
-	std::vector<float> res;
-	res.reserve(size);
-	for (size_t i = 0; i < size; ++i) {
-		res.push_back(uni_real_dist(rng));
+	for (size_t i = 0; i < total_size; ++i) {
+		ptr[i] = uni_real_dist(rng);
 	}
-	return res;
+
+	// Move the global ptr of the block to the end of the embeddings
+	dst = reinterpret_cast<void*>(reinterpret_cast<char*>(dst) + (total_size * sizeof(float)));
+	return ptr;
 }
 
 /*
@@ -175,7 +179,7 @@ void read_input(
 		b_size += get_byte_size(weights.w_o.row_ptr_size, weights.w_o.col_idx_size, weights.w_o.val_size);
 
 		// TODO: Pass the main host ptr and get a copy of a ptr that start at the embeddings table
-		// weights.x = alloc_token_embeddings(ptr, config.input_sequence_size * MAT_SIZE);
+		weights.x = generate_token_embeddings(ptr, config.input_sequence_size);
 
 		mhsa.b_size = b_size;
 	} catch (const std::exception& e) {
