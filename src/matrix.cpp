@@ -184,19 +184,15 @@ void read_input(
 	}
 }
 
-float* csr_to_row_major(CSRMatrix& mat)
+std::vector<float> csr_to_row_major(const CSRMatrix& mat)
 {
-	float* res = static_cast<float*>(std::malloc(sizeof(float) * mat.rows * mat.cols));
-	if (!res) {
-		THROW_RUNTIME_ERROR("Failed to allocate");
-	}
-
-	std::fill(res, res + mat.rows * mat.cols, 0.0f);
+	std::vector<float> res(mat.rows * mat.cols, 0.0f);
 
 	for (size_t i = 0; i < mat.rows; ++i) {
 		for (size_t j = mat.row_ptr[i]; j < mat.row_ptr[i + 1]; ++j) {
 			res[i * mat.cols + mat.col_idx[j]] = mat.val[j];
 		}
 	}
+
 	return res;
 }

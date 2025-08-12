@@ -85,10 +85,10 @@ void run(MHSA mhsa)
 	// TODO: Merge these two ^ v allocations
 	void* dev = prepare(mhsa);
 
-	uint32_t* d_row_ptr = reinterpret_cast<uint32_t*>(dev);
-	uint32_t* d_col_idx = d_row_ptr + q_weights.row_ptr_size;
-	float*    d_val = reinterpret_cast<float*>(d_col_idx + q_weights.col_idx_size);
-	float*    d_embeddings = d_val + q_weights.val_size;
+	uint32_t*          d_row_ptr = reinterpret_cast<uint32_t*>(dev);
+	uint32_t*          d_col_idx = d_row_ptr + w_q.row_ptr_size;
+	float*             d_val = reinterpret_cast<float*>(d_col_idx + w_q.col_idx_size);
+	std::vector<float> d_embeddings = csr_to_row_major(mhsa.weights.w_k);
 
 	dim3 dimBlock(16, 16);
 	dim3 dimGrid(32, 32);
@@ -103,7 +103,7 @@ void run(MHSA mhsa)
 	CUDA_CHECK(cudaEventRecord(start, 0));
 #endif
 
-	spmm_kernel<<<dimGrid, dimBlock>>>(d_row_ptr, d_col_idx, d_val, d_embeddings, w_q.rows, w_q.cols, res);
+	spmm_kernel<<<dimGrid, dimBlock>>>(d_row_ptr, d_col_idx, d_val, d_embeddings.data(), w_q.rows, w_q.cols, res);
 
 #if defined(__CHRONO__)
 	CUDA_CHECK(cudaEventRecord(stop, 0));

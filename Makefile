@@ -33,8 +33,6 @@ endif
 CUFLAGS+=-I/opt/cuda/targets/x86_64-linux/include/
 CUFLAGS+=-Wno-deprecated-gpu-targets
 
-CUFLAGS+=-Xcompiler "-DMAT_SIZE=512"
-
 all: $(BUILD_DIR)/cute
 
 chrono: CUFLAGS+=-Xcompiler "-D__CHRONO__"

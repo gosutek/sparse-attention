@@ -18,10 +18,10 @@
 		}                                                              \
 	} while (0)
 
-void run(Input input);
+void run(MHSA mhsa);
 void cuda_dealloc_host(void* ptr);
 
-MHSA default_run()
+MHSA dry_run()
 {
 	MHSA mhsa;
 
@@ -32,7 +32,17 @@ MHSA default_run()
 	std::string attention_mechanism = "self_attention_multihead_attention_";
 	int         n_layers = 0;
 
-	read_input(mhsa, mhsa.weights, base_data_path, s_pruning_method, sparsity, body, attention_mechanism, n_layers);
+	void read_input(
+		MHSA & mhsa,
+		Config & config,
+		Weights & weights,
+		const std::string& base_data_path,
+		const std::string& s_pruning_method,
+		const std::string& sparsity,
+		const std::string& body,
+		const std::string& attention_mechanism,
+		const int          layer);
+	read_input(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, body, attention_mechanism, n_layers);
 
 	return mhsa;
 }
@@ -108,6 +118,7 @@ static std::vector<float> read_row_major_from_rm(const std::filesystem::path& fi
 	return res;
 }
 
+// TODO: This reads w_q instead of 3x3.smtx
 [[maybe_unused]] static void test_csr_to_row_major(const std::filesystem::path& filepath)
 {
 	if (std::filesystem::is_regular_file(filepath) && filepath.extension() == ".smtx") {
@@ -116,21 +127,15 @@ static std::vector<float> read_row_major_from_rm(const std::filesystem::path& fi
 			THROW_RUNTIME_ERROR("Expected file not found for testing: " + expected_file.string());
 		}
 		std::cout << "Testing for file: " << filepath << "\n";
-		Input              input = read_input(filepath);
-		size_t             matrix_size = input.weights[0].rows * input.weights[0].cols;
-		float*             actual_matrix_ptr = csr_to_row_major(input.weights[0]);
-		std::vector<float> actual_matrix;
-		actual_matrix.reserve(matrix_size);
+		MHSA               mhsa = dry_run();
+		CSRMatrix&         w_q = mhsa.weights.w_q;
+		size_t             matrix_size = w_q.rows * w_q.cols;
+		std::vector<float> actual_matrix = csr_to_row_major(w_q);
 		std::vector<float> expected_matrix = read_row_major_from_rm(expected_file, matrix_size);
 
-		for (size_t i = 0; i < matrix_size; ++i) {
-			actual_matrix.push_back(actual_matrix_ptr[i]);
-		}
 		ASSERT_EQ(expected_matrix, actual_matrix, "The matrices differ in values.\n");
 
 		printf("Test successful\n");
-
-		std::free(actual_matrix_ptr);
 	}
 }
 
@@ -201,8 +206,4 @@ static void test_dev_spmm(const std::filesystem::path& filepath)
 
 int main()
 {
-	auto path = std::filesystem::current_path() / DATA_DIRECTORY / "dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx";
-	test_dev_spmm(path);
-
-	return 0;
 }

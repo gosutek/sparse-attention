@@ -40,4 +40,4 @@ void read_input(
 	const std::string& body,
 	const std::string& attention_mechanism,
 	const int          layer);
-float* csr_to_row_major(CSRMatrix& mat);
+std::vector<float> csr_to_row_major(const CSRMatrix& mat);
