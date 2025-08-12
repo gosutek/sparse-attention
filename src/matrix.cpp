@@ -38,20 +38,6 @@ static std::vector<float> generate_token_embeddings(size_t size = MAT_SIZE * MAT
 	return res;
 }
 
-static void alloc_token_embeddings(float* ptr, size_t size = MAT_SIZE * MAT_SIZE)
-{
-	if (!ptr) {
-		THROW_RUNTIME_ERROR("Passed nullptr\n");
-	}
-	std::random_device                    rd;
-	std::minstd_rand                      rng(rd());
-	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
-
-	for (size_t i = 0; i < size; ++i) {
-		ptr[i] = uni_real_dist(rng);
-	}
-}
-
 /*
  * WARN: This moves the filestream pointer
  */
