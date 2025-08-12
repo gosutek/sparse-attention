@@ -24,6 +24,20 @@ static size_t get_byte_size(const size_t row_ptr_size, const size_t col_idx_size
 	return b_row_ptr_size + b_col_idx_size + b_val_size;
 }
 
+static std::vector<float> generate_token_embeddings(size_t size = MAT_SIZE * MAT_SIZE)
+{
+	std::random_device                    rd;
+	std::minstd_rand                      rng(rd());
+	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+
+	std::vector<float> res;
+	res.reserve(size);
+	for (size_t i = 0; i < size; ++i) {
+		res.push_back(uni_real_dist(rng));
+	}
+	return res;
+}
+
 static void alloc_token_embeddings(float* ptr, size_t size = MAT_SIZE * MAT_SIZE)
 {
 	if (!ptr) {
@@ -193,6 +207,5 @@ std::vector<float> csr_to_row_major(const CSRMatrix& mat)
 			res[i * mat.cols + mat.col_idx[j]] = mat.val[j];
 		}
 	}
-
 	return res;
 }
