@@ -56,11 +56,7 @@ static DLMCHeader parse_dlmc_header(std::ifstream& file_stream)
 	return res;
 }
 
-
-
-
-
-static size_t get_byte_size(const size_t n_rows, const size_t nnz)
+static size_t calc_byte_size(const size_t n_rows, const size_t nnz)
 {
 	size_t b_row_ptr_size = (n_rows + 1) * sizeof(uint32_t);
 	size_t b_col_idx_size = nnz * sizeof(uint32_t);
@@ -69,6 +65,28 @@ static size_t get_byte_size(const size_t n_rows, const size_t nnz)
 	return b_row_ptr_size + b_col_idx_size + b_val_size;
 }
 
+static Tensor read_tensor(DLMC& dlmc, BodyType bt, AttentionMechanism am, size_t layer)
+{
+	Tensor tensor;
+	tensor.bt = bt;
+	tensor.am = am;
+	tensor.layer = layer;
+
+	tensor.path = dlmc.base_path + dlmc.pruning_method + dlmc.sparsity;
+
+	for (size_t i = 0; i < dlmc.suffixes.size(); ++i) {
+		const auto full_path = tensor.path.string() + dlmc.suffixes[i];
+		if (!std::filesystem::exists(full_path) || !std::filesystem::is_regular_file(full_path)) {
+			THROW_RUNTIME_ERROR("Tensor component doesn't exist\n");
+		}
+
+		std::ifstream file_stream(full_path);
+		DLMCHeader    header = parse_dlmc_header(file_stream);
+		tensor.b_size += calc_byte_size(header.n_rows, header.nnz);
+		tensor.shape[i] = std::move(header);
+	}
+	return tensor;
+}
 
 static CSRMatrix parse_dlmc(void*& dst, const std::filesystem::path& filepath)
 {

@@ -15,9 +15,47 @@ struct Config;
  * C is MxN
  */
 
+enum class BodyType
+{
+	Encoder,
+	Decoder
+};
+
+enum class AttentionMechanism
+{
+	SelfAttention,
+	CrossAttention
+};
+
 struct DLMCHeader
 {
 	size_t n_rows, n_cols, nnz;
+};
+
+struct Tensor
+{
+	size_t layer;
+	size_t b_size = 0;
+
+	BodyType           bt;
+	AttentionMechanism am;
+
+	std::filesystem::path path;
+
+	std::array<DLMCHeader, 4> shape;
+};
+
+struct DLMC
+{
+	std::string base_path = "data/dlmc/transformer/";
+	std::string pruning_method = "l0_regularization/";
+	std::string sparsity = "0.5/";
+
+	std::array<const char*, 4> suffixes = { "_q.smtx", "_k.smtx", "_v.smtx", "_output_transform.smtx" };
+
+	std::array<Tensor, MAX_N_LAYERS> enc_self_attention_tensors;
+
+	std::array<Tensor, MAX_N_LAYERS> dec_self_attention_tensors;
 };
 
 struct CSRMatrix
