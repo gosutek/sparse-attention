@@ -74,6 +74,20 @@ static Tensor read_tensor(DLMC& dlmc, BodyType bt, AttentionMechanism am, size_t
 
 	tensor.path = dlmc.base_path + dlmc.pruning_method + dlmc.sparsity;
 
+	if (bt == BodyType::Encoder) {
+		tensor.path += "body_encoder_";
+	} else {
+		tensor.path += "body_decoder_";
+	}
+
+	tensor.path += "layer_" + std::to_string(layer) + "_";
+
+	if (am == AttentionMechanism::SelfAttention) {
+		tensor.path += "self_attention_multihead_attention_";
+	} else {
+		tensor.path += "encdec_attention_multihead_attention_";
+	}
+
 	for (size_t i = 0; i < dlmc.suffixes.size(); ++i) {
 		const auto full_path = tensor.path.string() + dlmc.suffixes[i];
 		if (!std::filesystem::exists(full_path) || !std::filesystem::is_regular_file(full_path)) {
