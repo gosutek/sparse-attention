@@ -183,13 +183,16 @@ void read_input(
 		b_alloc_size += dlmc.dec_self_attention_tensors[i].b_size;
 	}
 
+	size_t b_embeddings_size = config.input_sequence_size * dlmc.dec_self_attention_tensors[0].shape[0].n_rows * sizeof(float);
+	b_alloc_size += b_embeddings_size;
+
 	/*
      * Allocate for
      * w_q (512, 512) float
      * w_k (512, 512) float
      * w_v (512, 512) float
      * w_o (512, 512) float
-     * x (512, 512) float
+     * x (input_sequence_size, 512) float
      */
 
 	assert(b_alloc_size < MAX_ALLOC);
