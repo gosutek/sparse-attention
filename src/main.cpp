@@ -8,7 +8,7 @@ int main(int argc, char* argv[])
 {
 	MHSA mhsa;
 
-	const char* base_data_path = "/data/dlmc/transformer/";
+	const char* base_data_path = "data/dlmc/transformer/";
 	const char* s_pruning_method = "l0_regularization/";
 	const char* sparsity = "0.5/";
 	const char* body = "body_decoder_";
