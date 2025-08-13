@@ -16,7 +16,7 @@ void  cuda_dealloc_host(void* ptr);
  * x
  */
 
-static float* generate_token_embeddings(void*& dst, size_t input_sequence)
+static void generate_token_embeddings(void* dst, size_t input_sequence)
 {
 	size_t total_size = input_sequence * MAT_SIZE;
 	float* ptr = reinterpret_cast<float*>(dst);
@@ -28,10 +28,6 @@ static float* generate_token_embeddings(void*& dst, size_t input_sequence)
 	for (size_t i = 0; i < total_size; ++i) {
 		ptr[i] = uni_real_dist(rng);
 	}
-
-	// Move the global ptr of the block to the end of the embeddings
-	dst = reinterpret_cast<void*>(reinterpret_cast<char*>(dst) + (total_size * sizeof(float)));
-	return ptr;
 }
 
 /*
