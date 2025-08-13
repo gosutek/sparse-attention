@@ -11,12 +11,8 @@ int main(int argc, char* argv[])
 	const char* base_data_path = "data/dlmc/transformer/";
 	const char* s_pruning_method = "l0_regularization/";
 	const char* sparsity = "0.5/";
-	const char* body = "body_decoder_";
-	const char* attention_mechanism = "self_attention_multihead_attention_";
-	const int   layer = 0;
 
-	read_input(mhsa, mhsa.config, mhsa.weights, base_data_path,
-		s_pruning_method, sparsity, body, attention_mechanism, layer);
+	read_input(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, AttentionMechanism::SelfAttention);
 
 	cuda_dealloc_host(mhsa.host);
 

@@ -48,7 +48,7 @@ void cuda_dealloc_device(void* ptr)
 {
 	CUDA_CHECK(cudaFree(ptr));
 }
-
+#if 0
 static void* prepare(MHSA& mhsa)
 {
 	// TODO: Streams go here
@@ -124,3 +124,4 @@ void run(MHSA mhsa)
 	cuda_dealloc_device(res);
 	cuda_dealloc_device(dev);
 }
+#endif

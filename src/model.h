@@ -14,10 +14,10 @@ struct Weights
 {
 	float* x = nullptr;  // (input_sequence_size, d_m) ~ defaults: (32, 512)
 
-	CSRMatrix w_q;
-	CSRMatrix w_k;
-	CSRMatrix w_v;
-	CSRMatrix w_o;
+	std::array<CSRMatrix, MAX_N_LAYERS> w_q;
+	std::array<CSRMatrix, MAX_N_LAYERS> w_k;
+	std::array<CSRMatrix, MAX_N_LAYERS> w_v;
+	std::array<CSRMatrix, MAX_N_LAYERS> w_o;
 };
 
 struct MHSA

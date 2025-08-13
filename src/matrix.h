@@ -51,7 +51,7 @@ struct DLMC
 	std::string pruning_method = "l0_regularization/";
 	std::string sparsity = "0.5/";
 
-	std::array<const char*, 4> suffixes = { "_q.smtx", "_k.smtx", "_v.smtx", "_output_transform.smtx" };
+	std::array<const char*, 4> suffixes = { "q.smtx", "k.smtx", "v.smtx", "output_transform.smtx" };
 
 	std::array<Tensor, MAX_N_LAYERS> enc_self_attention_tensors;
 
@@ -67,12 +67,12 @@ struct DLMC
 
 struct CSRMatrix
 {
-	size_t rows{}, cols{}, nnz{};
-	size_t row_ptr_size{}, col_idx_size{}, val_size{};
-
 	uint32_t* row_ptr = nullptr;
 	uint32_t* col_idx = nullptr;
 	float*    val = nullptr;
+
+	size_t rows{}, cols{}, nnz{};
+	size_t row_ptr_size{}, col_idx_size{}, val_size{};
 };
 
 void read_input(
@@ -82,5 +82,5 @@ void read_input(
 	const std::string& base_data_path,
 	const std::string& pruning_method,
 	const std::string& sparsity,
-	AttentionMechanism attention_mechanism);
+	AttentionMechanism am);
 std::vector<float> csr_to_row_major(const CSRMatrix& mat);

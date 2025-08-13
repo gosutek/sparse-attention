@@ -99,7 +99,7 @@ static Tensor read_tensor(DLMC& dlmc, BodyType bt, AttentionMechanism am, size_t
 	return tensor;
 }
 
-static CSRMatrix parse_dlmc(void*& dst, const std::filesystem::path& filepath)
+static CSRMatrix parse_dlmc(void* dst, const std::filesystem::path& filepath)
 {
 	std::ifstream file_stream(filepath, std::ios_base::in);
 
@@ -113,18 +113,15 @@ static CSRMatrix parse_dlmc(void*& dst, const std::filesystem::path& filepath)
 	res.cols = header.n_cols;
 	res.nnz = header.nnz;
 
-	char* ptr = reinterpret_cast<char*>(dst);
+	res.row_ptr_size = header.n_rows + 1;
+	res.col_idx_size = header.nnz;
+	res.val_size = header.nnz;
 
-	res.row_ptr = reinterpret_cast<uint32_t*>(ptr);
-	ptr += res.row_ptr_size * sizeof(uint32_t);
+	res.row_ptr = reinterpret_cast<uint32_t*>(dst);
 
-	res.col_idx = reinterpret_cast<uint32_t*>(ptr);
-	ptr += res.col_idx_size * sizeof(uint32_t);
+	res.col_idx = res.row_ptr + res.row_ptr_size;
 
-	res.val = reinterpret_cast<float*>(ptr);
-	ptr += res.val_size * sizeof(float);
-
-	dst = reinterpret_cast<void*>(ptr);
+	res.val = reinterpret_cast<float*>(res.col_idx + res.col_idx_size);
 
 	std::string line, token;
 	std::getline(file_stream, line);
@@ -175,6 +172,7 @@ void read_input(
 	for (size_t i = 0; i < config.n_layers; ++i) {
 		// WARN: Doing only decoder for now
 		// dlmc.enc_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Encoder, am, i);
+
 		dlmc.dec_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Decoder, am, i);
 		b_alloc_size += dlmc.dec_self_attention_tensors[i].b_size;
 	}
@@ -198,20 +196,28 @@ void read_input(
 		THROW_RUNTIME_ERROR("Failed to allocate page-locked host memory\n");
 	}
 
-	void* ptr = mhsa.host;
-
+	weights.x = reinterpret_cast<float*>(mhsa.host);
+	generate_token_embeddings(weights.x, config.input_sequence_size);
 	try {
-		weights.w_q = parse_dlmc(ptr, q_path);
+		void* block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(mhsa.host) + b_embeddings_size);
+		for (size_t i = 0; i < config.n_layers; ++i) {
+			void* w_q_ptr = block_start;
+			weights.w_q[i] = parse_dlmc(w_q_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[0]);
 
-		weights.w_k = parse_dlmc(ptr, k_path);
+			size_t b_size = calc_byte_size(dlmc.dec_self_attention_tensors[i].shape[0].n_rows, dlmc.dec_self_attention_tensors[i].shape[0].nnz);
+			void*  w_k_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_q_ptr) + b_size);
+			weights.w_k[i] = parse_dlmc(w_k_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[1]);
 
-		weights.w_v = parse_dlmc(ptr, v_path);
+			b_size = calc_byte_size(dlmc.dec_self_attention_tensors[i].shape[1].n_rows, dlmc.dec_self_attention_tensors[i].shape[1].nnz);
+			void* w_v_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_k_ptr) + b_size);
+			weights.w_v[i] = parse_dlmc(w_v_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[2]);
 
-		weights.w_o = parse_dlmc(ptr, o_path);
+			b_size = calc_byte_size(dlmc.dec_self_attention_tensors[i].shape[2].n_rows, dlmc.dec_self_attention_tensors[i].shape[2].nnz);
+			void* w_o_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_v_ptr) + b_size);
+			weights.w_o[i] = parse_dlmc(w_o_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[3]);
 
-		// TODO: Pass the main host ptr and get a copy of a ptr that start at the embeddings table
-		weights.x = generate_token_embeddings(ptr, config.input_sequence_size);
-
+			block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(block_start) + dlmc.dec_self_attention_tensors[i].b_size);
+		}
 	} catch (const std::exception& e) {
 		cuda_dealloc_host(mhsa.host);
 		throw;
