@@ -75,6 +75,16 @@ struct CSRMatrix
 	size_t row_ptr_size{}, col_idx_size{}, val_size{};
 };
 
+struct CSCMatrix
+{
+	uint32_t* col_ptr = nullptr;
+	uint32_t* row_idx = nullptr;
+	float*    val = nullptr;
+
+	size_t rows{}, cols{}, nnz{};
+	size_t col_ptr_size{}, row_idx_size{}, val_size{};
+};
+
 void load_host(
 	MHSA&              mhsa,
 	Config&            config,

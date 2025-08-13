@@ -235,3 +235,14 @@ std::vector<float> csr_to_row_major(const CSRMatrix& mat)
 	}
 	return res;
 }
+
+// TODO: 13/8/2025 21:10
+CSCMatrix csr_to_csc(const CSRMatrix& mat)
+{
+	CSCMatrix res;
+	res.rows = mat.rows;
+	res.cols = mat.cols;
+	res.nnz = mat.nnz;
+
+	return res;
+}
