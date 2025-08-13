@@ -139,16 +139,22 @@ static std::vector<float> read_row_major_from_rm(const std::filesystem::path& fi
 	}
 }
 
-static std::vector<float> host_spmm(std::vector<float> a, std::vector<float> b, size_t rows, size_t cols)
+/*
+ * a(m, k)
+ * b(k, n)
+ * c(m, n)
+ * Expects b to be in column-major
+ */
+static std::vector<float> host_spmm_rm_cm(std::vector<float> a, std::vector<float> b, size_t m, size_t k, size_t n)
 {
 	std::vector<float> res;
-	res.reserve(rows * cols);
+	res.reserve(m * n);
 
-	for (size_t a_row = 0; a_row < rows; ++a_row) {
-		for (size_t b_col = 0; b_col < cols; ++b_col) {
+	for (size_t a_row = 0; a_row < m; ++a_row) {
+		for (size_t b_col = 0; b_col < n; ++b_col) {
 			float acc = 0;
-			for (size_t i = 0; i < cols; ++i) {
-				acc += a[a_row * cols + i] * b[b_col * rows + i];
+			for (size_t i = 0; i < k; ++i) {
+				acc += a[a_row * k + i] * b[b_col * k + i];
 			}
 			res.push_back(acc);
 		}
@@ -157,7 +163,50 @@ static std::vector<float> host_spmm(std::vector<float> a, std::vector<float> b, 
 	return res;
 }
 
-[[maybe_unused]] static void test_host_spmm(const std::filesystem::path& filepath)
+static std::vector<float> host_spmm_rm_rm(std::vector<float> a, std::vector<float> b, size_t m, size_t k, size_t n)
+{
+	std::vector<float> res;
+	res.reserve(m * n);
+
+	for (size_t a_row = 0; a_row < m; ++a_row) {
+		for (size_t b_col = 0; b_col < n; ++b_col) {
+			float acc = 0;
+			for (size_t i = 0; i < k; ++i) {
+				acc += a[a_row * k + i] * b[i * k + b_col];
+			}
+			res.push_back(acc);
+		}
+	}
+
+	return res;
+}
+
+[[maybe_unused]] static void test_host_spmm_rm_cm(const std::filesystem::path& filepath, size_t m, size_t k, size_t n)
+{
+	if (std::filesystem::is_regular_file(filepath) && filepath.extension() == ".rm") {
+		const auto a_matrix_file = filepath.parent_path() / filepath.stem().replace_filename(filepath.stem().string().append("_a.rm"));
+		const auto b_matrix_file = filepath.parent_path() / filepath.stem().replace_filename(filepath.stem().string().append("_b.cm"));
+		if (!std::filesystem::exists(a_matrix_file)) {
+			THROW_RUNTIME_ERROR("Expected file not found for testing: " + a_matrix_file.string());
+		}
+		if (!std::filesystem::exists(b_matrix_file)) {
+			THROW_RUNTIME_ERROR("Expected file not found for testing: " + b_matrix_file.string());
+		}
+		std::cout << "Testing 'host_spmm' with file: " << filepath << "\n";
+		// WARN: change hardcoded values
+		std::vector<float> a = read_row_major_from_rm(a_matrix_file, m * k);
+		std::vector<float> b = read_row_major_from_rm(b_matrix_file, k * n);
+		std::vector<float> actual = host_spmm_rm_cm(a, b, m, k, n);
+		std::vector<float> expected = read_row_major_from_rm(filepath, m * n);
+
+		ASSERT_EQ(expected, actual, "The matrices differ in values.\n");
+
+		printf("Test successful\n");
+	}
+	std::ifstream file_stream(filepath, std::ios_base::in);
+}
+
+[[maybe_unused]] static void test_host_spmm_rm_rm(const std::filesystem::path& filepath, size_t m, size_t k, size_t n)
 {
 	if (std::filesystem::is_regular_file(filepath) && filepath.extension() == ".rm") {
 		const auto a_matrix_file = filepath.parent_path() / filepath.stem().replace_filename(filepath.stem().string().append("_a.rm"));
@@ -169,41 +218,22 @@ static std::vector<float> host_spmm(std::vector<float> a, std::vector<float> b, 
 			THROW_RUNTIME_ERROR("Expected file not found for testing: " + b_matrix_file.string());
 		}
 		std::cout << "Testing 'host_spmm' with file: " << filepath << "\n";
-		// WARN: change hardcoded 9
-		std::vector<float> a = read_row_major_from_rm(a_matrix_file, 9);
-		std::vector<float> b = read_row_major_from_rm(b_matrix_file, 9);
-		std::vector<float> actual = host_spmm(a, b, 3, 3);
-		std::vector<float> expected = read_row_major_from_rm(filepath, 9);
+		std::vector<float> a = read_row_major_from_rm(a_matrix_file, m * k);
+		std::vector<float> b = read_row_major_from_rm(b_matrix_file, k * n);
+		std::vector<float> actual = host_spmm_rm_rm(a, b, m, k, n);
+		std::vector<float> expected = read_row_major_from_rm(filepath, m * n);
 
 		ASSERT_EQ(expected, actual, "The matrices differ in values.\n");
 
 		printf("Test successful\n");
-	}
-	std::ifstream file_stream(filepath, std::ios_base::in);
-}
-
-static void test_dev_spmm(const std::filesystem::path& filepath)
-{
-	if (std::filesystem::is_regular_file(filepath) && filepath.extension() == ".smtx") {
-		std::cout << "Testing 'dev_spmm' with file: " << filepath << "\n";
-		Input input = read_input(filepath);
-
-		float*             a_ptr = csr_to_row_major(input.weights[0]);
-		std::vector<float> a(a_ptr, a_ptr + MAT_SIZE * MAT_SIZE);
-		std::free(a_ptr);
-		float*             b_ptr = input.embeddings;
-		std::vector<float> b(b_ptr, b_ptr + MAT_SIZE * MAT_SIZE);
-
-		std::vector<float> expected = host_spmm(a, b, MAT_SIZE, MAT_SIZE);
-		run(input);
-		std::vector<float> actual(reinterpret_cast<float*>(input.data), reinterpret_cast<float*>(input.data) + MAT_SIZE * MAT_SIZE);
-		ASSERT_EQ(expected, actual, "The matrices differ in values.\n");
-
-		printf("Test successful\n");
-		cuda_dealloc_host(input.data);
 	}
 }
 
 int main()
 {
+	test_host_spmm_rm_cm("test/2x3_host_spmm.rm", 2, 3, 3);
+	test_host_spmm_rm_rm("test/2x3_host_spmm.rm", 2, 3, 3);
+
+	test_host_spmm_rm_cm("test/3x3_host_spmm.rm", 3, 3, 3);
+	test_host_spmm_rm_rm("test/3x3_host_spmm.rm", 3, 3, 3);
 }
