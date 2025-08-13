@@ -168,17 +168,17 @@ void read_input(
 	DLMC dlmc = { base_data_path, pruning_method, sparsity };
 
 	assert(config.n_layers < MAX_N_LAYERS);
-	size_t b_alloc_size = 0;
+	mhsa.b_size = 0;
 	for (size_t i = 0; i < config.n_layers; ++i) {
 		// WARN: Doing only decoder for now
 		// dlmc.enc_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Encoder, am, i);
 
 		dlmc.dec_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Decoder, am, i);
-		b_alloc_size += dlmc.dec_self_attention_tensors[i].b_size;
+		mhsa.b_size += dlmc.dec_self_attention_tensors[i].b_size;
 	}
 
 	size_t b_embeddings_size = config.input_sequence_size * dlmc.dec_self_attention_tensors[0].shape[0].n_rows * sizeof(float);
-	b_alloc_size += b_embeddings_size;
+	mhsa.b_size += b_embeddings_size;
 
 	/*
      * Allocate for
@@ -189,8 +189,8 @@ void read_input(
      * x (input_sequence_size, 512) float
      */
 
-	assert(b_alloc_size < MAX_ALLOC);
-	mhsa.host = cuda_malloc_host(b_alloc_size);
+	assert(mhsa.b_size < MAX_ALLOC);
+	mhsa.host = cuda_malloc_host(mhsa.b_size);
 
 	if (!mhsa.host) {
 		THROW_RUNTIME_ERROR("Failed to allocate page-locked host memory\n");
