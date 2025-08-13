@@ -21,32 +21,6 @@
 void run(MHSA mhsa);
 void cuda_dealloc_host(void* ptr);
 
-MHSA dry_run()
-{
-	MHSA mhsa;
-
-	std::string base_data_path = "data/dlmc/transformer/";
-	std::string s_pruning_method = "l0_regularization/";
-	std::string sparsity = "0.5/";
-	std::string body = "body_decoder_";
-	std::string attention_mechanism = "self_attention_multihead_attention_";
-	int         n_layers = 0;
-
-	void read_input(
-		MHSA & mhsa,
-		Config & config,
-		Weights & weights,
-		const std::string& base_data_path,
-		const std::string& s_pruning_method,
-		const std::string& sparsity,
-		const std::string& body,
-		const std::string& attention_mechanism,
-		const int          layer);
-	read_input(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, body, attention_mechanism, n_layers);
-
-	return mhsa;
-}
-
 // struct ReadExpectedOutput
 // {
 // 	int32_t no_blocks = -1;
@@ -127,8 +101,8 @@ static std::vector<float> read_row_major_from_rm(const std::filesystem::path& fi
 			THROW_RUNTIME_ERROR("Expected file not found for testing: " + expected_file.string());
 		}
 		std::cout << "Testing for file: " << filepath << "\n";
-		MHSA               mhsa = dry_run();
-		CSRMatrix&         w_q = mhsa.weights.w_q;
+		MHSA               mhsa;
+		CSRMatrix&         w_q = mhsa.weights.w_q[0];
 		size_t             matrix_size = w_q.rows * w_q.cols;
 		std::vector<float> actual_matrix = csr_to_row_major(w_q);
 		std::vector<float> expected_matrix = read_row_major_from_rm(expected_file, matrix_size);
