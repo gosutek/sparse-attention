@@ -2,6 +2,8 @@
 #include "matrix.h"
 #include "model.h"
 
+void cuda_dealloc_host(void* ptr);
+
 int main(int argc, char* argv[])
 {
 	MHSA mhsa;
@@ -16,7 +18,7 @@ int main(int argc, char* argv[])
 	read_input(mhsa, mhsa.config, mhsa.weights, base_data_path,
 		s_pruning_method, sparsity, body, attention_mechanism, layer);
 
-	std::free(mhsa.host);
+	cuda_dealloc_host(mhsa.host);
 
 	try {
 	} catch (const std::exception& e) {
