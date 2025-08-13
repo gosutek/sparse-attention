@@ -3,6 +3,7 @@
 #include "model.h"
 
 void cuda_dealloc_host(void* ptr);
+void run(MHSA mhsa);
 
 int main(int argc, char* argv[])
 {
@@ -12,7 +13,8 @@ int main(int argc, char* argv[])
 	const char* s_pruning_method = "l0_regularization/";
 	const char* sparsity = "0.5/";
 
-	read_input(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, AttentionMechanism::SelfAttention);
+	load_host(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, AttentionMechanism::SelfAttention);
+	run(mhsa);
 
 	cuda_dealloc_host(mhsa.host);
 

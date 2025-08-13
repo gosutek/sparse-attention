@@ -156,7 +156,7 @@ static CSRMatrix parse_dlmc(void* dst, const std::filesystem::path& filepath)
 	return res;
 }
 
-void read_input(
+void load_host(
 	MHSA&              mhsa,
 	Config&            config,
 	Weights&           weights,

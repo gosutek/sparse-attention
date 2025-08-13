@@ -75,7 +75,7 @@ struct CSRMatrix
 	size_t row_ptr_size{}, col_idx_size{}, val_size{};
 };
 
-void read_input(
+void load_host(
 	MHSA&              mhsa,
 	Config&            config,
 	Weights&           weights,
