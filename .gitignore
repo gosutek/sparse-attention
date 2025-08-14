@@ -5,3 +5,4 @@ test/
 tools/venv/
 valgrind*
 sanitizer*
+output.log
