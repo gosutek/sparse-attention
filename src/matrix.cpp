@@ -181,18 +181,12 @@ static CSRMatrix parse_csr_dlmc(void* dst, const std::filesystem::path& filepath
 		res.col_idx[i] = static_cast<uint32_t>(std::stoi(token));
 	}
 
-#if defined(__TEST__)
-	for (size_t i = 0; i < res.val_size; ++i) {
-		res.val[i] = static_cast<float>(i + 1);
-	}
-#else
 	std::random_device                    rd;
 	std::minstd_rand                      rng(rd());
 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
 	for (size_t i = 0; i < res.val_size; ++i) {
 		res.val[i] = uni_real_dist(rng);
 	}
-#endif
 
 	return res;
 }
@@ -242,18 +236,12 @@ static CSCMatrix parse_csc_dlmc(void* dst, const std::filesystem::path& filepath
 
 	csr_to_csc(res, row_ptr_vec, col_idx_vec);
 
-#if defined(__TEST__)
-	for (size_t i = 0; i < res.val_size; ++i) {
-		res.val[i] = static_cast<float>(i + 1);
-	}
-#else
 	std::random_device                    rd;
 	std::minstd_rand                      rng(rd());
 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
 	for (size_t i = 0; i < res.val_size; ++i) {
 		res.val[i] = uni_real_dist(rng);
 	}
-#endif
 
 	return res;
 }
