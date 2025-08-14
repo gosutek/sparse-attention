@@ -10,7 +10,7 @@ struct Config
 	size_t input_sequence_size = 32;
 };
 
-struct Weights
+struct CSRWeights
 {
 	float* x = nullptr;  // (input_sequence_size, d_m) ~ defaults: (32, 512)
 
@@ -20,10 +20,28 @@ struct Weights
 	std::array<CSRMatrix, MAX_N_LAYERS> w_o;
 };
 
-struct MHSA
+struct CSCWeights
 {
-	Config  config;
-	Weights weights;
-	void*   host = nullptr;
-	size_t  b_size = 0;
+	float* x = nullptr;  // (input_sequence_size, d_m) ~ defaults: (32, 512)
+
+	std::array<CSCMatrix, MAX_N_LAYERS> w_q;
+	std::array<CSCMatrix, MAX_N_LAYERS> w_k;
+	std::array<CSCMatrix, MAX_N_LAYERS> w_v;
+	std::array<CSCMatrix, MAX_N_LAYERS> w_o;
+};
+
+struct CSR_MHSA
+{
+	Config     config;
+	CSRWeights weights;
+	void*      host = nullptr;
+	size_t     b_size = 0;
+};
+
+struct CSC_MHSA
+{
+	Config     config;
+	CSCWeights weights;
+	void*      host = nullptr;
+	size_t     b_size = 0;
 };

@@ -3,17 +3,17 @@
 #include "model.h"
 
 void cuda_dealloc_host(void* ptr);
-void run(MHSA mhsa);
+void run(CSC_MHSA mhsa);
 
 int main(int argc, char* argv[])
 {
-	MHSA mhsa;
+	CSC_MHSA mhsa;
 
 	const char* base_data_path = "data/dlmc/transformer/";
 	const char* s_pruning_method = "l0_regularization/";
 	const char* sparsity = "0.5/";
 
-	load_host(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, AttentionMechanism::SelfAttention);
+	load_host_csc(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, AttentionMechanism::SelfAttention);
 	run(mhsa);
 
 	cuda_dealloc_host(mhsa.host);

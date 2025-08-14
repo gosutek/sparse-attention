@@ -2,8 +2,10 @@
 
 #include "common.h"
 
-struct MHSA;
-struct Weights;
+struct CSR_MHSA;
+struct CSC_MHSA;
+struct CSRWeights;
+struct CSCWeights;
 struct Config;
 
 /*
@@ -25,6 +27,12 @@ enum class AttentionMechanism
 {
 	SelfAttention,
 	CrossAttention
+};
+
+enum class SparseMatrixType
+{
+	CSC,
+	CSR
 };
 
 struct DLMCHeader
@@ -85,12 +93,22 @@ struct CSCMatrix
 	size_t col_ptr_size{}, row_idx_size{}, val_size{};
 };
 
-void load_host(
-	MHSA&              mhsa,
+void load_host_csr(
+	CSR_MHSA&          mhsa,
 	Config&            config,
-	Weights&           weights,
+	CSRWeights&        weights,
 	const std::string& base_data_path,
 	const std::string& pruning_method,
 	const std::string& sparsity,
 	AttentionMechanism am);
+
+void load_host_csc(
+	CSC_MHSA&          mhsa,
+	Config&            config,
+	CSCWeights&        weights,
+	const std::string& base_data_path,
+	const std::string& pruning_method,
+	const std::string& sparsity,
+	AttentionMechanism am);
+
 std::vector<float> csr_to_row_major(const CSRMatrix& mat);

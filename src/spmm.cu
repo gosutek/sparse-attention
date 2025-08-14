@@ -48,47 +48,70 @@ void cuda_dealloc_device(void* ptr)
 {
 	CUDA_CHECK(cudaFree(ptr));
 }
-#if 0
-static void* prepare(MHSA& mhsa)
-{
-	// TODO: Streams go here
-	void* dev = cuda_device_copy(mhsa.host, mhsa.b_size);
-	return dev;
-}
 
-__global__ void spmm_kernel(
-	const uint32_t* const row_ptr,
-	const uint32_t* const col_idx,
+/*
+ * Column-Major access pattern
+ * x * n_rows + y
+ */
+__global__ void spmm_rm_csc(
+	const float* const    a,  // expect col-major for coalesced access
+	const uint32_t* const col_ptr,
+	const uint32_t* const row_idx,
 	const float* const    val,
-	const float* const    dense,  // expect col-major for coalesced access
-	const uint32_t        nrows,
-	const uint32_t        ncols,
+	const uint32_t        n_rows,
+	const uint32_t        n_cols,
 	float* const          res)  // expect row-major for coalesced access
 {
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
 	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
 
-	if (y < nrows) {
+	if (y < n_rows) {
 		float acc = 0;
-		for (size_t i = row_ptr[y]; i < row_ptr[y + 1]; ++i) {
-			acc += val[i] * dense[x * nrows + col_idx[i]];
+		for (size_t i = col_ptr[y]; i < col_ptr[y + 1]; ++i) {
+			acc += val[i] * a[x * n_rows + row_idx[i]];
 		}
-		res[ncols * y + x] = acc;
+		res[y * n_cols + x] = acc;
 	}
 }
 
-void run(MHSA mhsa)
+/*
+ * Row-Major access pattern
+ * y * n_cols + x
+ */
+__global__ void spmm_rm_csr(
+	const float* const    a,
+	const uint32_t* const row_ptr,
+	const uint32_t* const col_idx,
+	const float* const    val,
+	const uint32_t        n_rows,
+	const uint32_t        n_cols,
+	float* const          res)  // expect row-major for coalesced access
 {
-	CSRMatrix& w_q = mhsa.weights.w_q;
-	// TODO: change MAT_SIZE
-	float* res = static_cast<float*>(cuda_malloc_device(sizeof(float) * MAT_SIZE * MAT_SIZE));
-	// TODO: Merge these two ^ v allocations
-	void* dev = prepare(mhsa);
+	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
 
-	uint32_t*          d_row_ptr = reinterpret_cast<uint32_t*>(dev);
-	uint32_t*          d_col_idx = d_row_ptr + w_q.row_ptr_size;
-	float*             d_val = reinterpret_cast<float*>(d_col_idx + w_q.col_idx_size);
-	std::vector<float> d_embeddings = csr_to_row_major(mhsa.weights.w_k);
+	if (y < n_rows) {
+		float acc = 0;
+		for (size_t i = row_ptr[y]; i < row_ptr[y + 1]; ++i) {
+			acc += val[i] * a[y * n_cols + col_idx[i]];
+		}
+		res[y * n_cols + x] = acc;
+	}
+}
+
+// TODO: Make this into a function template :(
+void run(CSC_MHSA mhsa)
+{
+	CSCMatrix& w_q = mhsa.weights.w_q[0];
+	// TODO: change MAT_SIZE
+	float* res = static_cast<float*>(cuda_malloc_device(sizeof(float) * mhsa.config.input_sequence_size * MAT_SIZE));
+	// TODO: Merge these two ^ v allocations
+	void* dev = cuda_device_copy(mhsa.host, mhsa.b_size);
+
+	float*    x = reinterpret_cast<float*>(dev);
+	uint32_t* d_row_ptr = reinterpret_cast<uint32_t*>(reinterpret_cast<char*>(dev) + (mhsa.config.input_sequence_size * MAT_SIZE) * sizeof(float));
+	uint32_t* d_col_idx = d_row_ptr + w_q.col_ptr_size;
+	float*    d_val = reinterpret_cast<float*>(d_col_idx + w_q.row_idx_size);
 
 	dim3 dimBlock(16, 16);
 	dim3 dimGrid(32, 32);
@@ -103,7 +126,7 @@ void run(MHSA mhsa)
 	CUDA_CHECK(cudaEventRecord(start, 0));
 #endif
 
-	spmm_kernel<<<dimGrid, dimBlock>>>(d_row_ptr, d_col_idx, d_val, d_embeddings.data(), w_q.rows, w_q.cols, res);
+	spmm_rm_csc<<<dimGrid, dimBlock>>>(x, d_row_ptr, d_col_idx, d_val, w_q.rows, w_q.cols, res);
 
 #if defined(__CHRONO__)
 	CUDA_CHECK(cudaEventRecord(stop, 0));
@@ -119,9 +142,8 @@ void run(MHSA mhsa)
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	// TODO: can this be async?
-	CUDA_CHECK(cudaMemcpy(mhsa.host, res, sizeof(float) * MAT_SIZE * MAT_SIZE, cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(mhsa.host, res, sizeof(float) * mhsa.config.input_sequence_size * MAT_SIZE, cudaMemcpyDeviceToHost));
 
 	cuda_dealloc_device(res);
 	cuda_dealloc_device(dev);
 }
-#endif
