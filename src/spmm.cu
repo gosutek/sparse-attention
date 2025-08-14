@@ -67,8 +67,9 @@ __global__ void spmm_rm_csc(
 
 	if (y < n_rows) {
 		float acc = 0;
-		for (size_t i = col_ptr[y]; i < col_ptr[y + 1]; ++i) {
-			acc += val[i] * a[x * n_rows + row_idx[i]];
+		for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
+			// printf("Multiplying %f x %f\n", val[i], a[y * n_rows + row_idx[i]]);
+			acc += val[i] * a[y * n_rows + row_idx[i]];
 		}
 		res[y * n_cols + x] = acc;
 	}
