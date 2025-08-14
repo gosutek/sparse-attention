@@ -78,6 +78,18 @@ std::vector<float> csr_to_row_major(const CSRMatrix& mat)
 	return res;
 }
 
+std::vector<float> csc_to_col_major(const CSCMatrix& mat)
+{
+	std::vector<float> res(mat.rows * mat.cols, 0.0f);
+
+	for (size_t i = 0; i < mat.cols; ++i) {
+		for (size_t j = mat.col_ptr[i]; j < mat.col_ptr[i + 1]; ++j) {
+			res[i * mat.rows + mat.row_idx[j]] = mat.val[j];
+		}
+	}
+	return res;
+}
+
 static void csr_to_csc(CSCMatrix& mat, const std::vector<uint32_t>& row_ptr_vec, const std::vector<uint32_t>& col_idx_vec)
 {
 	std::vector<uint32_t> col_count(mat.cols, 0);
