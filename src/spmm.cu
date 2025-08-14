@@ -100,7 +100,6 @@ __global__ void spmm_rm_csr(
 	}
 }
 
-// TODO: Make this into a function template :(
 void run(CSC_MHSA mhsa)
 {
 	CSCMatrix& w_q = mhsa.weights.w_q[0];
@@ -110,9 +109,9 @@ void run(CSC_MHSA mhsa)
 	void* dev = cuda_device_copy(mhsa.host, mhsa.b_size);
 
 	float*    x = reinterpret_cast<float*>(dev);
-	uint32_t* d_row_ptr = reinterpret_cast<uint32_t*>(reinterpret_cast<char*>(dev) + (mhsa.config.input_sequence_size * MAT_SIZE) * sizeof(float));
-	uint32_t* d_col_idx = d_row_ptr + w_q.col_ptr_size;
-	float*    d_val = reinterpret_cast<float*>(d_col_idx + w_q.row_idx_size);
+	uint32_t* d_col_ptr = reinterpret_cast<uint32_t*>(reinterpret_cast<char*>(dev) + (mhsa.config.input_sequence_size * MAT_SIZE) * sizeof(float));
+	uint32_t* d_row_idx = d_col_ptr + w_q.col_ptr_size;
+	float*    d_val = reinterpret_cast<float*>(d_row_idx + w_q.row_idx_size);
 
 	dim3 dimBlock(16, 16);
 	dim3 dimGrid(32, 32);
@@ -127,7 +126,7 @@ void run(CSC_MHSA mhsa)
 	CUDA_CHECK(cudaEventRecord(start, 0));
 #endif
 
-	spmm_rm_csc<<<dimGrid, dimBlock>>>(x, d_row_ptr, d_col_idx, d_val, w_q.rows, w_q.cols, res);
+	spmm_rm_csc<<<dimGrid, dimBlock>>>(x, d_col_ptr, d_row_idx, d_val, w_q.rows, w_q.cols, res);
 
 #if defined(__CHRONO__)
 	CUDA_CHECK(cudaEventRecord(stop, 0));
