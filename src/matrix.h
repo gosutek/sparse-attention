@@ -95,7 +95,7 @@ struct CSCMatrix
 
 void load_host_csr(
 	CSR_MHSA&          mhsa,
-	Config&            config,
+	const Config&      config,
 	CSRWeights&        weights,
 	const std::string& base_data_path,
 	const std::string& pruning_method,
@@ -104,7 +104,7 @@ void load_host_csr(
 
 void load_host_csc(
 	CSC_MHSA&          mhsa,
-	Config&            config,
+	const Config&      config,
 	CSCWeights&        weights,
 	const std::string& base_data_path,
 	const std::string& pruning_method,
