@@ -260,7 +260,7 @@ static CSCMatrix parse_csc_dlmc(void* dst, const std::filesystem::path& filepath
 
 void load_host_csr(
 	CSR_MHSA&          mhsa,
-	Config&            config,
+	const Config&      config,
 	CSRWeights&        weights,
 	const std::string& base_data_path,
 	const std::string& pruning_method,
@@ -328,7 +328,7 @@ void load_host_csr(
 
 void load_host_csc(
 	CSC_MHSA&          mhsa,
-	Config&            config,
+	const Config&      config,
 	CSCWeights&        weights,
 	const std::string& base_data_path,
 	const std::string& pruning_method,
@@ -366,9 +366,9 @@ void load_host_csc(
 		THROW_RUNTIME_ERROR("Failed to allocate page-locked host memory\n");
 	}
 
-	weights.x = reinterpret_cast<float*>(mhsa.host);
-	generate_token_embeddings(weights.x, config.input_sequence_size);
 	try {
+		weights.x = reinterpret_cast<float*>(mhsa.host);
+		generate_token_embeddings(weights.x, config.input_sequence_size);
 		void* block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(mhsa.host) + b_embeddings_size);
 		for (size_t i = 0; i < config.n_layers; ++i) {
 			void* w_q_ptr = block_start;

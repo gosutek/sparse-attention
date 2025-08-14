@@ -112,3 +112,4 @@ void load_host_csc(
 	AttentionMechanism am);
 
 std::vector<float> csr_to_row_major(const CSRMatrix& mat);
+std::vector<float> csc_to_col_major(const CSCMatrix& mat);
