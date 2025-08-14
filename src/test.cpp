@@ -5,7 +5,7 @@
 #include "model.h"
 
 #ifndef MAT_SIZE
-#	define MAT_SIZE 512
+#	define MAT_SIZE 3
 #endif
 
 #define ASSERT_EQ(expected, actual, message)                           \
@@ -18,7 +18,7 @@
 		}                                                              \
 	} while (0)
 
-void run(MHSA mhsa);
+void run(CSC_MHSA mhsa);
 void cuda_dealloc_host(void* ptr);
 
 // struct ReadExpectedOutput
@@ -101,7 +101,7 @@ static std::vector<float> read_row_major_from_rm(const std::filesystem::path& fi
 			THROW_RUNTIME_ERROR("Expected file not found for testing: " + expected_file.string());
 		}
 		std::cout << "Testing for file: " << filepath << "\n";
-		MHSA               mhsa;
+		CSR_MHSA           mhsa;
 		CSRMatrix&         w_q = mhsa.weights.w_q[0];
 		size_t             matrix_size = w_q.rows * w_q.cols;
 		std::vector<float> actual_matrix = csr_to_row_major(w_q);
@@ -177,7 +177,6 @@ static std::vector<float> host_spmm_rm_rm(std::vector<float> a, std::vector<floa
 
 		printf("Test successful\n");
 	}
-	std::ifstream file_stream(filepath, std::ios_base::in);
 }
 
 [[maybe_unused]] static void test_host_spmm_rm_rm(const std::filesystem::path& filepath, size_t m, size_t k, size_t n)
@@ -203,6 +202,47 @@ static std::vector<float> host_spmm_rm_rm(std::vector<float> a, std::vector<floa
 	}
 }
 
+void print_mhsa(const CSC_MHSA& mhsa)
+{
+	std::cout << "Printing CSC::col_ptr\n";
+	for (size_t i = 0; i < mhsa.weights.w_q[0].col_ptr_size; ++i) {
+		std::cout << mhsa.weights.w_q[0].col_ptr[i] << "\n";
+	}
+
+	std::cout << "Printing CSC::row_idx\n";
+	for (size_t i = 0; i < mhsa.weights.w_q[0].row_idx_size; ++i) {
+		std::cout << mhsa.weights.w_q[0].row_idx[i] << "\n";
+	}
+
+	std::cout << "Printing CSC::val\n";
+	for (size_t i = 0; i < mhsa.weights.w_q[0].val_size; ++i) {
+		std::cout << mhsa.weights.w_q[0].val[i] << "\n";
+	}
+}
+
+static void test_dev_spmm()
+{
+	CSC_MHSA mhsa;
+
+	const char* base_data_path = "data/dlmc/transformer/";
+	const char* s_pruning_method = "test/";
+	const char* sparsity = "0.5/";
+
+	load_host_csc(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, AttentionMechanism::SelfAttention);
+
+	float*             a_ptr = mhsa.weights.x;
+	std::vector<float> a(a_ptr, a_ptr + mhsa.config.input_sequence_size * MAT_SIZE);
+	std::vector<float> b = csc_to_col_major(mhsa.weights.w_q[0]);
+
+	std::vector<float> expected = host_spmm_rm_cm(a, b, mhsa.config.input_sequence_size, MAT_SIZE, MAT_SIZE);
+	run(mhsa);
+	std::vector<float> actual(reinterpret_cast<float*>(mhsa.host), reinterpret_cast<float*>(mhsa.host) + mhsa.config.input_sequence_size * MAT_SIZE);
+	ASSERT_EQ(expected, actual, "The matrices differ in values.\n");
+
+	printf("Test successful\n");
+	cuda_dealloc_host(mhsa.host);
+}
+
 int main()
 {
 	test_host_spmm_rm_cm("test/2x3_host_spmm.rm", 2, 3, 3);
@@ -210,4 +250,6 @@ int main()
 
 	test_host_spmm_rm_cm("test/3x3_host_spmm.rm", 3, 3, 3);
 	test_host_spmm_rm_rm("test/3x3_host_spmm.rm", 3, 3, 3);
+
+	test_dev_spmm();
 }

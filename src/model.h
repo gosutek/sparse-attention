@@ -7,7 +7,7 @@ struct Config
 {
 	size_t n_heads = 1;
 	size_t n_layers = 1;
-	size_t input_sequence_size = 32;
+	size_t input_sequence_size = 3;
 };
 
 struct CSRWeights

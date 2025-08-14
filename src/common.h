@@ -10,7 +10,7 @@
 #include <vector>
 
 constexpr size_t MAX_N_LAYERS = 6;
-constexpr size_t MAT_SIZE = 512;
+constexpr size_t MAT_SIZE = 3;
 // 5 = w_q, w_k, w_v, w_o, x
 constexpr size_t MAX_ALLOC = MAX_N_LAYERS * (5 * MAT_SIZE * MAT_SIZE);
 

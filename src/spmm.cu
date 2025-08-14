@@ -3,7 +3,7 @@
 #include "model.h"
 
 #ifndef MAT_SIZE
-#	define MAT_SIZE 512
+#	define MAT_SIZE 3
 #endif
 
 #define CUDA_CHECK(x)                                                                                    \
@@ -113,8 +113,8 @@ void run(CSC_MHSA mhsa)
 	uint32_t* d_row_idx = d_col_ptr + w_q.col_ptr_size;
 	float*    d_val = reinterpret_cast<float*>(d_row_idx + w_q.row_idx_size);
 
-	dim3 dimBlock(16, 16);
-	dim3 dimGrid(32, 32);
+	dim3 dimBlock(3, 3);
+	dim3 dimGrid(1, 1);
 
 #if defined(__CHRONO__)
 	cudaEvent_t start, stop;
