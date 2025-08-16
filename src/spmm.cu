@@ -69,7 +69,7 @@ __device__ inline static void set_element_cm(float* const a, size_t n_rows, size
 	a[col * n_rows + row] = val;
 }
 
-__global__ void spmm_rm_csc(
+__global__ void spmm_rm_csc_gm(
 	const float* __restrict__ a,  // expect row-major for coalesced access
 	const uint32_t* __restrict__ col_ptr,
 	const uint32_t* __restrict__ row_idx,
@@ -93,7 +93,7 @@ __global__ void spmm_rm_csc(
 	set_element_rm(res, n, y, x, acc);
 }
 
-__global__ void spmm_rm_csr(
+__global__ void spmm_rm_csr_gm(
 	const float* __restrict__ a,
 	const uint32_t* __restrict__ row_ptr,
 	const uint32_t* __restrict__ col_idx,
@@ -117,6 +117,47 @@ __global__ void spmm_rm_csr(
 	set_element_rm(res, n, y, x, acc);
 }
 
+__global__ void spmm_rm_csc_sm(
+	const float* __restrict__ a,
+	const uint32_t* __restrict__ col_ptr,
+	const uint32_t* __restrict__ row_idx,
+	const float* __restrict__ val,
+	const uint32_t m,
+	const uint32_t k,
+	const uint32_t n,
+	float* __restrict__ res)  // expect row-major for coalesced access
+{
+	uint32_t x = threadIdx.x;
+	uint32_t y = blockIdx.x;
+
+	if (x >= n || y >= m) {
+		return;
+	}
+
+	__shared__ float x_row_sm[512];
+
+	x_row_sm[x] = get_element_rm(a, k, y, x);
+
+	__syncthreads();
+
+	float acc = 0.0f;
+	for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
+		acc += x_row_sm[row_idx[i]] * val[i];
+	}
+	set_element_rm(res, n, y, x, acc);
+}
+
+__global__ void spmm_rm_csr_sm(
+	const float* __restrict__ a,
+	const uint32_t* __restrict__ row_ptr,
+	const uint32_t* __restrict__ col_idx,
+	const float* __restrict__ val,
+	const uint32_t m,
+	const uint32_t k,
+	const uint32_t n,
+	float* const __restrict__ res)  // expect row-major for coalesced access
+{}
+
 void run(CSC_MHSA mhsa)
 {
 	CSCMatrix& w_q = mhsa.weights.w_q[0];
@@ -130,13 +171,16 @@ void run(CSC_MHSA mhsa)
 	uint32_t* d_row_idx = d_col_ptr + w_q.col_ptr_size;
 	float*    d_val = reinterpret_cast<float*>(d_row_idx + w_q.row_idx_size);
 
-	const uint32_t M = mhsa.config.input_sequence_size;
-	const uint32_t K = w_q.rows;
-	const uint32_t N = w_q.cols;
+	const uint32_t m = mhsa.config.input_sequence_size;
+	const uint32_t k = w_q.rows;
+	const uint32_t n = w_q.cols;
 
-	dim3 dimBlock(32, 32);
-	dim3 dimGrid((N + dimBlock.x - 1) / dimBlock.x,
-		(M + dimBlock.y - 1) / dimBlock.y);
+	dim3 dim_block_gm(32, 32);
+	dim3 dim_block_sm(512);
+
+	dim3 dim_grid_gm((n + dim_block_gm.x - 1) / dim_block_gm.x,
+		(m + dim_block_gm.y - 1) / dim_block_gm.y);
+	dim3 dim_grid_sm(mhsa.config.input_sequence_size);
 
 #if defined(__CHRONO__)
 	cudaEvent_t start, stop;
@@ -148,7 +192,8 @@ void run(CSC_MHSA mhsa)
 	CUDA_CHECK(cudaEventRecord(start, 0));
 #endif
 
-	spmm_rm_csc<<<dimGrid, dimBlock>>>(x, d_col_ptr, d_row_idx, d_val, M, K, N, res);
+	// spmm_rm_csc_gm<<<dim_grid_gm, dim_block_gm>>>(x, d_col_ptr, d_row_idx, d_val, m, k, n, res);
+	spmm_rm_csc_sm<<<dim_grid_sm, dim_block_sm>>>(x, d_col_ptr, d_row_idx, d_val, m, k, n, res);
 
 #if defined(__CHRONO__)
 	CUDA_CHECK(cudaEventRecord(stop, 0));
