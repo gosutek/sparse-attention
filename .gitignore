@@ -6,3 +6,5 @@ tools/venv/
 valgrind*
 sanitizer*
 output.log
+*nsys-rep
+*.sqlite
