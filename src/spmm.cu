@@ -49,57 +49,72 @@ void cuda_dealloc_device(void* ptr)
 	CUDA_CHECK(cudaFree(ptr));
 }
 
-/*
- * Column-Major access pattern
- * x * n_rows + y
- */
+__device__ inline static float get_element_rm(const float* const a, size_t n_cols, size_t row, size_t col)
+{
+	return a[row * n_cols + col];
+}
+
+__device__ inline static float get_element_cm(const float* const a, size_t n_rows, size_t row, size_t col)
+{
+	return a[col * n_rows + row];
+}
+
+__device__ inline static void set_element_rm(float* const a, size_t n_cols, size_t row, size_t col, float val)
+{
+	a[row * n_cols + col] = val;
+}
+
+__device__ inline static void set_element_cm(float* const a, size_t n_rows, size_t row, size_t col, float val)
+{
+	a[col * n_rows + row] = val;
+}
+
 __global__ void spmm_rm_csc(
 	const float* __restrict__ a,  // expect row-major for coalesced access
 	const uint32_t* __restrict__ col_ptr,
 	const uint32_t* __restrict__ row_idx,
 	const float* __restrict__ val,
-	const uint32_t M,
-	const uint32_t K,
-	const uint32_t N,
-	float* __restrict res)  // expect row-major for coalesced access
+	const uint32_t m,
+	const uint32_t k,
+	const uint32_t n,
+	float* __restrict__ res)  // expect row-major for coalesced access
 {
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
 	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
 
-	if (x >= N || y >= M) {
+	if (x >= n || y >= m) {
 		return;
 	}
 
 	float acc = 0.0f;
 	for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
-		acc += a[y * K + row_idx[i]] * val[i];
+		acc += get_element_rm(a, k, y, row_idx[i]) * val[i];
 	}
-	res[y * N + x] = acc;
+	set_element_rm(res, n, y, x, acc);
 }
 
-/*
- * Row-Major access pattern
- * y * n_cols + x
- */
 __global__ void spmm_rm_csr(
-	const float* const    a,
-	const uint32_t* const row_ptr,
-	const uint32_t* const col_idx,
-	const float* const    val,
-	const uint32_t        n_rows,
-	const uint32_t        n_cols,
-	float* const          res)  // expect row-major for coalesced access
+	const float* __restrict__ a,
+	const uint32_t* __restrict__ row_ptr,
+	const uint32_t* __restrict__ col_idx,
+	const float* __restrict__ val,
+	const uint32_t m,
+	const uint32_t k,
+	const uint32_t n,
+	float* const __restrict__ res)  // expect row-major for coalesced access
 {
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
 	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
 
-	if (y < n_rows) {
-		float acc = 0;
-		for (size_t i = row_ptr[y]; i < row_ptr[y + 1]; ++i) {
-			acc += val[i] * a[y * n_cols + col_idx[i]];
-		}
-		res[y * n_cols + x] = acc;
+	if (x >= n || y >= m) {
+		return;
 	}
+
+	float acc = 0.0f;
+	for (size_t i = row_ptr[y]; i < row_ptr[y + 1]; ++i) {
+		acc += get_element_rm(a, k, y, col_idx[i]) * val[i];
+	}
+	set_element_rm(res, n, y, x, acc);
 }
 
 void run(CSC_MHSA mhsa)
