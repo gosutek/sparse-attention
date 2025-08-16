@@ -102,10 +102,15 @@ static void csr_to_csc(CSCMatrix& mat, const std::vector<uint32_t>& row_ptr_vec,
 		mat.col_ptr[col + 1] = mat.col_ptr[col] + col_count[col];
 	}
 
+	std::vector<uint32_t> cur_pos(mat.cols);
+	for (size_t col = 0; col < mat.cols; ++col) {
+		cur_pos[col] = mat.col_ptr[col];
+	}
+
 	for (size_t row = 0; row < mat.rows; ++row) {
 		for (size_t i = row_ptr_vec[row]; i < row_ptr_vec[row + 1]; ++i) {
 			uint32_t col = col_idx_vec[i];
-			uint32_t dest_pos = mat.col_ptr[col];
+			uint32_t dest_pos = cur_pos[col]++;
 			mat.row_idx[dest_pos] = row;
 		}
 	}

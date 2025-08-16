@@ -3,7 +3,7 @@
 #include "model.h"
 
 #ifndef MAT_SIZE
-#	define MAT_SIZE 3
+#	define MAT_SIZE 512
 #endif
 
 #define CUDA_CHECK(x)                                                                                    \
@@ -54,25 +54,27 @@ void cuda_dealloc_device(void* ptr)
  * x * n_rows + y
  */
 __global__ void spmm_rm_csc(
-	const float* const    a,  // expect col-major for coalesced access
-	const uint32_t* const col_ptr,
-	const uint32_t* const row_idx,
-	const float* const    val,
-	const uint32_t        n_rows,
-	const uint32_t        n_cols,
-	float* const          res)  // expect row-major for coalesced access
+	const float* __restrict__ a,  // expect row-major for coalesced access
+	const uint32_t* __restrict__ col_ptr,
+	const uint32_t* __restrict__ row_idx,
+	const float* __restrict__ val,
+	const uint32_t M,
+	const uint32_t K,
+	const uint32_t N,
+	float* __restrict res)  // expect row-major for coalesced access
 {
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
 	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
 
-	if (y < n_rows) {
-		float acc = 0;
-		for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
-			// printf("Multiplying %f x %f\n", val[i], a[y * n_rows + row_idx[i]]);
-			acc += val[i] * a[y * n_rows + row_idx[i]];
-		}
-		res[y * n_cols + x] = acc;
+	if (x >= N || y >= M) {
+		return;
 	}
+
+	float acc = 0.0f;
+	for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
+		acc += a[y * K + row_idx[i]] * val[i];
+	}
+	res[y * N + x] = acc;
 }
 
 /*
@@ -113,8 +115,13 @@ void run(CSC_MHSA mhsa)
 	uint32_t* d_row_idx = d_col_ptr + w_q.col_ptr_size;
 	float*    d_val = reinterpret_cast<float*>(d_row_idx + w_q.row_idx_size);
 
-	dim3 dimBlock(3, 3);
-	dim3 dimGrid(1, 1);
+	const uint32_t M = mhsa.config.input_sequence_size;
+	const uint32_t K = w_q.rows;
+	const uint32_t N = w_q.cols;
+
+	dim3 dimBlock(32, 32);
+	dim3 dimGrid((N + dimBlock.x - 1) / dimBlock.x,
+		(M + dimBlock.y - 1) / dimBlock.y);
 
 #if defined(__CHRONO__)
 	cudaEvent_t start, stop;
@@ -126,7 +133,7 @@ void run(CSC_MHSA mhsa)
 	CUDA_CHECK(cudaEventRecord(start, 0));
 #endif
 
-	spmm_rm_csc<<<dimGrid, dimBlock>>>(x, d_col_ptr, d_row_idx, d_val, w_q.rows, w_q.cols, res);
+	spmm_rm_csc<<<dimGrid, dimBlock>>>(x, d_col_ptr, d_row_idx, d_val, M, K, N, res);
 
 #if defined(__CHRONO__)
 	CUDA_CHECK(cudaEventRecord(stop, 0));

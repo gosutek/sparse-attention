@@ -5,7 +5,7 @@
 #include "model.h"
 
 #ifndef MAT_SIZE
-#	define MAT_SIZE 3
+#	define MAT_SIZE 512
 #endif
 
 #define ASSERT_EQ(expected, actual, message)                           \
@@ -119,7 +119,7 @@ static std::vector<float> read_row_major_from_rm(const std::filesystem::path& fi
  * c(m, n)
  * Expects b to be in column-major
  */
-static std::vector<float> host_spmm_rm_cm(std::vector<float> a, std::vector<float> b, size_t m, size_t k, size_t n)
+static std::vector<float> host_spmm_rm_cm(const std::vector<float>& a, const std::vector<float>& b, size_t m, size_t k, size_t n)
 {
 	std::vector<float> res;
 	res.reserve(m * n);
@@ -225,13 +225,14 @@ static void test_dev_spmm()
 	CSC_MHSA mhsa;
 
 	const char* base_data_path = "data/dlmc/transformer/";
-	const char* s_pruning_method = "test/";
+	const char* s_pruning_method = "l0_regularization/";
 	const char* sparsity = "0.5/";
 
 	load_host_csc(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, AttentionMechanism::SelfAttention);
 
 	float*             a_ptr = mhsa.weights.x;
 	std::vector<float> a(a_ptr, a_ptr + mhsa.config.input_sequence_size * MAT_SIZE);
+
 	std::vector<float> b = csc_to_col_major(mhsa.weights.w_q[0]);
 
 	std::vector<float> expected = host_spmm_rm_cm(a, b, mhsa.config.input_sequence_size, MAT_SIZE, MAT_SIZE);
