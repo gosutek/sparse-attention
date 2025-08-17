@@ -5,6 +5,6 @@ test/
 tools/venv/
 valgrind*
 sanitizer*
-output.log
+*.log
 *nsys-rep
 *.sqlite
