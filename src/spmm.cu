@@ -49,6 +49,17 @@ void cuda_dealloc_device(void* ptr)
 	CUDA_CHECK(cudaFree(ptr));
 }
 
+void print_device_properties()
+{
+	cudaDeviceProp dev_prop = {};
+	CUDA_CHECK(cudaGetDeviceProperties(&dev_prop, 0));
+
+	printf("# CUDA: %s, compute %d.%d, %d SMs, %.1f GiB, peak bandwidth %.0f GB/s (ECC %d)\n",
+		dev_prop.name, dev_prop.major, dev_prop.minor, dev_prop.multiProcessorCount,
+		static_cast<double>(dev_prop.totalGlobalMem) / (1024 * 1024 * 1024),
+		static_cast<double>(dev_prop.memoryClockRate) * (dev_prop.memoryBusWidth / 8) * 2 / 1e6, dev_prop.ECCEnabled);
+}
+
 __device__ inline static float get_element_rm(const float* const a, size_t n_cols, size_t row, size_t col)
 {
 	return a[row * n_cols + col];
@@ -146,17 +157,6 @@ __global__ void spmm_rm_csc_sm(
 	}
 	set_element_rm(res, n, y, x, acc);
 }
-
-__global__ void spmm_rm_csr_sm(
-	const float* __restrict__ a,
-	const uint32_t* __restrict__ row_ptr,
-	const uint32_t* __restrict__ col_idx,
-	const float* __restrict__ val,
-	const uint32_t m,
-	const uint32_t k,
-	const uint32_t n,
-	float* const __restrict__ res)  // expect row-major for coalesced access
-{}
 
 void run(CSC_MHSA mhsa)
 {
