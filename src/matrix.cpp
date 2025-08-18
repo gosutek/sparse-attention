@@ -116,6 +116,17 @@ static void csr_to_csc(CSCMatrix& mat, const std::vector<uint32_t>& row_ptr_vec,
 	}
 }
 
+float measure_sparsity(void* s, size_t size)
+{
+	float* ptr = reinterpret_cast<float*>(s);
+	float  nz = .0f;
+	for (size_t i = 0; i < size; i++) {
+		if (ptr[i] == 0)
+			nz++;
+	}
+	return nz / size;
+}
+
 static Tensor read_tensor(DLMC& dlmc, BodyType bt, AttentionMechanism am, size_t layer, SparseMatrixType sparse_matrix_type)
 {
 	Tensor tensor;

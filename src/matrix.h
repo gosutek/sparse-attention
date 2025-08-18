@@ -113,3 +113,4 @@ void load_host_csc(
 
 std::vector<float> csr_to_row_major(const CSRMatrix& mat);
 std::vector<float> csc_to_col_major(const CSCMatrix& mat);
+float              measure_sparsity(void* s, size_t size);
