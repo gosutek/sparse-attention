@@ -72,22 +72,22 @@ void print_device_properties()
 		static_cast<double>(dev_prop.memoryClockRate) * (dev_prop.memoryBusWidth / 8) * 2 / 1e6, dev_prop.ECCEnabled);
 }
 
-__device__ inline static float get_element_rm(const float* const a, size_t n_cols, size_t row, size_t col)
+__device__ inline static float get_elem_rm(const float* const a, size_t n_cols, size_t row, size_t col)
 {
 	return a[row * n_cols + col];
 }
 
-__device__ inline static float get_element_cm(const float* const a, size_t n_rows, size_t row, size_t col)
+__device__ inline static float get_elem_cm(const float* const a, size_t n_rows, size_t row, size_t col)
 {
 	return a[col * n_rows + row];
 }
 
-__device__ inline static void set_element_rm(float* const a, size_t n_cols, size_t row, size_t col, float val)
+__device__ inline static void set_elem_rm(float* const a, size_t n_cols, size_t row, size_t col, float val)
 {
 	a[row * n_cols + col] = val;
 }
 
-__device__ inline static void set_element_cm(float* const a, size_t n_rows, size_t row, size_t col, float val)
+__device__ inline static void set_elem_cm(float* const a, size_t n_rows, size_t row, size_t col, float val)
 {
 	a[col * n_rows + row] = val;
 }
@@ -121,7 +121,7 @@ __global__ void spmm_csc(
 		// TODO: Change hardcoded value
 		__shared__ float x_row_sm[512];
 
-		x_row_sm[x] = get_element_rm(a, k, y, x);
+		x_row_sm[x] = get_elem_rm(a, k, y, x);
 
 		__syncthreads();
 		for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
@@ -129,13 +129,13 @@ __global__ void spmm_csc(
 		}
 	} else {
 		for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
-			acc += get_element_rm(a, k, y, row_idx[i]) * val[i];
+			acc += get_elem_rm(a, k, y, row_idx[i]) * val[i];
 		}
 	}
 	if constexpr (O == OutputFormat::RM) {
-		set_element_rm(res, n, y, x, acc);
+		set_elem_rm(res, n, y, x, acc);
 	} else {
-		set_element_cm(res, m, y, x, acc);
+		set_elem_cm(res, m, y, x, acc);
 	}
 }
 
@@ -159,9 +159,9 @@ __global__ void spmm_rm_csr_gm(
 
 	float acc = 0.0f;
 	for (size_t i = row_ptr[y]; i < row_ptr[y + 1]; ++i) {
-		acc += get_element_rm(a, k, y, col_idx[i]) * val[i];
+		acc += get_elem_rm(a, k, y, col_idx[i]) * val[i];
 	}
-	set_element_rm(res, n, y, x, acc);
+	set_elem_rm(res, n, y, x, acc);
 }
 
 void run(CSC_MHSA mhsa)
