@@ -56,8 +56,9 @@ static DLMCHeader parse_dlmc_header(std::ifstream& file_stream)
 /*
  * Calculates the size of a CSR or CSC matrix in bytes for float values
  * Accounts for non-square matrices
+ * n: main dimension's size (cols for CSC, rows for CSR)
  */
-static size_t calc_byte_size_compressed_sparse(const size_t n, const size_t nnz)
+size_t calc_byte_size_compressed_sparse(const size_t n, const size_t nnz)
 {
 	size_t b_ptr_size = (n + 1) * sizeof(uint32_t);
 	size_t b_idx_size = nnz * sizeof(uint32_t);
@@ -227,15 +228,8 @@ static CSCMatrix parse_csc_dlmc(void* dst, const std::filesystem::path& filepath
 		THROW_RUNTIME_ERROR(filepath.string());
 	}
 
-	CSCMatrix  res;
 	DLMCHeader header = parse_dlmc_header(file_stream);
-	res.rows = header.n_rows;
-	res.cols = header.n_cols;
-	res.nnz = header.nnz;
-
-	res.col_ptr_size = header.n_cols + 1;
-	res.row_idx_size = header.nnz;
-	res.val_size = header.nnz;
+	CSCMatrix  res(header.n_rows, header.n_cols, header.nnz);
 
 	res.col_ptr = reinterpret_cast<uint32_t*>(dst);
 

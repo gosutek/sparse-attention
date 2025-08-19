@@ -91,6 +91,20 @@ struct CSCMatrix
 
 	size_t rows{}, cols{}, nnz{};
 	size_t col_ptr_size{}, row_idx_size{}, val_size{};
+
+	CSCMatrix() {}
+
+	CSCMatrix(size_t _rows, size_t _cols, size_t _nnz) :
+		rows(_rows), cols(_cols), nnz(_nnz)
+	{
+		col_ptr_size = cols + 1;
+		row_idx_size = nnz;
+		val_size = nnz;
+	}
+
+	CSCMatrix(const CSCMatrix& other) :
+		rows(other.rows), cols(other.cols), nnz(other.nnz),
+		col_ptr_size(other.col_ptr_size), row_idx_size(other.row_idx_size), val_size(other.val_size) {}
 };
 
 void load_host_csr(
@@ -114,3 +128,4 @@ void load_host_csc(
 std::vector<float> csr_to_row_major(const CSRMatrix& mat);
 std::vector<float> csc_to_col_major(const CSCMatrix& mat);
 float              measure_sparsity(void* s, size_t size);
+size_t             calc_byte_size_compressed_sparse(const size_t n, const size_t nnz);
