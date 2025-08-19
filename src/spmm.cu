@@ -181,20 +181,29 @@ __global__ void spmm_rm_csr_gm(
 
 void run(CSC_MHSA mhsa)
 {
-	CSCMatrix& w_q = mhsa.weights.w_q[0];
+	// TODO: Find a better name
+	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;  // k OR v's size
 	// TODO: change MAT_SIZE
-	float* res = static_cast<float*>(cuda_malloc_device(sizeof(float) * mhsa.config.input_sequence_size * MAT_SIZE));
+	float* q_res = static_cast<float*>(cuda_malloc_device(sizeof(float) * kv_size * 3));
+	float* k_res = q_res + kv_size;
+	float* v_res = k_res + kv_size;
 	// TODO: Merge these two ^ v allocations
 	void* dev = cuda_device_copy(mhsa.host, mhsa.b_size);
 
-	float*    x = reinterpret_cast<float*>(dev);
-	uint32_t* d_col_ptr = reinterpret_cast<uint32_t*>(reinterpret_cast<char*>(dev) + (mhsa.config.input_sequence_size * MAT_SIZE) * sizeof(float));
-	uint32_t* d_row_idx = d_col_ptr + w_q.col_ptr_size;
-	float*    d_val = reinterpret_cast<float*>(d_row_idx + w_q.row_idx_size);
+	float* x = reinterpret_cast<float*>(dev);
+
+	char*     starting_ptr = reinterpret_cast<char*>(x + kv_size);
+	CSCMatrix d_wq = partition_dev_mem(reinterpret_cast<void*>(starting_ptr), mhsa.weights.w_q[0]);
+
+	starting_ptr += calc_byte_size_compressed_sparse(d_wq.cols, d_wq.nnz);
+	CSCMatrix d_wk = partition_dev_mem(reinterpret_cast<void*>(starting_ptr), mhsa.weights.w_k[0]);
+
+	starting_ptr += calc_byte_size_compressed_sparse(d_wk.cols, d_wk.nnz);
+	CSCMatrix d_wv = partition_dev_mem(reinterpret_cast<void*>(starting_ptr), mhsa.weights.w_v[0]);
 
 	const uint32_t m = mhsa.config.input_sequence_size;
-	const uint32_t k = w_q.rows;
-	const uint32_t n = w_q.cols;
+	const uint32_t k = d_wq.rows;
+	const uint32_t n = d_wq.cols;
 
 	dim3 dim_block_gm(32, 32);
 	dim3 dim_block_sm(512);
@@ -213,8 +222,9 @@ void run(CSC_MHSA mhsa)
 	CUDA_CHECK(cudaEventRecord(start, 0));
 #endif
 
-	// spmm_rm_csc_sm<<<dim_grid_sm, dim_block_sm>>>(x, d_col_ptr, d_row_idx, d_val, m, k, n, res);
-	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<dim_grid_sm, dim_block_sm>>>(x, d_col_ptr, d_row_idx, d_val, m, k, n, res);
+	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<dim_grid_sm, dim_block_sm>>>(x, d_wq.col_ptr, d_wq.row_idx, d_wq.val, m, k, n, q_res);
+	spmm_csc<KernelType::SharedMemory, OutputFormat::CM><<<dim_grid_sm, dim_block_sm>>>(x, d_wk.col_ptr, d_wk.row_idx, d_wk.val, m, k, n, k_res);
+	spmm_csc<KernelType::SharedMemory, OutputFormat::CM><<<dim_grid_sm, dim_block_sm>>>(x, d_wv.col_ptr, d_wv.row_idx, d_wv.val, m, k, n, v_res);
 
 #if defined(__CHRONO__)
 	CUDA_CHECK(cudaEventRecord(stop, 0));
@@ -230,8 +240,8 @@ void run(CSC_MHSA mhsa)
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	// TODO: can this be async?
-	CUDA_CHECK(cudaMemcpy(mhsa.host, res, sizeof(float) * mhsa.config.input_sequence_size * MAT_SIZE, cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(mhsa.host, q_res, sizeof(float) * kv_size * 3, cudaMemcpyDeviceToHost));
 
-	cuda_dealloc_device(res);
+	cuda_dealloc_device(q_res);
 	cuda_dealloc_device(dev);
 }
