@@ -72,6 +72,21 @@ void print_device_properties()
 		static_cast<double>(dev_prop.memoryClockRate) * (dev_prop.memoryBusWidth / 8) * 2 / 1e6, dev_prop.ECCEnabled);
 }
 
+/*
+ * Init the pointers of a CSCMatrix that lives on dev
+ * start: where col_ptr should point to
+ * mat: host-side matrix to copy metadata from
+ */
+static CSCMatrix partition_dev_mem(void* start, const CSCMatrix& mat)
+{
+	CSCMatrix d_wq = mat;
+	d_wq.col_ptr = reinterpret_cast<uint32_t*>(start);
+	d_wq.row_idx = d_wq.col_ptr + d_wq.col_ptr_size;
+	d_wq.val = reinterpret_cast<float*>(d_wq.row_idx + d_wq.row_idx_size);
+
+	return d_wq;
+}
+
 __device__ inline static float get_elem_rm(const float* const a, size_t n_cols, size_t row, size_t col)
 {
 	return a[row * n_cols + col];
