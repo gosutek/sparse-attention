@@ -16,6 +16,18 @@
 		}                                                                                                \
 	} while (0)
 
+enum class KernelType
+{
+	GlobalMemory,
+	SharedMemory,
+};
+
+enum class OutputFormat
+{
+	RM,
+	CM
+};
+
 static void* cuda_malloc_device(size_t b_size)
 {
 	void* ptr = nullptr;
@@ -80,7 +92,8 @@ __device__ inline static void set_element_cm(float* const a, size_t n_rows, size
 	a[col * n_rows + row] = val;
 }
 
-__global__ void spmm_rm_csc_gm(
+template <KernelType K, OutputFormat O>
+__global__ void spmm_csc(
 	const float* __restrict__ a,  // expect row-major for coalesced access
 	const uint32_t* __restrict__ col_ptr,
 	const uint32_t* __restrict__ row_idx,
@@ -88,22 +101,45 @@ __global__ void spmm_rm_csc_gm(
 	const uint32_t m,
 	const uint32_t k,
 	const uint32_t n,
-	float* __restrict__ res)  // expect row-major for coalesced access
+	float* __restrict__ res)
 {
-	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
-	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+	uint32_t x, y;
+	if constexpr (K == KernelType::SharedMemory) {
+		x = threadIdx.x;
+		y = blockIdx.x;
+	} else {
+		x = blockIdx.x * blockDim.x + threadIdx.x;
+		y = blockIdx.y * blockDim.y + threadIdx.y;
+	}
 
 	if (x >= n || y >= m) {
 		return;
 	}
 
 	float acc = 0.0f;
-	for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
-		acc += get_element_rm(a, k, y, row_idx[i]) * val[i];
+	if constexpr (K == KernelType::SharedMemory) {
+		// TODO: Change hardcoded value
+		__shared__ float x_row_sm[512];
+
+		x_row_sm[x] = get_element_rm(a, k, y, x);
+
+		__syncthreads();
+		for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
+			acc += x_row_sm[row_idx[i]] * val[i];
+		}
+	} else {
+		for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
+			acc += get_element_rm(a, k, y, row_idx[i]) * val[i];
+		}
 	}
-	set_element_rm(res, n, y, x, acc);
+	if constexpr (O == OutputFormat::RM) {
+		set_element_rm(res, n, y, x, acc);
+	} else {
+		set_element_cm(res, m, y, x, acc);
+	}
 }
 
+// TODO: Incorporate into the template
 __global__ void spmm_rm_csr_gm(
 	const float* __restrict__ a,
 	const uint32_t* __restrict__ row_ptr,
@@ -124,36 +160,6 @@ __global__ void spmm_rm_csr_gm(
 	float acc = 0.0f;
 	for (size_t i = row_ptr[y]; i < row_ptr[y + 1]; ++i) {
 		acc += get_element_rm(a, k, y, col_idx[i]) * val[i];
-	}
-	set_element_rm(res, n, y, x, acc);
-}
-
-__global__ void spmm_rm_csc_sm(
-	const float* __restrict__ a,
-	const uint32_t* __restrict__ col_ptr,
-	const uint32_t* __restrict__ row_idx,
-	const float* __restrict__ val,
-	const uint32_t m,
-	const uint32_t k,
-	const uint32_t n,
-	float* __restrict__ res)  // expect row-major for coalesced access
-{
-	uint32_t x = threadIdx.x;
-	uint32_t y = blockIdx.x;
-
-	if (x >= n || y >= m) {
-		return;
-	}
-
-	__shared__ float x_row_sm[512];
-
-	x_row_sm[x] = get_element_rm(a, k, y, x);
-
-	__syncthreads();
-
-	float acc = 0.0f;
-	for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
-		acc += x_row_sm[row_idx[i]] * val[i];
 	}
 	set_element_rm(res, n, y, x, acc);
 }
@@ -192,8 +198,8 @@ void run(CSC_MHSA mhsa)
 	CUDA_CHECK(cudaEventRecord(start, 0));
 #endif
 
-	// spmm_rm_csc_gm<<<dim_grid_gm, dim_block_gm>>>(x, d_col_ptr, d_row_idx, d_val, m, k, n, res);
-	spmm_rm_csc_sm<<<dim_grid_sm, dim_block_sm>>>(x, d_col_ptr, d_row_idx, d_val, m, k, n, res);
+	// spmm_rm_csc_sm<<<dim_grid_sm, dim_block_sm>>>(x, d_col_ptr, d_row_idx, d_val, m, k, n, res);
+	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<dim_grid_sm, dim_block_sm>>>(x, d_col_ptr, d_row_idx, d_val, m, k, n, res);
 
 #if defined(__CHRONO__)
 	CUDA_CHECK(cudaEventRecord(stop, 0));
