@@ -6,6 +6,7 @@
 #	define MAT_SIZE 512
 #endif
 
+// TODO: This *can* leak memory
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \
 		cudaError_t err = x;                                                                             \
@@ -127,7 +128,7 @@ __global__ void spmm_csc(
 		y = blockIdx.y * blockDim.y + threadIdx.y;
 	}
 
-	if (x >= n || y >= m) {
+	if (x >= n || y >= m) {  // not really needed
 		return;
 	}
 
@@ -163,7 +164,7 @@ __global__ void spmm_rm_csr_gm(
 	const uint32_t m,
 	const uint32_t k,
 	const uint32_t n,
-	float* const __restrict__ res)  // expect row-major for coalesced access
+	float* __restrict__ res)  // expect row-major for coalesced access
 {
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
 	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -179,14 +180,44 @@ __global__ void spmm_rm_csr_gm(
 	set_elem_rm(res, n, y, x, acc);
 }
 
+__global__ void gemm(
+	const float* __restrict__ a,  // row-major
+	const float* __restrict__ b,  // col-major
+	const uint32_t m,
+	const uint32_t k,
+	const uint32_t n,
+	float* __restrict res)
+{
+	uint32_t x = threadIdx.x;
+	uint32_t y = blockIdx.x;
+
+	if (x >= n || y >= m) {  // not really needed
+		return;
+	}
+
+	float acc = 0.0f;
+	// TODO: Change hardcoded value
+	__shared__ float a_row_sm[512];
+
+	a_row_sm[x] = get_elem_rm(a, k, y, x);
+	__syncthreads();
+
+	for (size_t i = 0; i < k; ++i) {
+		acc += a_row_sm[i] * b[x * k + i];
+	}
+	set_elem_rm(res, n, y, x, acc);
+}
+
 void run(CSC_MHSA mhsa)
 {
 	// TODO: Find a better name
 	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;  // k OR v's size
+	size_t gemm_res_size = mhsa.config.input_sequence_size * mhsa.config.input_sequence_size;
 	// TODO: change MAT_SIZE
-	float* q_res = static_cast<float*>(cuda_malloc_device(sizeof(float) * kv_size * 3));
+	float* q_res = static_cast<float*>(cuda_malloc_device(sizeof(float) * kv_size * 3 + gemm_res_size));
 	float* k_res = q_res + kv_size;
 	float* v_res = k_res + kv_size;
+	float* gemm_res = v_res + kv_size;
 	// TODO: Merge these two ^ v allocations
 	void* dev = cuda_device_copy(mhsa.host, mhsa.b_size);
 
@@ -207,6 +238,8 @@ void run(CSC_MHSA mhsa)
 
 	dim3 dim_block_gm(32, 32);
 	dim3 dim_block_sm(512);
+	dim3 dim_block_test_sm(32);
+	dim3 dim_grid_test_sm(32);
 
 	dim3 dim_grid_gm((n + dim_block_gm.x - 1) / dim_block_gm.x,
 		(m + dim_block_gm.y - 1) / dim_block_gm.y);
@@ -223,8 +256,12 @@ void run(CSC_MHSA mhsa)
 #endif
 
 	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<dim_grid_sm, dim_block_sm>>>(x, d_wq.col_ptr, d_wq.row_idx, d_wq.val, m, k, n, q_res);
-	spmm_csc<KernelType::SharedMemory, OutputFormat::CM><<<dim_grid_sm, dim_block_sm>>>(x, d_wk.col_ptr, d_wk.row_idx, d_wk.val, m, k, n, k_res);
+	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<dim_grid_sm, dim_block_sm>>>(x, d_wk.col_ptr, d_wk.row_idx, d_wk.val, m, k, n, k_res);
 	spmm_csc<KernelType::SharedMemory, OutputFormat::CM><<<dim_grid_sm, dim_block_sm>>>(x, d_wv.col_ptr, d_wv.row_idx, d_wv.val, m, k, n, v_res);
+
+	CUDA_CHECK(cudaDeviceSynchronize());
+
+	gemm<<<dim_grid_test_sm, dim_block_test_sm>>>(q_res, k_res, m, k, m, gemm_res);
 
 #if defined(__CHRONO__)
 	CUDA_CHECK(cudaEventRecord(stop, 0));
@@ -240,7 +277,7 @@ void run(CSC_MHSA mhsa)
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	// TODO: can this be async?
-	CUDA_CHECK(cudaMemcpy(mhsa.host, q_res, sizeof(float) * kv_size * 3, cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(mhsa.host, q_res, sizeof(float) * kv_size * 3 + gemm_res_size, cudaMemcpyDeviceToHost));
 
 	cuda_dealloc_device(q_res);
 	cuda_dealloc_device(dev);
