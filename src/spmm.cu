@@ -1,6 +1,7 @@
 #include "common.h"
 #include "matrix.h"
 #include "model.h"
+#include <cmath>
 
 #ifndef MAT_SIZE
 #	define MAT_SIZE 512
@@ -186,7 +187,7 @@ __global__ void gemm(
 	const uint32_t m,
 	const uint32_t k,
 	const uint32_t n,
-	float* __restrict res)
+	float* __restrict__ res)
 {
 	uint32_t x = threadIdx.x;
 	uint32_t y = blockIdx.x;
@@ -236,15 +237,25 @@ void run(CSC_MHSA mhsa)
 	const uint32_t k = d_wq.rows;
 	const uint32_t n = d_wq.cols;
 
-	dim3 dim_block_gm(32, 32);
-	dim3 dim_block_sm(512);
-	dim3 dim_block_test_sm(32);
-	dim3 dim_grid_test_sm(32);
+	// One thread per element of the output
+	// One thread block per 32x32 submatrix of the output
+	// (32x512)*(512x512)=(32x512)
+	dim3 spmm_block_gm(32, 32);
+	dim3 spmm_grid_gm(
+		(n + spmm_block_gm.x - 1) / spmm_block_gm.x,
+		(m + spmm_block_gm.y - 1) / spmm_block_gm.y);
 
-	dim3 dim_grid_gm((n + dim_block_gm.x - 1) / dim_block_gm.x,
-		(m + dim_block_gm.y - 1) / dim_block_gm.y);
-	dim3 dim_grid_sm(mhsa.config.input_sequence_size);
+	// One thread per element of the output.
+	// One thread block stretched across a row of the output
+	// (32x512)*(512x512)=(32x512)
+	dim3 spmm_block_sm(512);
+	dim3 spmm_grid_sm(32);
 
+	// One thread per element of the output.
+	// One thread block stretched across a row of the output
+	// (32x512)*(512x32)=(32x32)
+	dim3 gemm_block_sm(32);
+	dim3 gemm_grid_sm(32);
 #if defined(__CHRONO__)
 	cudaEvent_t start, stop;
 	float       time;
@@ -255,13 +266,13 @@ void run(CSC_MHSA mhsa)
 	CUDA_CHECK(cudaEventRecord(start, 0));
 #endif
 
-	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<dim_grid_sm, dim_block_sm>>>(x, d_wq.col_ptr, d_wq.row_idx, d_wq.val, m, k, n, q_res);
-	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<dim_grid_sm, dim_block_sm>>>(x, d_wk.col_ptr, d_wk.row_idx, d_wk.val, m, k, n, k_res);
-	spmm_csc<KernelType::SharedMemory, OutputFormat::CM><<<dim_grid_sm, dim_block_sm>>>(x, d_wv.col_ptr, d_wv.row_idx, d_wv.val, m, k, n, v_res);
+	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<spmm_grid_sm, spmm_block_sm>>>(x, d_wq.col_ptr, d_wq.row_idx, d_wq.val, m, k, n, q_res);
+	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<spmm_grid_sm, spmm_block_sm>>>(x, d_wk.col_ptr, d_wk.row_idx, d_wk.val, m, k, n, k_res);
+	spmm_csc<KernelType::SharedMemory, OutputFormat::CM><<<spmm_grid_sm, spmm_block_sm>>>(x, d_wv.col_ptr, d_wv.row_idx, d_wv.val, m, k, n, v_res);
 
 	CUDA_CHECK(cudaDeviceSynchronize());
 
-	gemm<<<dim_grid_test_sm, dim_block_test_sm>>>(q_res, k_res, m, k, m, gemm_res);
+	gemm<<<gemm_grid_sm, gemm_block_sm>>>(q_res, k_res, m, k, m, gemm_res);
 
 #if defined(__CHRONO__)
 	CUDA_CHECK(cudaEventRecord(stop, 0));
