@@ -209,16 +209,36 @@ __global__ void gemm(
 	set_elem_rm(res, n, y, x, acc);
 }
 
+__global__ void softmax(
+	const float* __restrict__ a,
+	const uint32_t m,
+	const uint32_t k,
+	float*         acc,
+	float* __restrict__ res)
+{
+	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	float e = std::exp(get_elem_rm(a, k, y, x));
+	atomicAdd(acc, e);
+
+	__syncthreads();
+
+	float val = e / *acc;
+	set_elem_rm(res, k, y, x, val);
+}
+
 void run(CSC_MHSA mhsa)
 {
 	// TODO: Find a better name
 	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;  // k OR v's size
 	size_t gemm_res_size = mhsa.config.input_sequence_size * mhsa.config.input_sequence_size;
 	// TODO: change MAT_SIZE
-	float* q_res = static_cast<float*>(cuda_malloc_device(sizeof(float) * kv_size * 3 + gemm_res_size));
+	float* q_res = static_cast<float*>(cuda_malloc_device(sizeof(float) * kv_size * 3 + gemm_res_size + 1));  // Q, K, V, gemm result, float acc for softmax
 	float* k_res = q_res + kv_size;
 	float* v_res = k_res + kv_size;
 	float* gemm_res = v_res + kv_size;
+	float* softmax_acc = gemm_res + gemm_res_size;
 	// TODO: Merge these two ^ v allocations
 	void* dev = cuda_device_copy(mhsa.host, mhsa.b_size);
 
@@ -256,6 +276,15 @@ void run(CSC_MHSA mhsa)
 	// (32x512)*(512x32)=(32x32)
 	dim3 gemm_block_sm(32);
 	dim3 gemm_grid_sm(32);
+
+	// One thread per element of the output.
+	// One thread block per 32x32 submatrix of the output
+	// (32x32)
+	dim3 softmax_block(32, 32);
+	dim3 softmax_grid(
+		(m + softmax_block.x - 1) / softmax_block.x,
+		(m + softmax_block.y - 1) / softmax_block.y);  // This should actually be equal to (1,1) i.e. one block
+
 #if defined(__CHRONO__)
 	cudaEvent_t start, stop;
 	float       time;
@@ -273,6 +302,10 @@ void run(CSC_MHSA mhsa)
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	gemm<<<gemm_grid_sm, gemm_block_sm>>>(q_res, k_res, m, k, m, gemm_res);
+
+	CUDA_CHECK(cudaDeviceSynchronize());
+
+	softmax<<<softmax_grid, softmax_block>>>(gemm_res, m, m, softmax_acc, gemm_res);
 
 #if defined(__CHRONO__)
 	CUDA_CHECK(cudaEventRecord(stop, 0));
