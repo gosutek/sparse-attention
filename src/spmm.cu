@@ -37,14 +37,14 @@ static void* cuda_malloc_device(size_t b_size)
 	return ptr;
 }
 
-void* cuda_device_copy(void* host, size_t b_size)
-{
-	void* device = nullptr;
-	CUDA_CHECK(cudaMalloc(&device, b_size));
-	// TODO: can this be async?
-	CUDA_CHECK(cudaMemcpy(device, host, b_size, cudaMemcpyHostToDevice));
-	return device;
-}
+// void* cuda_device_copy(void* host, size_t b_size)
+// {
+// 	void* device = nullptr;
+// 	CUDA_CHECK(cudaMalloc(&device, b_size));
+// 	// TODO: can this be async?
+// 	CUDA_CHECK(cudaMemcpy(device, host, b_size, cudaMemcpyHostToDevice));
+// 	return device;
+// }
 
 void* cuda_malloc_host(size_t b_size)
 {
@@ -68,10 +68,12 @@ void print_device_properties()
 	cudaDeviceProp dev_prop = {};
 	CUDA_CHECK(cudaGetDeviceProperties(&dev_prop, 0));
 
-	printf("# CUDA: %s, compute %d.%d, %d SMs, %.1f GiB, peak bandwidth %.0f GB/s (ECC %d)\n",
+	printf(
+		"# CUDA: %s, compute %d.%d, %d SMs, %.1f GiB, peak bandwidth %.0f GB/s\n- Maximum threads per block ~ %d\n",
 		dev_prop.name, dev_prop.major, dev_prop.minor, dev_prop.multiProcessorCount,
 		static_cast<double>(dev_prop.totalGlobalMem) / (1024 * 1024 * 1024),
-		static_cast<double>(dev_prop.memoryClockRate) * (dev_prop.memoryBusWidth / 8) * 2 / 1e6, dev_prop.ECCEnabled);
+		static_cast<double>(dev_prop.memoryClockRate) * (dev_prop.memoryBusWidth / 8) * 2 / 1e6,
+		dev_prop.maxThreadsPerBlock);
 }
 
 /*
@@ -228,30 +230,42 @@ __global__ void softmax(
 	set_elem_rm(res, k, y, x, val);
 }
 
-void run(CSC_MHSA mhsa)
+void* prepare_dev_mem(void* src, size_t b_host_size, size_t sequence_size)
 {
 	// TODO: Find a better name
-	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;  // k OR v's size
+	size_t kv_size = sequence_size * MAT_SIZE;  // k OR v's size
+	size_t gemm_res_size = sequence_size * sequence_size;
+	size_t res_b_size = sizeof(float) * kv_size * 3 + gemm_res_size + 1;  // Q, K, V, gemm result, float acc for softmax
+	void*  dev = cuda_malloc_device(b_host_size + res_b_size);
+	CUDA_CHECK(cudaMemcpy(dev, src, b_host_size, cudaMemcpyHostToDevice));
+
+	return dev;
+}
+
+void run(CSC_MHSA mhsa)
+{
+	void* dev = prepare_dev_mem(mhsa.host, mhsa.b_size, mhsa.config.input_sequence_size);
+
+	float* x = reinterpret_cast<float*>(dev);
+	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;
 	size_t gemm_res_size = mhsa.config.input_sequence_size * mhsa.config.input_sequence_size;
-	// TODO: change MAT_SIZE
-	float* q_res = static_cast<float*>(cuda_malloc_device(sizeof(float) * kv_size * 3 + gemm_res_size + 1));  // Q, K, V, gemm result, float acc for softmax
+	size_t b_x_size = sizeof(float) * kv_size;
+
+	char*     ptr = reinterpret_cast<char*>(x + b_x_size);
+	CSCMatrix d_wq = partition_dev_mem(reinterpret_cast<void*>(ptr), mhsa.weights.w_q[0]);
+
+	ptr += calc_byte_size_compressed_sparse(d_wq.cols, d_wq.nnz);
+	CSCMatrix d_wk = partition_dev_mem(reinterpret_cast<void*>(ptr), mhsa.weights.w_k[0]);
+
+	ptr += calc_byte_size_compressed_sparse(d_wk.cols, d_wk.nnz);
+	CSCMatrix d_wv = partition_dev_mem(reinterpret_cast<void*>(ptr), mhsa.weights.w_v[0]);
+
+	ptr += calc_byte_size_compressed_sparse(d_wv.cols, d_wv.nnz);
+	float* q_res = reinterpret_cast<float*>(ptr);
 	float* k_res = q_res + kv_size;
 	float* v_res = k_res + kv_size;
 	float* gemm_res = v_res + kv_size;
 	float* softmax_acc = gemm_res + gemm_res_size;
-	// TODO: Merge these two ^ v allocations
-	void* dev = cuda_device_copy(mhsa.host, mhsa.b_size);
-
-	float* x = reinterpret_cast<float*>(dev);
-
-	char*     starting_ptr = reinterpret_cast<char*>(x + kv_size);
-	CSCMatrix d_wq = partition_dev_mem(reinterpret_cast<void*>(starting_ptr), mhsa.weights.w_q[0]);
-
-	starting_ptr += calc_byte_size_compressed_sparse(d_wq.cols, d_wq.nnz);
-	CSCMatrix d_wk = partition_dev_mem(reinterpret_cast<void*>(starting_ptr), mhsa.weights.w_k[0]);
-
-	starting_ptr += calc_byte_size_compressed_sparse(d_wk.cols, d_wk.nnz);
-	CSCMatrix d_wv = partition_dev_mem(reinterpret_cast<void*>(starting_ptr), mhsa.weights.w_v[0]);
 
 	const uint32_t m = mhsa.config.input_sequence_size;
 	const uint32_t k = d_wq.rows;
@@ -323,6 +337,5 @@ void run(CSC_MHSA mhsa)
 	// TODO: can this be async?
 	CUDA_CHECK(cudaMemcpy(mhsa.host, q_res, sizeof(float) * kv_size * 3 + gemm_res_size, cudaMemcpyDeviceToHost));
 
-	cuda_dealloc_device(q_res);
 	cuda_dealloc_device(dev);
 }

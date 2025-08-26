@@ -8,6 +8,7 @@
 #	define MAT_SIZE 512
 #endif
 
+// TODO: expected == actual is garbage
 #define ASSERT_EQ(expected, actual, message)                           \
 	do {                                                               \
 		if (!((expected) == (actual))) {                               \
