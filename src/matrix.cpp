@@ -108,7 +108,7 @@ static void csr_to_csc(CSCMatrix& mat, const std::vector<uint32_t>& row_ptr_vec,
 		cur_pos[col] = mat.col_ptr[col];
 	}
 
-	for (size_t row = 0; row < mat.rows; ++row) {
+	for (uint32_t row = 0; row < mat.rows; ++row) {
 		for (size_t i = row_ptr_vec[row]; i < row_ptr_vec[row + 1]; ++i) {
 			uint32_t col = col_idx_vec[i];
 			uint32_t dest_pos = cur_pos[col]++;
@@ -348,7 +348,6 @@ void load_host_csc(
 	DLMC dlmc = { base_data_path, pruning_method, sparsity };
 
 	assert(config.n_layers < MAX_N_LAYERS);
-	mhsa.b_size = 0;
 	for (size_t i = 0; i < config.n_layers; ++i) {
 		// WARN: Doing only decoder for now
 		// dlmc.enc_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Encoder, am, i);

@@ -37,12 +37,12 @@ enum class SparseMatrixType
 
 struct DLMCHeader
 {
-	size_t n_rows, n_cols, nnz;
+	size_t n_rows{}, n_cols{}, nnz{};
 };
 
 struct Tensor
 {
-	size_t layer;
+	size_t layer{};
 	size_t b_size = 0;
 
 	BodyType           bt;
@@ -61,9 +61,9 @@ struct DLMC
 
 	std::array<const char*, 4> suffixes = { "q.smtx", "k.smtx", "v.smtx", "output_transform.smtx" };
 
-	std::array<Tensor, MAX_N_LAYERS> enc_self_attention_tensors;
+	std::array<Tensor, MAX_N_LAYERS> enc_self_attention_tensors{};
 
-	std::array<Tensor, MAX_N_LAYERS> dec_self_attention_tensors;
+	std::array<Tensor, MAX_N_LAYERS> dec_self_attention_tensors{};
 
 	DLMC(const std::string& _base_data_path,
 		const std::string&  _pruning_method,
@@ -92,6 +92,8 @@ struct CSCMatrix
 	size_t rows{}, cols{}, nnz{};
 	size_t col_ptr_size{}, row_idx_size{}, val_size{};
 
+	size_t b_size{};
+
 	CSCMatrix() {}
 
 	CSCMatrix(size_t _rows, size_t _cols, size_t _nnz) :
@@ -100,11 +102,24 @@ struct CSCMatrix
 		col_ptr_size = cols + 1;
 		row_idx_size = nnz;
 		val_size = nnz;
+
+		b_size = col_ptr_size * sizeof(uint32_t) + row_idx_size * sizeof(uint32_t) + val_size * sizeof(float);
 	}
 
 	CSCMatrix(const CSCMatrix& other) :
 		rows(other.rows), cols(other.cols), nnz(other.nnz),
-		col_ptr_size(other.col_ptr_size), row_idx_size(other.row_idx_size), val_size(other.val_size) {}
+		col_ptr_size(other.col_ptr_size), row_idx_size(other.row_idx_size), val_size(other.val_size),
+		b_size(other.b_size) {}
+
+	CSCMatrix& operator=(const CSCMatrix& other) = default;
+
+public:
+	void partition(void* const ptr)
+	{
+		col_ptr = reinterpret_cast<uint32_t*>(ptr);
+		row_idx = col_ptr + col_ptr_size;
+		val = reinterpret_cast<float*>(row_idx + row_idx_size);
+	}
 };
 
 void load_host_csr(

@@ -42,6 +42,7 @@ struct CSC_MHSA
 {
 	Config     config;
 	CSCWeights weights;
-	void*      host = nullptr;
-	size_t     b_size = 0;
+
+	void*  host = nullptr;
+	size_t b_size = 0;
 };

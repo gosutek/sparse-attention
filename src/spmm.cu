@@ -96,7 +96,7 @@ __device__ inline static float get_elem_rm(const float* const a, size_t n_cols, 
 	return a[row * n_cols + col];
 }
 
-__device__ inline static float get_elem_cm(const float* const a, size_t n_rows, size_t row, size_t col)
+[[maybe_unused]] __device__ inline static float get_elem_cm(const float* const a, size_t n_rows, size_t row, size_t col)
 {
 	return a[col * n_rows + row];
 }
@@ -117,9 +117,9 @@ __global__ void spmm_csc(
 	const uint32_t* __restrict__ col_ptr,
 	const uint32_t* __restrict__ row_idx,
 	const float* __restrict__ val,
-	const uint32_t m,
-	const uint32_t k,
-	const uint32_t n,
+	const size_t m,
+	const size_t k,
+	const size_t n,
 	float* __restrict__ res)
 {
 	uint32_t x, y;
@@ -186,9 +186,9 @@ __global__ void spmm_rm_csr_gm(
 __global__ void gemm(
 	const float* __restrict__ a,  // row-major
 	const float* __restrict__ b,  // col-major
-	const uint32_t m,
-	const uint32_t k,
-	const uint32_t n,
+	const size_t m,
+	const size_t k,
+	const size_t n,
 	float* __restrict__ res)
 {
 	uint32_t x = threadIdx.x;
@@ -213,9 +213,9 @@ __global__ void gemm(
 
 __global__ void softmax(
 	const float* __restrict__ a,
-	const uint32_t m,
-	const uint32_t k,
-	float*         acc,
+	const size_t m,
+	const size_t k,
+	float*       acc,
 	float* __restrict__ res)
 {
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -267,9 +267,8 @@ void run(CSC_MHSA mhsa)
 	float* gemm_res = v_res + kv_size;
 	float* softmax_acc = gemm_res + gemm_res_size;
 
-	const uint32_t m = mhsa.config.input_sequence_size;
-	const uint32_t k = d_wq.rows;
-	const uint32_t n = d_wq.cols;
+	const size_t m = mhsa.config.input_sequence_size;
+	const size_t n = d_wq.cols;
 
 	// One thread per element of the output
 	// One thread block per 32x32 submatrix of the output
@@ -309,17 +308,18 @@ void run(CSC_MHSA mhsa)
 	CUDA_CHECK(cudaEventRecord(start, 0));
 #endif
 
-	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<spmm_grid_sm, spmm_block_sm>>>(x, d_wq.col_ptr, d_wq.row_idx, d_wq.val, m, k, n, q_res);
-	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<spmm_grid_sm, spmm_block_sm>>>(x, d_wk.col_ptr, d_wk.row_idx, d_wk.val, m, k, n, k_res);
-	spmm_csc<KernelType::SharedMemory, OutputFormat::CM><<<spmm_grid_sm, spmm_block_sm>>>(x, d_wv.col_ptr, d_wv.row_idx, d_wv.val, m, k, n, v_res);
+	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<spmm_grid_sm, spmm_block_sm>>>(x, d_wq.col_ptr, d_wq.row_idx, d_wq.val, mhsa.config.input_sequence_size, d_wq.rows, d_wq.cols, q_res);
+	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<spmm_grid_sm, spmm_block_sm>>>(x, d_wk.col_ptr, d_wk.row_idx, d_wk.val, mhsa.config.input_sequence_size, d_wk.rows, d_wk.cols, k_res);
+	spmm_csc<KernelType::SharedMemory, OutputFormat::CM><<<spmm_grid_sm, spmm_block_sm>>>(x, d_wv.col_ptr, d_wv.row_idx, d_wv.val, mhsa.config.input_sequence_size, d_wv.rows, d_wv.cols, v_res);
 
 	CUDA_CHECK(cudaDeviceSynchronize());
 
-	gemm<<<gemm_grid_sm, gemm_block_sm>>>(q_res, k_res, m, k, m, gemm_res);
+	gemm<<<gemm_grid_sm, gemm_block_sm>>>(q_res, k_res, mhsa.config.input_sequence_size, d_wq.rows, mhsa.config.input_sequence_size, gemm_res);
 
 	CUDA_CHECK(cudaDeviceSynchronize());
 
-	softmax<<<softmax_grid, softmax_block>>>(gemm_res, m, m, softmax_acc, gemm_res);
+	// TODO: Don't write back to gemm_res
+	softmax<<<softmax_grid, softmax_block>>>(gemm_res, mhsa.config.input_sequence_size, mhsa.config.input_sequence_size, softmax_acc, gemm_res);
 
 #if defined(__CHRONO__)
 	CUDA_CHECK(cudaEventRecord(stop, 0));
