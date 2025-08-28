@@ -76,21 +76,6 @@ void print_device_properties()
 		dev_prop.maxThreadsPerBlock);
 }
 
-/*
- * Init the pointers of a CSCMatrix that lives on dev
- * start: where col_ptr should point to
- * mat: host-side matrix to copy metadata from
- */
-static CSCMatrix partition_dev_mem(void* start, const CSCMatrix& mat)
-{
-	CSCMatrix d_wq = mat;
-	d_wq.col_ptr = reinterpret_cast<uint32_t*>(start);
-	d_wq.row_idx = d_wq.col_ptr + d_wq.col_ptr_size;
-	d_wq.val = reinterpret_cast<float*>(d_wq.row_idx + d_wq.row_idx_size);
-
-	return d_wq;
-}
-
 __device__ inline static float get_elem_rm(const float* const a, size_t n_cols, size_t row, size_t col)
 {
 	return a[row * n_cols + col];
@@ -230,37 +215,42 @@ __global__ void softmax(
 	set_elem_rm(res, k, y, x, val);
 }
 
-void* prepare_dev_mem(void* src, size_t b_host_size, size_t sequence_size)
-{
-	// TODO: Find a better name
-	size_t kv_size = sequence_size * MAT_SIZE;  // k OR v's size
-	size_t gemm_res_size = sequence_size * sequence_size;
-	size_t res_b_size = sizeof(float) * kv_size * 3 + gemm_res_size + 1;  // Q, K, V, gemm result, float acc for softmax
-	void*  dev = cuda_malloc_device(b_host_size + res_b_size);
-	CUDA_CHECK(cudaMemcpy(dev, src, b_host_size, cudaMemcpyHostToDevice));
-
-	return dev;
-}
-
 void run(CSC_MHSA mhsa)
 {
-	void* dev = prepare_dev_mem(mhsa.host, mhsa.b_size, mhsa.config.input_sequence_size);
+	// TODO: Find a better name
+	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;  // k OR v's size
+	size_t gemm_res_size = mhsa.config.input_sequence_size * mhsa.config.input_sequence_size;
+	size_t res_b_size = sizeof(float) * kv_size * 3 + gemm_res_size + 1;  // Q, K, V, gemm result, float acc for softmax
+	void*  dev = cuda_malloc_device(mhsa.b_size + res_b_size);
+	CUDA_CHECK(cudaMemcpy(dev, mhsa.host, mhsa.b_size, cudaMemcpyHostToDevice));
+
+	/*
+      * +---+-----+-----+-----+-----+---+---+---+------+-----+
+      * | x | w_q | w_k | w_v | w_o | Q | K | V | QK^T | ACC |
+      * +---+-----+-----+-----+-----+---+---+---+------+-----+
+   */
 
 	float* x = reinterpret_cast<float*>(dev);
-	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;
-	size_t gemm_res_size = mhsa.config.input_sequence_size * mhsa.config.input_sequence_size;
 	size_t b_x_size = sizeof(float) * kv_size;
 
-	char*     ptr = reinterpret_cast<char*>(x + b_x_size);
-	CSCMatrix d_wq = partition_dev_mem(reinterpret_cast<void*>(ptr), mhsa.weights.w_q[0]);
+	char* ptr = reinterpret_cast<char*>(x) + b_x_size;
 
-	ptr += calc_byte_size_compressed_sparse(d_wq.cols, d_wq.nnz);
-	CSCMatrix d_wk = partition_dev_mem(reinterpret_cast<void*>(ptr), mhsa.weights.w_k[0]);
+	CSCMatrix d_wq = mhsa.weights.w_q[0];
+	d_wq.partition(ptr);
+	ptr += d_wq.b_size;
 
-	ptr += calc_byte_size_compressed_sparse(d_wk.cols, d_wk.nnz);
-	CSCMatrix d_wv = partition_dev_mem(reinterpret_cast<void*>(ptr), mhsa.weights.w_v[0]);
+	CSCMatrix d_wk = mhsa.weights.w_k[0];
+	d_wk.partition(ptr);
+	ptr += d_wk.b_size;
 
-	ptr += calc_byte_size_compressed_sparse(d_wv.cols, d_wv.nnz);
+	CSCMatrix d_wv = mhsa.weights.w_v[0];
+	d_wv.partition(ptr);
+	ptr += d_wv.b_size;
+
+	CSCMatrix d_wo = mhsa.weights.w_o[0];
+	d_wo.partition(ptr);
+	ptr += d_wo.b_size;
+
 	float* q_res = reinterpret_cast<float*>(ptr);
 	float* k_res = q_res + kv_size;
 	float* v_res = k_res + kv_size;
