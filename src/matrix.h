@@ -1,17 +1,12 @@
 #pragma once
 
 #include "common.h"
-
-struct CSR_MHSA;
-struct CSC_MHSA;
-struct CSRWeights;
-struct CSCWeights;
-struct Config;
+#include "model.h"
 
 /*
  * C = A*B
  * MxNxK
- * where 
+ * where
  * A is MxK
  * B is KxN
  * C is MxN
@@ -73,7 +68,11 @@ struct DLMC
 		sparsity(_sparsity) {}
 };
 
-struct CSRMatrix
+/**
+ * Doesn't and shouldn't own any
+ * resources pointed to by row_ptr, col_idx, val
+ */
+struct CSR
 {
 	uint32_t* row_ptr = nullptr;
 	uint32_t* col_idx = nullptr;
@@ -81,9 +80,31 @@ struct CSRMatrix
 
 	size_t rows{}, cols{}, nnz{};
 	size_t row_ptr_size{}, col_idx_size{}, val_size{};
+
+	size_t b_size{};
+
+	CSR() {}
+
+	CSR(size_t _rows, size_t _cols, size_t _nnz) :
+		rows(_rows), cols(_cols), nnz(_nnz)
+	{
+		row_ptr_size = rows + 1;
+		col_idx_size = nnz;
+		val_size = nnz;
+
+		b_size = row_ptr_size * sizeof(uint32_t) + col_idx_size * sizeof(uint32_t) + val_size * sizeof(float);
+	}
+
+	CSR(const CSR& other) = default;
+	CSR& operator=(const CSR& other) = default;
+	CSR(CSR&& other) = default;
 };
 
-struct CSCMatrix
+/**
+ * Doesn't and shouldn't own any
+ * resources pointed to by col_ptr, row_idx, val
+ */
+struct CSC
 {
 	uint32_t* col_ptr = nullptr;
 	uint32_t* row_idx = nullptr;
@@ -94,9 +115,9 @@ struct CSCMatrix
 
 	size_t b_size{};
 
-	CSCMatrix() {}
+	CSC() {}
 
-	CSCMatrix(size_t _rows, size_t _cols, size_t _nnz) :
+	CSC(size_t _rows, size_t _cols, size_t _nnz) :
 		rows(_rows), cols(_cols), nnz(_nnz)
 	{
 		col_ptr_size = cols + 1;
@@ -106,14 +127,14 @@ struct CSCMatrix
 		b_size = col_ptr_size * sizeof(uint32_t) + row_idx_size * sizeof(uint32_t) + val_size * sizeof(float);
 	}
 
-	CSCMatrix(const CSCMatrix& other) :
+	CSC(const CSC& other) :
 		rows(other.rows), cols(other.cols), nnz(other.nnz),
 		col_ptr_size(other.col_ptr_size), row_idx_size(other.row_idx_size), val_size(other.val_size),
 		b_size(other.b_size) {}
 
-	CSCMatrix& operator=(const CSCMatrix& other) = default;
+	CSC& operator=(const CSC& other) = default;
+	CSC(CSC&& other) = default;
 
-public:
 	void partition(void* const ptr)
 	{
 		col_ptr = reinterpret_cast<uint32_t*>(ptr);
@@ -123,24 +144,24 @@ public:
 };
 
 void load_host_csr(
-	CSR_MHSA&          mhsa,
+	MHSA<CSR, CSR>     mhsa,
 	const Config&      config,
-	CSRWeights&        weights,
+	Weights<CSR>       weights,
 	const std::string& base_data_path,
 	const std::string& pruning_method,
 	const std::string& sparsity,
 	AttentionMechanism am);
 
 void load_host_csc(
-	CSC_MHSA&          mhsa,
+	MHSA<CSC, CSR>&    mhsa,
 	const Config&      config,
-	CSCWeights&        weights,
+	Weights<CSC>       weights,
 	const std::string& base_data_path,
 	const std::string& pruning_method,
 	const std::string& sparsity,
 	AttentionMechanism am);
 
-std::vector<float> csr_to_row_major(const CSRMatrix& mat);
-std::vector<float> csc_to_col_major(const CSCMatrix& mat);
+std::vector<float> csr_to_row_major(const CSR& mat);
+std::vector<float> csc_to_col_major(const CSC& mat);
 float              measure_sparsity(void* s, size_t size);
 size_t             calc_byte_size_compressed_sparse(const size_t n, const size_t nnz);

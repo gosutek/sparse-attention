@@ -1,7 +1,6 @@
 #include "common.h"
 #include "matrix.h"
 #include "model.h"
-#include <cmath>
 
 #ifndef MAT_SIZE
 #	define MAT_SIZE 512
@@ -215,7 +214,8 @@ __global__ void softmax(
 	set_elem_rm(res, k, y, x, val);
 }
 
-void run(CSC_MHSA mhsa)
+// TODO: Template this?
+void run(MHSA<CSC, CSR>& mhsa)
 {
 	// TODO: Find a better name
 	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;  // k OR v's size
@@ -235,19 +235,19 @@ void run(CSC_MHSA mhsa)
 
 	char* ptr = reinterpret_cast<char*>(x) + b_x_size;
 
-	CSCMatrix d_wq = mhsa.weights.w_q[0];
+	CSC d_wq = mhsa.weights.w_q[0];
 	d_wq.partition(ptr);
 	ptr += d_wq.b_size;
 
-	CSCMatrix d_wk = mhsa.weights.w_k[0];
+	CSC d_wk = mhsa.weights.w_k[0];
 	d_wk.partition(ptr);
 	ptr += d_wk.b_size;
 
-	CSCMatrix d_wv = mhsa.weights.w_v[0];
+	CSC d_wv = mhsa.weights.w_v[0];
 	d_wv.partition(ptr);
 	ptr += d_wv.b_size;
 
-	CSCMatrix d_wo = mhsa.weights.w_o[0];
+	CSC d_wo = mhsa.weights.w_o[0];
 	d_wo.partition(ptr);
 	ptr += d_wo.b_size;
 

@@ -19,7 +19,7 @@
 		}                                                              \
 	} while (0)
 
-void run(CSC_MHSA mhsa);
+void run(MHSA<CSC, CSR>& mhsa);
 void cuda_dealloc_host(void* ptr);
 
 // struct ReadExpectedOutput
@@ -102,8 +102,8 @@ static std::vector<float> read_row_major_from_rm(const std::filesystem::path& fi
 			THROW_RUNTIME_ERROR("Expected file not found for testing: " + expected_file.string());
 		}
 		std::cout << "Testing for file: " << filepath << "\n";
-		CSR_MHSA           mhsa;
-		CSRMatrix&         w_q = mhsa.weights.w_q[0];
+		MHSA<CSR, CSR>     mhsa;
+		CSR&               w_q = mhsa.weights.w_q[0];
 		size_t             matrix_size = w_q.rows * w_q.cols;
 		std::vector<float> actual_matrix = csr_to_row_major(w_q);
 		std::vector<float> expected_matrix = read_row_major_from_rm(expected_file, matrix_size);
@@ -203,7 +203,7 @@ static std::vector<float> host_spmm_rm_rm(std::vector<float> a, std::vector<floa
 	}
 }
 
-void print_mhsa(const CSC_MHSA& mhsa)
+void print_mhsa(const MHSA<CSC, CSR>& mhsa)
 {
 	std::cout << "Printing CSC::col_ptr\n";
 	for (size_t i = 0; i < mhsa.weights.w_q[0].col_ptr_size; ++i) {
@@ -223,7 +223,7 @@ void print_mhsa(const CSC_MHSA& mhsa)
 
 static void test_dev_spmm()
 {
-	CSC_MHSA mhsa;
+	MHSA<CSC, CSR> mhsa;
 
 	const char* base_data_path = "data/dlmc/transformer/";
 	const char* s_pruning_method = "l0_regularization/";
@@ -231,7 +231,7 @@ static void test_dev_spmm()
 
 	load_host_csc(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, AttentionMechanism::SelfAttention);
 
-	float*             a_ptr = mhsa.weights.x;
+	float*             a_ptr = mhsa.x;
 	std::vector<float> a(a_ptr, a_ptr + mhsa.config.input_sequence_size * MAT_SIZE);
 
 	std::vector<float> b = csc_to_col_major(mhsa.weights.w_q[0]);

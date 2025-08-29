@@ -67,7 +67,7 @@ size_t calc_byte_size_compressed_sparse(const size_t n, const size_t nnz)
 	return b_ptr_size + b_idx_size + b_val_size;
 }
 
-std::vector<float> csr_to_row_major(const CSRMatrix& mat)
+std::vector<float> csr_to_row_major(const CSR& mat)
 {
 	std::vector<float> res(mat.rows * mat.cols, 0.0f);
 
@@ -79,7 +79,7 @@ std::vector<float> csr_to_row_major(const CSRMatrix& mat)
 	return res;
 }
 
-std::vector<float> csc_to_col_major(const CSCMatrix& mat)
+std::vector<float> csc_to_col_major(const CSC& mat)
 {
 	std::vector<float> res(mat.rows * mat.cols, 0.0f);
 
@@ -91,7 +91,7 @@ std::vector<float> csc_to_col_major(const CSCMatrix& mat)
 	return res;
 }
 
-static void csr_to_csc(CSCMatrix& mat, const std::vector<uint32_t>& row_ptr_vec, const std::vector<uint32_t>& col_idx_vec)
+static void csr_to_csc(CSC& mat, const std::vector<uint32_t>& row_ptr_vec, const std::vector<uint32_t>& col_idx_vec)
 {
 	std::vector<uint32_t> col_count(mat.cols, 0);
 	for (size_t i = 0; i < mat.nnz; ++i) {
@@ -128,7 +128,7 @@ float measure_sparsity(void* s, size_t size)
 	return nz / size;
 }
 
-static Tensor read_tensor(DLMC& dlmc, BodyType bt, AttentionMechanism am, size_t layer, SparseMatrixType sparse_matrix_type)
+static Tensor read_tensor(const DLMC& dlmc, const BodyType bt, const AttentionMechanism am, const size_t layer, const SparseMatrixType sparse_matrix_type)
 {
 	Tensor tensor;
 	tensor.bt = bt;
@@ -171,7 +171,7 @@ static Tensor read_tensor(DLMC& dlmc, BodyType bt, AttentionMechanism am, size_t
 	return tensor;
 }
 
-static CSRMatrix parse_csr_dlmc(void* dst, const std::filesystem::path& filepath)
+static CSR parse_csr_dlmc(void* dst, const std::filesystem::path& filepath)
 {
 	std::ifstream file_stream(filepath, std::ios_base::in);
 
@@ -179,7 +179,7 @@ static CSRMatrix parse_csr_dlmc(void* dst, const std::filesystem::path& filepath
 		THROW_RUNTIME_ERROR(filepath.string());
 	}
 
-	CSRMatrix  res;
+	CSR        res;
 	DLMCHeader header = parse_dlmc_header(file_stream);
 	res.rows = header.n_rows;
 	res.cols = header.n_cols;
@@ -220,7 +220,7 @@ static CSRMatrix parse_csr_dlmc(void* dst, const std::filesystem::path& filepath
 	return res;
 }
 
-static CSCMatrix parse_csc_dlmc(void* dst, const std::filesystem::path& filepath)
+static CSC parse_csc_dlmc(void* dst, const std::filesystem::path& filepath)
 {
 	std::ifstream file_stream(filepath, std::ios_base::in);
 
@@ -229,7 +229,7 @@ static CSCMatrix parse_csc_dlmc(void* dst, const std::filesystem::path& filepath
 	}
 
 	DLMCHeader header = parse_dlmc_header(file_stream);
-	CSCMatrix  res(header.n_rows, header.n_cols, header.nnz);
+	CSC        res(header.n_rows, header.n_cols, header.nnz);
 
 	res.col_ptr = reinterpret_cast<uint32_t*>(dst);
 
@@ -269,9 +269,9 @@ static CSCMatrix parse_csc_dlmc(void* dst, const std::filesystem::path& filepath
 }
 
 void load_host_csr(
-	CSR_MHSA&          mhsa,
+	MHSA<CSR, CSR>     mhsa,
 	const Config&      config,
-	CSRWeights&        weights,
+	Weights<CSR>       weights,
 	const std::string& base_data_path,
 	const std::string& pruning_method,
 	const std::string& sparsity,
@@ -330,6 +330,7 @@ void load_host_csr(
 
 			block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(block_start) + dlmc.dec_self_attention_tensors[i].b_size);
 		}
+
 	} catch (const std::exception& e) {
 		cuda_dealloc_host(mhsa.host);
 		throw;
@@ -337,9 +338,9 @@ void load_host_csr(
 }
 
 void load_host_csc(
-	CSC_MHSA&          mhsa,
+	MHSA<CSC, CSR>&    mhsa,
 	const Config&      config,
-	CSCWeights&        weights,
+	Weights<CSC>       weights,
 	const std::string& base_data_path,
 	const std::string& pruning_method,
 	const std::string& sparsity,
@@ -358,6 +359,9 @@ void load_host_csc(
 
 	size_t b_embeddings_size = config.input_sequence_size * dlmc.dec_self_attention_tensors[0].shape[0].n_rows * sizeof(float);
 	mhsa.b_size += b_embeddings_size;
+
+	mhsa.mask = read_mask(dlmc, mhsa.config.input_sequence_size, 2, 95);
+	mhsa.b_size += mhsa.mask.b_size;
 
 	/*
      * Allocate for

@@ -4,13 +4,13 @@
 
 void print_device_properties();
 void cuda_dealloc_host(void* ptr);
-void run(CSC_MHSA mhsa);
+void run(MHSA<CSC, CSR>& mhsa);
 
 int main(int argc, char* argv[])
 {
 	print_device_properties();
 
-	CSC_MHSA mhsa;
+	MHSA<CSC, CSR> mhsa;
 
 	const char* base_data_path = "data/dlmc/transformer/";
 	const char* s_pruning_method = "l0_regularization/";
