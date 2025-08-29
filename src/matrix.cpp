@@ -131,9 +131,6 @@ float measure_sparsity(void* s, size_t size)
 static Tensor read_tensor(const DLMC& dlmc, const BodyType bt, const AttentionMechanism am, const size_t layer, const SparseMatrixType sparse_matrix_type)
 {
 	Tensor tensor;
-	tensor.bt = bt;
-	tensor.am = am;
-	tensor.layer = layer;
 
 	tensor.path = dlmc.base_path + dlmc.pruning_method + dlmc.sparsity;
 
@@ -160,7 +157,6 @@ static Tensor read_tensor(const DLMC& dlmc, const BodyType bt, const AttentionMe
 		std::ifstream file_stream(full_path);
 		DLMCHeader    header = parse_dlmc_header(file_stream);
 
-		// Different total byte size calculation depending on the sparse matrix type.
 		if (sparse_matrix_type == SparseMatrixType::CSC) {
 			tensor.b_size += calc_byte_size_compressed_sparse(header.n_cols, header.nnz);
 		} else {
@@ -292,6 +288,9 @@ void load_host_csr(
 	size_t b_embeddings_size = config.input_sequence_size * dlmc.dec_self_attention_tensors[0].shape[0].n_rows * sizeof(float);
 	mhsa.b_size += b_embeddings_size;
 
+	mhsa.mask = read_mask(dlmc, mhsa.config.input_sequence_size, 2, 95);
+	mhsa.b_size += mhsa.mask.b_size;
+
 	/*
      * Allocate for
      * w_q (512, 512) float
@@ -308,8 +307,8 @@ void load_host_csr(
 		THROW_RUNTIME_ERROR("Failed to allocate page-locked host memory\n");
 	}
 
-	weights.x = reinterpret_cast<float*>(mhsa.host);
-	generate_token_embeddings(weights.x, config.input_sequence_size);
+	mhsa.x = reinterpret_cast<float*>(mhsa.host);
+	generate_token_embeddings(mhsa.x, config.input_sequence_size);
 	try {
 		void* block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(mhsa.host) + b_embeddings_size);
 		for (size_t i = 0; i < config.n_layers; ++i) {
@@ -380,8 +379,8 @@ void load_host_csc(
 	}
 
 	try {
-		weights.x = reinterpret_cast<float*>(mhsa.host);
-		generate_token_embeddings(weights.x, config.input_sequence_size);
+		mhsa.x = reinterpret_cast<float*>(mhsa.host);
+		generate_token_embeddings(mhsa.x, config.input_sequence_size);
 		void* block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(mhsa.host) + b_embeddings_size);
 		for (size_t i = 0; i < config.n_layers; ++i) {
 			void* w_q_ptr = block_start;
