@@ -72,7 +72,7 @@ void cuda_dealloc_host(void* ptr);
 // 			ASSERT_EQ(expected.no_blocks, hrpb_ptr->packed_blocks.size(), "Block size mismatch");
 // 			ASSERT_EQ(expected.hrpb, *hrpb_ptr, "Structs are different");
 //
-// 			printf("Test successful\n");
+//          std::cout << "Test successful\n";
 // 		}
 // 	}
 // }
@@ -101,7 +101,7 @@ static std::vector<float> read_row_major_from_rm(const std::filesystem::path& fi
 		if (!std::filesystem::exists(expected_file)) {
 			THROW_RUNTIME_ERROR("Expected file not found for testing: " + expected_file.string());
 		}
-		std::cout << "Testing for file: " << filepath << "\n";
+		std::cout << std::format("Testing for file: {}\n", filepath.string());
 		MHSA<CSR, CSR>     mhsa;
 		CSR&               w_q = mhsa.weights.w_q[0];
 		size_t             matrix_size = w_q.rows * w_q.cols;
@@ -110,7 +110,7 @@ static std::vector<float> read_row_major_from_rm(const std::filesystem::path& fi
 
 		ASSERT_EQ(expected_matrix, actual_matrix, "The matrices differ in values.\n");
 
-		printf("Test successful\n");
+		std::cout << "Test successful\n";
 	}
 }
 
@@ -167,7 +167,7 @@ static std::vector<float> host_spmm_rm_rm(std::vector<float> a, std::vector<floa
 		if (!std::filesystem::exists(b_matrix_file)) {
 			THROW_RUNTIME_ERROR("Expected file not found for testing: " + b_matrix_file.string());
 		}
-		std::cout << "Testing 'host_spmm' with file: " << filepath << "\n";
+		std::cout << std::format("Testing 'host_spmm' with file: {}\n", filepath.string());
 		// WARN: change hardcoded values
 		std::vector<float> a = read_row_major_from_rm(a_matrix_file, m * k);
 		std::vector<float> b = read_row_major_from_rm(b_matrix_file, k * n);
@@ -176,7 +176,7 @@ static std::vector<float> host_spmm_rm_rm(std::vector<float> a, std::vector<floa
 
 		ASSERT_EQ(expected, actual, "The matrices differ in values.\n");
 
-		printf("Test successful\n");
+		std::cout << "Test successful\n";
 	}
 }
 
@@ -191,7 +191,7 @@ static std::vector<float> host_spmm_rm_rm(std::vector<float> a, std::vector<floa
 		if (!std::filesystem::exists(b_matrix_file)) {
 			THROW_RUNTIME_ERROR("Expected file not found for testing: " + b_matrix_file.string());
 		}
-		std::cout << "Testing 'host_spmm' with file: " << filepath << "\n";
+		std::cout << std::format("Testing 'host_spmm' with file: {}\n", filepath.string());
 		std::vector<float> a = read_row_major_from_rm(a_matrix_file, m * k);
 		std::vector<float> b = read_row_major_from_rm(b_matrix_file, k * n);
 		std::vector<float> actual = host_spmm_rm_rm(a, b, m, k, n);
@@ -199,7 +199,7 @@ static std::vector<float> host_spmm_rm_rm(std::vector<float> a, std::vector<floa
 
 		ASSERT_EQ(expected, actual, "The matrices differ in values.\n");
 
-		printf("Test successful\n");
+		std::cout << "Test successful\n";
 	}
 }
 
@@ -207,17 +207,17 @@ void print_mhsa(const MHSA<CSC, CSR>& mhsa)
 {
 	std::cout << "Printing CSC::col_ptr\n";
 	for (size_t i = 0; i < mhsa.weights.w_q[0].col_ptr_size; ++i) {
-		std::cout << mhsa.weights.w_q[0].col_ptr[i] << "\n";
+		std::cout << std::format("{}\n", mhsa.weights.w_q[0].col_ptr[i]);
 	}
 
 	std::cout << "Printing CSC::row_idx\n";
 	for (size_t i = 0; i < mhsa.weights.w_q[0].row_idx_size; ++i) {
-		std::cout << mhsa.weights.w_q[0].row_idx[i] << "\n";
+		std::cout << std::format("{}\n", mhsa.weights.w_q[0].row_idx[i]);
 	}
 
 	std::cout << "Printing CSC::val\n";
 	for (size_t i = 0; i < mhsa.weights.w_q[0].val_size; ++i) {
-		std::cout << mhsa.weights.w_q[0].val[i] << "\n";
+		std::cout << std::format("{}\n", mhsa.weights.w_q[0].val[i]);
 	}
 }
 
@@ -241,7 +241,7 @@ static void test_dev_spmm()
 	std::vector<float> actual(reinterpret_cast<float*>(mhsa.host), reinterpret_cast<float*>(mhsa.host) + mhsa.config.input_sequence_size * MAT_SIZE);
 	ASSERT_EQ(expected, actual, "The matrices differ in values.\n");
 
-	printf("Test successful\n");
+	std::cout << "Test successful\n";
 	cuda_dealloc_host(mhsa.host);
 }
 

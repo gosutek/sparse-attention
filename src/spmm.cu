@@ -67,12 +67,29 @@ void print_device_properties()
 	cudaDeviceProp dev_prop = {};
 	CUDA_CHECK(cudaGetDeviceProperties(&dev_prop, 0));
 
-	printf(
-		"# CUDA: %s, compute %d.%d, %d SMs, %.1f GiB, peak bandwidth %.0f GB/s\n- Maximum threads per block ~ %d\n",
-		dev_prop.name, dev_prop.major, dev_prop.minor, dev_prop.multiProcessorCount,
-		static_cast<double>(dev_prop.totalGlobalMem) / (1024 * 1024 * 1024),
-		static_cast<double>(dev_prop.memoryClockRate) * (dev_prop.memoryBusWidth / 8) * 2 / 1e6,
-		dev_prop.maxThreadsPerBlock);
+	std::cout << std::format(
+		"- {:30}: {}\n"
+		"- {:30}: {}.{}\n"
+		"- {:30}: {}\n"
+		"- {:30}: {}\n"
+		"- {:30}: {}\n"
+		"- {:30}: {}\n"
+		"- {:30}: {}\n"
+		"- {:30}: {} MB\n"
+		"- {:30}: {} KB\n"
+		"- {:30}: {} B\n"
+		"- {:30}: {}\n",
+		"Name", dev_prop.name,
+		"Compute Capability", dev_prop.major, dev_prop.minor,
+		"Max threads per block", dev_prop.maxThreadsPerBlock,
+		"Max threads per SM", dev_prop.maxThreadsPerMultiProcessor,
+		"Threads per warp", dev_prop.warpSize,
+		"Max regs per block", dev_prop.regsPerBlock,
+		"Max regs per SM", dev_prop.regsPerMultiprocessor,
+		"Total Global Memory", static_cast<uint32_t>(dev_prop.totalGlobalMem / 1e6),
+		"Max shared memory per block", static_cast<uint32_t>(dev_prop.sharedMemPerBlock / 1e3),
+		"Max shared memory per SM", dev_prop.sharedMemPerMultiprocessor,
+		"SM count", dev_prop.multiProcessorCount);
 }
 
 __device__ inline static float get_elem_rm(const float* const a, size_t n_cols, size_t row, size_t col)
@@ -319,7 +336,7 @@ void run(MHSA<CSC, CSR>& mhsa)
 	CUDA_CHECK(cudaEventDestroy(start));
 	CUDA_CHECK(cudaEventDestroy(stop));
 
-	std::cout << "Clock: " << time << "ms" << std::endl;
+	std::cout << std::format("Clock: {} ms", time);
 #endif
 
 	CUDA_CHECK(cudaDeviceSynchronize());

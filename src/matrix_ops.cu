@@ -303,11 +303,6 @@ static __host__ void unit_test_deserialization_kernel(PitchedMatrix* d_pcm_spars
 	CUDA_CHECK(cudaMemcpy(&h_sparse_second_element, h_sparse_res.data + 1, sizeof(__half), cudaMemcpyDeviceToHost));
 
 	CUDA_CHECK(cudaMemcpy(&h_dense_first_element, h_dense_res.data, sizeof(__half), cudaMemcpyDeviceToHost));
-
-	std::cout << "Sparse [0,0]: " << __half2float(h_sparse_first_element) << "\n";
-	std::cout << "Sparse [1,0]: " << __half2float(h_sparse_second_element) << "\n";
-
-	std::cout << "Dense [0,0]: " << __half2float(h_dense_first_element) << std::endl;
 }
 
 static __global__ void deserialization_kernel(float* const h_sparse_ptr, float* const h_dense_ptr,
@@ -345,7 +340,9 @@ static __host__ LoadBinaryOutput load_binary_into_global_mem(const std::filesyst
 	void*            host_serialized_ptr = nullptr;
 	size_t           filesize = std::filesystem::file_size(filepath);
 
-	printf("File %s with a filesize of %zu bytes will be loaded into global memory\n", filepath.c_str(), filesize);
+	std::cout << std::format(
+		"File {} with a filesize of {} bytes will be loaded into global memory\n",
+		filepath.c_str(), filesize);
 	CUDA_CHECK(cudaMallocHost(&host_serialized_ptr, filesize));
 
 	std::ifstream ifs(filepath, std::ios::binary);
@@ -442,7 +439,7 @@ __host__ void get_non_zero_col_predicate(PitchedMatrix* pcm_sparse, size_t rows,
 	for (size_t i = 0; i < 2048; i++) {
 		const bool val = h_predicate[i];
 		if (val == 0) {
-			printf("Found at %zu\n", i);
+			std::cout << std::format("Found at {}\n", i);
 		}
 	}
 	CUDA_CHECK(cudaFree(d_predicate));

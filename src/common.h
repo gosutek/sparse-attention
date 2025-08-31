@@ -2,8 +2,8 @@
 
 #include <array>
 #include <cstdint>
-#include <cstdio>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <string>

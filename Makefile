@@ -16,7 +16,7 @@ OBJECTS:=$(SOURCES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
 TEST_OBJECTS:=$(TEST_SOURCES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
 
 CFLAGS=-g $(ERROR_FLAGS) $(OPT)
-CFLAGS+=-fopenmp -mf16c -mavx2 -mfma
+CFLAGS+=-fopenmp -mf16c -mavx2 -mfma -std=c++20
 CFLAGS+=-I/opt/cuda/targets/x86_64-linux/include/
 
 CUFLAGS=-g $(OPT) -lineinfo
