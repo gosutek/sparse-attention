@@ -154,7 +154,7 @@ struct CSC
 void load_host_csr(
 	MHSA<CSR, CSR>     mhsa,
 	const Config&      config,
-	Weights<CSR>       weights,
+	Weights<CSR>&      weights,
 	const std::string& base_data_path,
 	const std::string& pruning_method,
 	const std::string& sparsity,
@@ -163,7 +163,7 @@ void load_host_csr(
 void load_host_csc(
 	MHSA<CSC, CSR>&    mhsa,
 	const Config&      config,
-	Weights<CSC>       weights,
+	Weights<CSC>&      weights,
 	const std::string& base_data_path,
 	const std::string& pruning_method,
 	const std::string& sparsity,
