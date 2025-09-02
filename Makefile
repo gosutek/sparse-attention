@@ -9,11 +9,9 @@ BUILD_DIR:=build
 SRC_DIR:=src
 EXT_DIR:=extern
 
-SOURCES:=$(filter-out src/test.cpp, $(wildcard $(SRC_DIR)/*.cu) $(wildcard $(SRC_DIR)/*.cpp))
-TEST_SOURCES:=src/test.cpp src/matrix.cpp src/spmm.cu
+SOURCES:=$(wildcard $(SRC_DIR)/*.cu) $(wildcard $(SRC_DIR)/*.cpp)
 
 OBJECTS:=$(SOURCES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
-TEST_OBJECTS:=$(TEST_SOURCES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
 
 CFLAGS=-g $(ERROR_FLAGS) $(OPT)
 CFLAGS+=-fopenmp -mf16c -mavx2 -mfma -std=c++20
@@ -45,10 +43,6 @@ bounds: $(BUILD_DIR)/cute
 $(BUILD_DIR)/cute: $(OBJECTS)
 	@mkdir -p $(@D)
 	$(NVCC) $(CUFLAGS) $(OBJECTS) -o $@
-
-$(BUILD_DIR)/cute_test: $(TEST_OBJECTS)
-	@mkdir -p $(@D)
-	$(NVCC) $(CUFLAGS) $(TEST_OBJECTS) -o $@
 
 $(BUILD_DIR)/%.cpp.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
