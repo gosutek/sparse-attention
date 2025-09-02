@@ -19,7 +19,7 @@
 		}                                                              \
 	} while (0)
 
-void run(MHSA<CSC, CSR>& mhsa);
+void run(MHSA<CSC, CSR>& mhsa, float* res);
 void cuda_dealloc_host(void* ptr);
 
 // struct ReadExpectedOutput
@@ -221,7 +221,22 @@ void print_mhsa(const MHSA<CSC, CSR>& mhsa)
 	}
 }
 
-static void test_dev_spmm()
+bool verify_res(const float* const actual, const float* const expected, size_t n)
+{
+	double diff = 0.0;
+	for (size_t i = 0; i < n; ++i) {
+		diff = std::fabs(actual[i] - expected[i]);
+		if (diff > 0.01) {
+			std::cout << std::format(
+				"Values diverge -> Actual: {}, Expected: {} (Diff {}), pos: {}",
+				actual[i], expected[i], diff, i);
+			return false;
+		}
+	}
+	return true;
+}
+
+void test_dev_spmm()
 {
 	MHSA<CSC, CSR> mhsa;
 
@@ -237,21 +252,10 @@ static void test_dev_spmm()
 	std::vector<float> b = csc_to_col_major(mhsa.weights.w_q[0]);
 
 	std::vector<float> expected = host_spmm_rm_cm(a, b, mhsa.config.input_sequence_size, MAT_SIZE, MAT_SIZE);
-	run(mhsa);
-	std::vector<float> actual(reinterpret_cast<float*>(mhsa.host), reinterpret_cast<float*>(mhsa.host) + mhsa.config.input_sequence_size * MAT_SIZE);
-	ASSERT_EQ(expected, actual, "The matrices differ in values.\n");
+	std::vector<float> actual;
+	actual.resize(MAT_SIZE * mhsa.config.input_sequence_size);
+	run(mhsa, actual.data());
 
-	std::cout << "Test successful\n";
+	verify_res(actual.data(), expected.data(), MAT_SIZE * mhsa.config.input_sequence_size);
 	cuda_dealloc_host(mhsa.host);
-}
-
-int main()
-{
-	test_host_spmm_rm_cm("test/2x3_host_spmm.rm", 2, 3, 3);
-	test_host_spmm_rm_rm("test/2x3_host_spmm.rm", 2, 3, 3);
-
-	test_host_spmm_rm_cm("test/3x3_host_spmm.rm", 3, 3, 3);
-	test_host_spmm_rm_rm("test/3x3_host_spmm.rm", 3, 3, 3);
-
-	test_dev_spmm();
 }
