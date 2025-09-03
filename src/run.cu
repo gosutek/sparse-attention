@@ -142,9 +142,77 @@ void print_x(float* x, size_t size)
 	std::cout << "---------------------------------------------------" << std::endl;
 }
 
+void print_help()
+{
+	const std::string help_msg = std::format(
+		"usage: cute [options]\n\n"
+		"Options:\n"
+		"\t-b <kernel number>      Benchmark a kernel, use -l [ --list ] for a list of kernel numbers.\n"
+		"\t-l                      Enumerate kernels for use with -b.\n"
+		"\t-m                      Run the entire pipeline.\n"
+		"\t-p                      Print device properties.\n");
+
+	std::cout << help_msg << "\n";
+}
+
+void list_kernels()
+{
+	const std::string kernel_msg =
+		"List of kernels:\n\n"
+		"1. SpMM\n"
+		"2. SDDMM\n"
+		"3. SoftMax\n";
+
+	std::cout << kernel_msg << "\n";
+}
+
 int main(int argc, char* argv[])
 {
-	// print_device_properties();
+	if (argc < 2) {
+		print_help();
+		return EXIT_FAILURE;
+	}
+
+	for (size_t i = 1; i < argc; ++i) {
+		if (argv[i][0] != '-') {
+			print_help();
+			return EXIT_FAILURE;
+		}
+		if (strlen(argv[i]) != 2) {
+			print_help();
+			return EXIT_FAILURE;
+		}
+		if (argv[i][1] == 'b') {
+			if (i + 1 >= argc) {
+				print_help();
+				return EXIT_FAILURE;
+			}
+
+			int kernel = std::atoi(argv[i + 1]);
+			++i;
+
+			switch (kernel) {
+			case 1:
+				std::cout << "Benchmark SpMM\n";
+				break;
+			case 2:
+				std::cout << "Benchmark SDDMM\n";
+				break;
+			case 3:
+				std::cout << "Benchmark wtf\n";
+				break;
+			default:
+				print_help();
+				return EXIT_FAILURE;
+			}
+		} else if (argv[i][1] == 'l') {
+			list_kernels();
+		} else if (argv[i][1] == 'm') {
+			// Run entire pipeline
+		} else if (argv[i][1] == 'p') {
+			print_device_properties();
+		}
+	}
 
 	// MHSA<CSC, CSR> mhsa;
 	//
