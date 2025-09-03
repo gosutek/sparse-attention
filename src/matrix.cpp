@@ -167,6 +167,22 @@ Tensor read_tensor(const DLMC& dlmc, const BodyType bt, const AttentionMechanism
 	return tensor;
 }
 
+static CSR read_mask(const DLMC& dlmc, const size_t sequence_size, const size_t band_size_ratio, const size_t sparsity)
+{
+	const std::filesystem::path path = std::format("{}{}{}m_{}_0{}_{}.smtx",
+		dlmc.base_path, dlmc.pruning_method, dlmc.sparsity,
+		sequence_size, band_size_ratio, sparsity);
+
+	if (!std::filesystem::exists(path) || !std::filesystem::is_regular_file(path)) {
+		THROW_RUNTIME_ERROR("Mask doesn't exist\n");
+	}
+
+	std::ifstream file_stream(path);
+	DLMCHeader    header = parse_dlmc_header(file_stream);
+
+	return { header.n_rows, header.n_cols, header.nnz };
+}
+
 static CSR parse_csr_dlmc(void* dst, const std::filesystem::path& filepath)
 {
 	std::ifstream file_stream(filepath, std::ios_base::in);
@@ -400,6 +416,9 @@ void load_host_csc(
 
 			block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(block_start) + dlmc.dec_self_attention_tensors[i].b_size);
 		}
+
+		// TODO: refactor how you pass the path
+		mhsa.mask = parse_csr_dlmc(reinterpret_cast<void*>(block_start), dlmc.base_path + dlmc.pruning_method + dlmc.sparsity + "m_32_02_95.smtx");
 	} catch (const std::exception& e) {
 		cuda_dealloc_host(mhsa.host);
 		throw;
