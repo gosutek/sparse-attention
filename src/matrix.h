@@ -173,3 +173,4 @@ std::vector<float> csr_to_row_major(const CSR& mat);
 std::vector<float> csc_to_col_major(const CSC& mat);
 float              measure_sparsity(void* s, size_t size);
 size_t             calc_byte_size_compressed_sparse(const size_t n, const size_t nnz);
+Tensor             read_tensor(const DLMC& dlmc, const BodyType bt, const AttentionMechanism am, const size_t layer, const SparseMatrixType sparse_matrix_type);

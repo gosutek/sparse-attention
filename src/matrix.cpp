@@ -128,7 +128,7 @@ float measure_sparsity(void* s, size_t size)
 	return nz / size;
 }
 
-static Tensor read_tensor(const DLMC& dlmc, const BodyType bt, const AttentionMechanism am, const size_t layer, const SparseMatrixType sparse_matrix_type)
+Tensor read_tensor(const DLMC& dlmc, const BodyType bt, const AttentionMechanism am, const size_t layer, const SparseMatrixType sparse_matrix_type)
 {
 	Tensor tensor;
 
