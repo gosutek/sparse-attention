@@ -28,6 +28,7 @@ else
 endif
 
 CUFLAGS+=-I/opt/cuda/targets/x86_64-linux/include/
+CUFLAGS+=-L/opt/cuda/targets/x86_64-linux/lib/ -lcusparse
 CUFLAGS+=-Wno-deprecated-gpu-targets
 
 all: $(BUILD_DIR)/cute

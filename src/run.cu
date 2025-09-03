@@ -42,21 +42,24 @@ void run_cusparse_spmm(cusparseHandle_t handle, void* col_ptr, void* row_idx, vo
 		CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
 
 	cusparseDnMatDescr_t b, c;
-	CUSPARSE_CHECK(cusparseCreateDnMat(&b, k, m, k, x, CUDA_R_32F, CUSPARSE_ORDER_ROW));
-	CUSPARSE_CHECK(cusparseCreateDnMat(&c, n, m, n, res, CUDA_R_32F, CUSPARSE_ORDER_ROW));
+	// CUSPARSE_CHECK(cusparseCreateDnMat(&b, k, m, k, x, CUDA_R_32F, CUSPARSE_ORDER_COL));
+	// CUSPARSE_CHECK(cusparseCreateDnMat(&c, n, m, n, res, CUDA_R_32F, CUSPARSE_ORDER_COL));
+
+	CUSPARSE_CHECK(cusparseCreateDnMat(&b, m, k, k, x, CUDA_R_32F, CUSPARSE_ORDER_ROW));
+	CUSPARSE_CHECK(cusparseCreateDnMat(&c, n, m, n, res, CUDA_R_32F, CUSPARSE_ORDER_COL));
 
 	size_t work_buffer_size = 0;
 	CUSPARSE_CHECK(cusparseSpMM_bufferSize(handle,
-		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
+		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
 		&alpha, a, b, &beta, c,
-		CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT, &work_buffer_size));
+		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, &work_buffer_size));
 
 	void* work_buffer = cuda_malloc_device(work_buffer_size);
 
 	CUSPARSE_CHECK(cusparseSpMM_preprocess(handle,
-		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
+		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
 		&alpha, a, b, &beta, c,
-		CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT, work_buffer));
+		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, work_buffer));
 
 #if defined(__CHRONO__)
 	cudaEvent_t start, stop;
@@ -69,7 +72,7 @@ void run_cusparse_spmm(cusparseHandle_t handle, void* col_ptr, void* row_idx, vo
 #endif
 
 	CUSPARSE_CHECK(cusparseSpMM(handle,
-		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
+		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
 		&alpha, a, b, &beta, c, CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT, work_buffer));
 
 #if defined(__CHRONO__)
@@ -80,7 +83,7 @@ void run_cusparse_spmm(cusparseHandle_t handle, void* col_ptr, void* row_idx, vo
 	CUDA_CHECK(cudaEventDestroy(start));
 	CUDA_CHECK(cudaEventDestroy(stop));
 
-	std::cout << std::format("Clock: {} ms", time);
+	std::cout << std::format("cuSparse kernel: {} ms\n", time);
 #endif
 
 	cuda_dealloc_device(work_buffer);
@@ -150,13 +153,12 @@ int main(int argc, char* argv[])
 	// const char* sparsity = "0.5/";
 	//
 	// load_host_csc(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, AttentionMechanism::SelfAttention);
-	// print_x(mhsa.weights.w_q[0].val, mhsa.config.input_sequence_size * MAT_SIZE);
+	//
 	// float* cusparse_res = (float*)std::malloc(sizeof(float) * MAT_SIZE * mhsa.config.input_sequence_size);
 	// run_spmm(mhsa, cusparse_res);
-	// print_x(mhsa.weights.w_q[0].val, mhsa.config.input_sequence_size * MAT_SIZE);
+	//
 	// float* cute_res = (float*)std::malloc(sizeof(float) * MAT_SIZE * mhsa.config.input_sequence_size);
 	// run(mhsa, cute_res);
-	// print_x(mhsa.weights.w_q[0].val, mhsa.config.input_sequence_size * MAT_SIZE);
 	//
 	// verify_res(cute_res, cusparse_res, sizeof(float) * MAT_SIZE * mhsa.config.input_sequence_size);
 	//
@@ -164,8 +166,6 @@ int main(int argc, char* argv[])
 	// std::free(cute_res);
 	// cuda_dealloc_host(mhsa.host);
 	// cuda_dealloc_device(mhsa.dev);
-
-	test_dev_spmm();
 	try {
 	} catch (const std::exception& e) {
 		std::cerr << "Exception: " << e.what() << "\n";
