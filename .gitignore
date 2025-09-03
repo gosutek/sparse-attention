@@ -7,4 +7,5 @@ valgrind*
 sanitizer*
 *.log
 *nsys-rep
+*ncu-rep
 *.sqlite
