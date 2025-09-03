@@ -230,8 +230,8 @@ void run(MHSA<CSC, CSR>& mhsa, float* res)
 	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;  // k OR v's size
 	size_t gemm_res_size = mhsa.config.input_sequence_size * mhsa.config.input_sequence_size;
 	size_t res_b_size = sizeof(float) * kv_size * 3 + gemm_res_size + 1;  // Q, K, V, gemm result, float acc for softmax
-	void*  dev = cuda_malloc_device(mhsa.b_size + res_b_size);
-	CUDA_CHECK(cudaMemcpy(dev, mhsa.host, mhsa.b_size, cudaMemcpyHostToDevice));
+	mhsa.dev = cuda_malloc_device(mhsa.b_size + res_b_size);
+	CUDA_CHECK(cudaMemcpy(mhsa.dev, mhsa.host, mhsa.b_size, cudaMemcpyHostToDevice));
 
 	/*
       * +---+-----+-----+-----+-----+---+---+---+------+-----+
@@ -239,7 +239,7 @@ void run(MHSA<CSC, CSR>& mhsa, float* res)
       * +---+-----+-----+-----+-----+---+---+---+------+-----+
    */
 
-	float* x = reinterpret_cast<float*>(dev);
+	float* x = reinterpret_cast<float*>(mhsa.dev);
 	size_t b_x_size = sizeof(float) * kv_size;
 
 	char* ptr = reinterpret_cast<char*>(x) + b_x_size;
@@ -334,5 +334,6 @@ void run(MHSA<CSC, CSR>& mhsa, float* res)
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	// TODO: can this be async?
+	// TODO: THIS NEEDS TO WRITE TO PAGE-LOCKED MEMORY NOT SOME RANDOM ALLCOATED MEMORY
 	CUDA_CHECK(cudaMemcpy(res, q_res, sizeof(float) * kv_size, cudaMemcpyDeviceToHost));
 }

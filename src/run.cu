@@ -222,9 +222,11 @@ int main(int argc, char* argv[])
 	//
 	// load_host_csc(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, AttentionMechanism::SelfAttention);
 	//
+	// TODO: Don't use malloc, instead add more space to the page-locked allocation
 	// float* cusparse_res = (float*)std::malloc(sizeof(float) * MAT_SIZE * mhsa.config.input_sequence_size);
 	// run_spmm(mhsa, cusparse_res);
 	//
+	// TODO: Don't use malloc, instead add more space to the page-locked allocation
 	// float* cute_res = (float*)std::malloc(sizeof(float) * MAT_SIZE * mhsa.config.input_sequence_size);
 	// run(mhsa, cute_res);
 	//
