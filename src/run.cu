@@ -228,7 +228,7 @@ int main(int argc, char* argv[])
 	// float* cute_res = (float*)std::malloc(sizeof(float) * MAT_SIZE * mhsa.config.input_sequence_size);
 	// run(mhsa, cute_res);
 	//
-	// verify_res(cute_res, cusparse_res, sizeof(float) * MAT_SIZE * mhsa.config.input_sequence_size);
+	// verify_res(cute_res, cusparse_res, MAT_SIZE * mhsa.config.input_sequence_size);
 	//
 	// std::free(cusparse_res);
 	// std::free(cute_res);
