@@ -29,21 +29,12 @@ enum class OutputFormat
 	CM
 };
 
-static void* cuda_malloc_device(size_t b_size)
+void* cuda_malloc_device(size_t b_size)
 {
 	void* ptr = nullptr;
 	CUDA_CHECK(cudaMalloc(&ptr, b_size));
 	return ptr;
 }
-
-// void* cuda_device_copy(void* host, size_t b_size)
-// {
-// 	void* device = nullptr;
-// 	CUDA_CHECK(cudaMalloc(&device, b_size));
-// 	// TODO: can this be async?
-// 	CUDA_CHECK(cudaMemcpy(device, host, b_size, cudaMemcpyHostToDevice));
-// 	return device;
-// }
 
 void* cuda_malloc_host(size_t b_size)
 {
@@ -222,6 +213,7 @@ __global__ void softmax(
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
 	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
 
+	// TODO: std::expf()
 	float e = std::exp(get_elem_rm(a, k, y, x));
 	atomicAdd(acc, e);
 
@@ -232,7 +224,7 @@ __global__ void softmax(
 }
 
 // TODO: Template this?
-void run(MHSA<CSC, CSR>& mhsa)
+void run(MHSA<CSC, CSR>& mhsa, float* res)
 {
 	// TODO: Find a better name
 	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;  // k OR v's size
@@ -336,13 +328,11 @@ void run(MHSA<CSC, CSR>& mhsa)
 	CUDA_CHECK(cudaEventDestroy(start));
 	CUDA_CHECK(cudaEventDestroy(stop));
 
-	std::cout << std::format("Clock: {} ms", time);
+	std::cout << std::format("Custom kernel: {} ms\n", time);
 #endif
 
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	// TODO: can this be async?
-	CUDA_CHECK(cudaMemcpy(mhsa.host, q_res, sizeof(float) * kv_size * 3 + gemm_res_size, cudaMemcpyDeviceToHost));
-
-	cuda_dealloc_device(dev);
+	CUDA_CHECK(cudaMemcpy(res, q_res, sizeof(float) * kv_size, cudaMemcpyDeviceToHost));
 }
