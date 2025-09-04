@@ -223,51 +223,71 @@ __global__ void softmax(
 	set_elem_rm(res, k, y, x, val);
 }
 
-// TODO: Template this?
-void run(MHSA<CSC, CSR>& mhsa, float* res)
+struct DevMHSA
 {
+	float *x{}, *q_res{}, *k_res{}, *v_res{}, *gemm_res{}, *softmax_acc{}, *attention{};
+	// TODO: Maybe add byte sizes here...
+
+	CSC w_q, w_k, w_v, w_o;
+};
+
+DevMHSA prepare_mhsa(MHSA<CSC, CSR>& mhsa)
+{
+	DevMHSA res;
+
 	// TODO: Find a better name
 	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;  // k OR v's size
 	size_t gemm_res_size = mhsa.config.input_sequence_size * mhsa.config.input_sequence_size;
-	size_t res_b_size = sizeof(float) * kv_size * 3 + gemm_res_size + 1;  // Q, K, V, gemm result, float acc for softmax
+
+	size_t res_b_size = sizeof(float) * (kv_size * 4 + gemm_res_size * 2 + 1);  // Q, K, V, gemm result, float acc for softmax, Attention matrix, Final Result
+
 	mhsa.dev = cuda_malloc_device(mhsa.b_size + res_b_size);
 	CUDA_CHECK(cudaMemcpy(mhsa.dev, mhsa.host, mhsa.b_size, cudaMemcpyHostToDevice));
 
 	/*
-      * +---+-----+-----+-----+-----+---+---+---+------+-----+
-      * | x | w_q | w_k | w_v | w_o | Q | K | V | QK^T | ACC |
-      * +---+-----+-----+-----+-----+---+---+---+------+-----+
+      * +---+-----+-----+-----+-----+---+---+---+------+-----+---+--------------+
+      * | x | w_q | w_k | w_v | w_o | Q | K | V | QK^T | ACC | A | Final Result |
+      * +---+-----+-----+-----+-----+---+---+---+------+-----+---+--------------+
    */
 
-	float* x = reinterpret_cast<float*>(mhsa.dev);
+	res.x = reinterpret_cast<float*>(mhsa.dev);
 	size_t b_x_size = sizeof(float) * kv_size;
 
-	char* ptr = reinterpret_cast<char*>(x) + b_x_size;
+	char* ptr = reinterpret_cast<char*>(res.x) + b_x_size;
 
-	CSC d_wq = mhsa.weights.w_q[0];
-	d_wq.partition(ptr);
-	ptr += d_wq.b_size;
+	// TODO: This call copy assignment operator of CSC
+	// check if the custom one does what you want
+	res.w_q = mhsa.weights.w_q[0];
+	res.w_q.partition(ptr);
+	ptr += res.w_q.b_size;
 
-	CSC d_wk = mhsa.weights.w_k[0];
-	d_wk.partition(ptr);
-	ptr += d_wk.b_size;
+	res.w_k = mhsa.weights.w_k[0];
+	res.w_k.partition(ptr);
+	ptr += res.w_k.b_size;
 
-	CSC d_wv = mhsa.weights.w_v[0];
-	d_wv.partition(ptr);
-	ptr += d_wv.b_size;
+	res.w_v = mhsa.weights.w_v[0];
+	res.w_v.partition(ptr);
+	ptr += res.w_v.b_size;
 
-	CSC d_wo = mhsa.weights.w_o[0];
-	d_wo.partition(ptr);
-	ptr += d_wo.b_size;
+	res.w_o = mhsa.weights.w_o[0];
+	res.w_o.partition(ptr);
+	ptr += res.w_o.b_size;
 
-	float* q_res = reinterpret_cast<float*>(ptr);
-	float* k_res = q_res + kv_size;
-	float* v_res = k_res + kv_size;
-	float* gemm_res = v_res + kv_size;
-	float* softmax_acc = gemm_res + gemm_res_size;
+	res.q_res = reinterpret_cast<float*>(ptr);
+	res.k_res = res.q_res + kv_size;
+	res.v_res = res.k_res + kv_size;
+	res.gemm_res = res.v_res + kv_size;
+	res.softmax_acc = res.gemm_res + gemm_res_size;
+	res.attention = res.softmax_acc + 1;
 
+	return res;
+}
+
+void run_mhsa(MHSA<CSC, CSR>& mhsa)
+{
+	DevMHSA      d = prepare_mhsa(mhsa);
 	const size_t m = mhsa.config.input_sequence_size;
-	const size_t n = d_wq.cols;
+	const size_t n = d.w_q.cols;
 
 	// One thread per element of the output
 	// One thread block per 32x32 submatrix of the output
@@ -297,43 +317,22 @@ void run(MHSA<CSC, CSR>& mhsa, float* res)
 		(m + softmax_block.x - 1) / softmax_block.x,
 		(m + softmax_block.y - 1) / softmax_block.y);  // This should actually be equal to (1,1) i.e. one block
 
-#if defined(__CHRONO__)
-	cudaEvent_t start, stop;
-	float       time;
-
-	CUDA_CHECK(cudaEventCreate(&start));
-	CUDA_CHECK(cudaEventCreate(&stop));
-
-	CUDA_CHECK(cudaEventRecord(start, 0));
-#endif
-
-	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<spmm_grid_sm, spmm_block_sm>>>(x, d_wq.col_ptr, d_wq.row_idx, d_wq.val, mhsa.config.input_sequence_size, d_wq.rows, d_wq.cols, q_res);
-	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<spmm_grid_sm, spmm_block_sm>>>(x, d_wk.col_ptr, d_wk.row_idx, d_wk.val, mhsa.config.input_sequence_size, d_wk.rows, d_wk.cols, k_res);
-	spmm_csc<KernelType::SharedMemory, OutputFormat::CM><<<spmm_grid_sm, spmm_block_sm>>>(x, d_wv.col_ptr, d_wv.row_idx, d_wv.val, mhsa.config.input_sequence_size, d_wv.rows, d_wv.cols, v_res);
+	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<spmm_grid_sm, spmm_block_sm>>>(d.x, d.w_q.col_ptr, d.w_q.row_idx, d.w_q.val, mhsa.config.input_sequence_size, d.w_q.rows, d.w_q.cols, d.q_res);
+	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<spmm_grid_sm, spmm_block_sm>>>(d.x, d.w_k.col_ptr, d.w_k.row_idx, d.w_k.val, mhsa.config.input_sequence_size, d.w_k.rows, d.w_k.cols, d.k_res);
+	spmm_csc<KernelType::SharedMemory, OutputFormat::CM><<<spmm_grid_sm, spmm_block_sm>>>(d.x, d.w_v.col_ptr, d.w_v.row_idx, d.w_v.val, mhsa.config.input_sequence_size, d.w_v.rows, d.w_v.cols, d.v_res);
 
 	CUDA_CHECK(cudaDeviceSynchronize());
 
-	gemm<<<gemm_grid_sm, gemm_block_sm>>>(q_res, k_res, mhsa.config.input_sequence_size, d_wq.rows, mhsa.config.input_sequence_size, gemm_res);
+	gemm<<<gemm_grid_sm, gemm_block_sm>>>(d.q_res, d.k_res, mhsa.config.input_sequence_size, d.w_q.rows, mhsa.config.input_sequence_size, d.gemm_res);
 
 	CUDA_CHECK(cudaDeviceSynchronize());
 
-	// TODO: Don't write back to gemm_res
-	softmax<<<softmax_grid, softmax_block>>>(gemm_res, mhsa.config.input_sequence_size, mhsa.config.input_sequence_size, softmax_acc, gemm_res);
-
-#if defined(__CHRONO__)
-	CUDA_CHECK(cudaEventRecord(stop, 0));
-	CUDA_CHECK(cudaEventSynchronize(stop));
-
-	CUDA_CHECK(cudaEventElapsedTime(&time, start, stop));
-	CUDA_CHECK(cudaEventDestroy(start));
-	CUDA_CHECK(cudaEventDestroy(stop));
-
-	std::cout << std::format("Custom kernel: {} ms\n", time);
-#endif
+	softmax<<<softmax_grid, softmax_block>>>(d.gemm_res, mhsa.config.input_sequence_size, mhsa.config.input_sequence_size, d.softmax_acc, d.attention);
 
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	// TODO: can this be async?
-	// TODO: THIS NEEDS TO WRITE TO PAGE-LOCKED MEMORY NOT SOME RANDOM ALLCOATED MEMORY
-	CUDA_CHECK(cudaMemcpy(res, q_res, sizeof(float) * kv_size, cudaMemcpyDeviceToHost));
+	// TODO: THIS NEEDS TO WRITE TO PAGE-LOCKED MEMORY NOT SOME RANDOM ALLOCATED MEMORY
+	//
+	// CUDA_CHECK(cudaMemcpy(res, q_res, sizeof(float) * kv_size, cudaMemcpyDeviceToHost));
 }
