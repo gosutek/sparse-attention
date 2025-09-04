@@ -128,25 +128,29 @@ float measure_sparsity(void* s, size_t size)
 	return nz / size;
 }
 
+static std::filesystem::path construct_path(const std::filesystem::path base_path, const BodyType bt, const AttentionMechanism am, const size_t layer)
+{
+	std::filesystem::path path = base_path;
+	if (bt == BodyType::Encoder) {
+		path += "body_encoder_";
+	} else {
+		path += "body_decoder_";
+	}
+	path += "layer_" + std::to_string(layer) + "_";
+
+	if (am == AttentionMechanism::SelfAttention) {
+		path += "self_attention_multihead_attention_";
+	} else {
+		path += "encdec_attention_multihead_attention_";
+	}
+	return path;
+}
+
 Tensor read_tensor(const DLMC& dlmc, const BodyType bt, const AttentionMechanism am, const size_t layer, const SparseMatrixType sparse_matrix_type)
 {
 	Tensor tensor;
 
-	tensor.path = dlmc.base_path + dlmc.pruning_method + dlmc.sparsity;
-
-	if (bt == BodyType::Encoder) {
-		tensor.path += "body_encoder_";
-	} else {
-		tensor.path += "body_decoder_";
-	}
-
-	tensor.path += "layer_" + std::to_string(layer) + "_";
-
-	if (am == AttentionMechanism::SelfAttention) {
-		tensor.path += "self_attention_multihead_attention_";
-	} else {
-		tensor.path += "encdec_attention_multihead_attention_";
-	}
+	tensor.path = construct_path(dlmc.base_path + dlmc.pruning_method + dlmc.sparsity, bt, am, layer);
 
 	for (size_t i = 0; i < dlmc.suffixes.size(); ++i) {
 		const auto full_path = tensor.path.string() + dlmc.suffixes[i];
@@ -280,7 +284,7 @@ static CSC parse_csc_dlmc(void* dst, const std::filesystem::path& filepath)
 	return res;
 }
 
-void load_host_csr(
+void mhsa_load_host_csr(
 	MHSA<CSR, CSR>     mhsa,
 	const Config&      config,
 	Weights<CSR>&      weights,
@@ -352,7 +356,7 @@ void load_host_csr(
 	}
 }
 
-void load_host_csc(
+void mhsa_load_host_csc(
 	MHSA<CSC, CSR>&    mhsa,
 	const Config&      config,
 	Weights<CSC>&      weights,
@@ -417,7 +421,7 @@ void load_host_csc(
 			block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(block_start) + dlmc.dec_self_attention_tensors[i].b_size);
 		}
 
-		// TODO: refactor how you pass the path
+		// TODO: fix the way path is passed
 		mhsa.mask = parse_csr_dlmc(reinterpret_cast<void*>(block_start), dlmc.base_path + dlmc.pruning_method + dlmc.sparsity + "m_32_02_95.smtx");
 	} catch (const std::exception& e) {
 		cuda_dealloc_host(mhsa.host);

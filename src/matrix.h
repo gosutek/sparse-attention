@@ -151,7 +151,7 @@ struct CSC
 	}
 };
 
-void load_host_csr(
+void mhsa_load_host_csr(
 	MHSA<CSR, CSR>     mhsa,
 	const Config&      config,
 	Weights<CSR>&      weights,
@@ -160,7 +160,7 @@ void load_host_csr(
 	const std::string& sparsity,
 	AttentionMechanism am);
 
-void load_host_csc(
+void mhsa_load_host_csc(
 	MHSA<CSC, CSR>&    mhsa,
 	const Config&      config,
 	Weights<CSC>&      weights,
