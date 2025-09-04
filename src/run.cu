@@ -3,6 +3,7 @@
 #include "common.h"
 #include "matrix.h"
 #include "model.h"
+#include "spmm.cuh"
 
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \
@@ -224,34 +225,22 @@ int main(int argc, char* argv[])
 		} else if (argv[i][1] == 'l') {
 			list_kernels();
 		} else if (argv[i][1] == 'm') {
-			// Run entire pipeline
+			// Run the entire pipeline
+			MHSA<CSC, CSR> mhsa;
+
+			const char* base_data_path = "data/dlmc/transformer/";
+			const char* s_pruning_method = "l0_regularization/";
+			const char* sparsity = "0.5/";
+
+			mhsa_load_host_csc(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, AttentionMechanism::SelfAttention);
+
+			run_mhsa(mhsa);
+			cuda_dealloc_host(mhsa.host);
+			cuda_dealloc_device(mhsa.dev);
 		} else if (argv[i][1] == 'p') {
 			print_device_properties();
 		}
 	}
-
-	// MHSA<CSC, CSR> mhsa;
-	//
-	// const char* base_data_path = "data/dlmc/transformer/";
-	// const char* s_pruning_method = "l0_regularization/";
-	// const char* sparsity = "0.5/";
-	//
-	// load_host_csc(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, AttentionMechanism::SelfAttention);
-	//
-	// TODO: Don't use malloc, instead add more space to the page-locked allocation
-	// float* cusparse_res = (float*)std::malloc(sizeof(float) * MAT_SIZE * mhsa.config.input_sequence_size);
-	// run_spmm(mhsa, cusparse_res);
-	//
-	// TODO: Don't use malloc, instead add more space to the page-locked allocation
-	// float* cute_res = (float*)std::malloc(sizeof(float) * MAT_SIZE * mhsa.config.input_sequence_size);
-	// run(mhsa, cute_res);
-	//
-	// verify_res(cute_res, cusparse_res, MAT_SIZE * mhsa.config.input_sequence_size);
-	//
-	// std::free(cusparse_res);
-	// std::free(cute_res);
-	// cuda_dealloc_host(mhsa.host);
-	// cuda_dealloc_device(mhsa.dev);
 	try {
 	} catch (const std::exception& e) {
 		std::cerr << "Exception: " << e.what() << "\n";

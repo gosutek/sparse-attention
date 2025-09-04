@@ -22,6 +22,7 @@ constexpr uint8_t TK = 16;
 constexpr uint8_t brick_m = 16;
 constexpr uint8_t brick_k = 4;
 
+// TODO: This is garbagio
 #define THROW_RUNTIME_ERROR(message) throw std::runtime_error(std::string(__FILE__) + ":" + std::to_string(__LINE__) + " - " + message)
 
 template <typename T>

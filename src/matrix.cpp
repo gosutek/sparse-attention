@@ -284,6 +284,23 @@ static CSC parse_csc_dlmc(void* dst, const std::filesystem::path& filepath)
 	return res;
 }
 
+static CSC read_mat(void* dst, const BodyType bt, const AttentionMechanism am, const size_t layer)
+{
+	const std::filesystem::path base_path = "data/dlmc/transformer/l0_regularization/0.5/";
+
+	std::filesystem::path path = construct_path(base_path, bt, am, layer);
+	path += "_q.smtx";
+
+	if (!std::filesystem::exists(path) || !std::filesystem::is_regular_file(path)) {
+		THROW_RUNTIME_ERROR("Matrix doesn't exist\n");
+	}
+	std::ifstream file_stream(path);
+
+	CSC mat = parse_csc_dlmc(dst, path);
+
+	return mat;
+}
+
 void mhsa_load_host_csr(
 	MHSA<CSR, CSR>     mhsa,
 	const Config&      config,
@@ -313,11 +330,12 @@ void mhsa_load_host_csr(
 
 	/*
      * Allocate for
+     * x (input_sequence_size, 512) float
      * w_q (512, 512) float
      * w_k (512, 512) float
      * w_v (512, 512) float
      * w_o (512, 512) float
-     * x (input_sequence_size, 512) float
+     * mask
      */
 
 	assert(mhsa.b_size < MAX_ALLOC);

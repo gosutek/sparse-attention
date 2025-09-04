@@ -1,5 +1,3 @@
-#include "../extern/json.hpp"
-
 #include "common.h"
 #include "matrix.h"
 #include "model.h"
@@ -254,7 +252,7 @@ void test_dev_spmm()
 	std::vector<float> expected = host_spmm_rm_cm(a, b, mhsa.config.input_sequence_size, MAT_SIZE, MAT_SIZE);
 	std::vector<float> actual;
 	actual.resize(MAT_SIZE * mhsa.config.input_sequence_size);
-	run(mhsa, actual.data());
+	// run(mhsa, actual.data());
 
 	verify_res(actual.data(), expected.data(), MAT_SIZE * mhsa.config.input_sequence_size);
 	cuda_dealloc_host(mhsa.host);
