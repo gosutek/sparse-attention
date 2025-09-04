@@ -223,6 +223,28 @@ __global__ void softmax(
 	set_elem_rm(res, k, y, x, val);
 }
 
+struct DevSpmm
+{
+	float *d{}, *res{};
+
+	CSC s;
+};
+
+static DevSpmm prepare_spmm(CSC& s, float* d, size_t m, void* host)
+{
+	DevSpmm res;
+
+	size_t input_b_size = s.b_size + m * sizeof(float);
+	size_t res_b_size = (m * s.cols) * sizeof(float);
+
+	dev = cuda_malloc_device(input_b_size + res_b_size);
+
+	return res;
+}
+
+void run_spmm(std::filesystem::path& path)
+{}
+
 struct DevMHSA
 {
 	float *x{}, *q_res{}, *k_res{}, *v_res{}, *gemm_res{}, *softmax_acc{}, *attention{};
@@ -231,7 +253,7 @@ struct DevMHSA
 	CSC w_q, w_k, w_v, w_o;
 };
 
-DevMHSA prepare_mhsa(MHSA<CSC, CSR>& mhsa)
+static DevMHSA prepare_mhsa(MHSA<CSC, CSR>& mhsa)
 {
 	DevMHSA res;
 
@@ -245,9 +267,10 @@ DevMHSA prepare_mhsa(MHSA<CSC, CSR>& mhsa)
 	CUDA_CHECK(cudaMemcpy(mhsa.dev, mhsa.host, mhsa.b_size, cudaMemcpyHostToDevice));
 
 	/*
-      * +---+-----+-----+-----+-----+---+---+---+------+-----+---+--------------+
-      * | x | w_q | w_k | w_v | w_o | Q | K | V | QK^T | ACC | A | Final Result |
-      * +---+-----+-----+-----+-----+---+---+---+------+-----+---+--------------+
+      * +---+-----+-----+-----+-----+------+---+---+---+------+-----+---+--------------+
+      * | x | w_q | w_k | w_v | w_o | mask | Q | K | V | QK^T | ACC | A | Final Result |
+      * +---+-----+-----+-----+-----+------+---+---+---+------+-----+---+--------------+
+      * +-------------HOST-----------------+----------------DEVICE---------------------+
    */
 
 	res.x = reinterpret_cast<float*>(mhsa.dev);
