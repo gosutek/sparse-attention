@@ -166,6 +166,21 @@ void list_kernels()
 	std::cout << kernel_msg << "\n";
 }
 
+void benchmark_spmm()
+{
+	// 1. Read weight
+	// 2. Generate X with sizes (32, 64, 128, 256, 512)
+	// 3. For each size
+	// 3.1 Run once
+	// 3.2 Verify result
+	// 3.3 Run 100-1000 times each
+	// 3.4 Calculate FLOPs
+	//
+	//
+	// TODO: Write a prepare_spmm() function that loads everything needed into host/dev and aligns pointers.
+	// TODO: Split run() to prepare_mhsa() and the run part.
+}
+
 int main(int argc, char* argv[])
 {
 	if (argc < 2) {
@@ -194,6 +209,7 @@ int main(int argc, char* argv[])
 			switch (kernel) {
 			case 1:
 				std::cout << "Benchmark SpMM\n";
+				// benchmark_spmm();
 				break;
 			case 2:
 				std::cout << "Benchmark SDDMM\n";
