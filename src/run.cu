@@ -184,7 +184,7 @@ int main(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 
-	for (size_t i = 1; i < argc; ++i) {
+	for (int i = 1; i < argc; ++i) {
 		if (argv[i][0] != '-') {
 			print_help();
 			return EXIT_FAILURE;
