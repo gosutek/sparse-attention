@@ -252,7 +252,7 @@ void test_dev_spmm()
 	const char* s_pruning_method = "l0_regularization/";
 	const char* sparsity = "0.5/";
 
-	load_host_csc(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, AttentionMechanism::SelfAttention);
+	mhsa_load_host_csc(mhsa, mhsa.config, mhsa.dlmc, mhsa.weights);
 
 	float*             a_ptr = mhsa.x;
 	std::vector<float> a(a_ptr, a_ptr + mhsa.config.input_sequence_size * MAT_SIZE);

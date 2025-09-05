@@ -242,7 +242,7 @@ static DevSpmm prepare_spmm(CSC& s, float* d, size_t m, void* host)
 	size_t input_b_size = s.b_size + m * sizeof(float);
 	size_t res_b_size = (m * s.cols) * sizeof(float);
 
-	dev = cuda_malloc_device(input_b_size + res_b_size);
+	// dev = cuda_malloc_device(input_b_size + res_b_size);
 
 	return res;
 }
@@ -260,6 +260,7 @@ struct DevMHSA
 
 static DevMHSA prepare_mhsa(MHSA<CSC, CSR>& mhsa)
 {
+	mhsa_load_host_csc(mhsa, mhsa.config, mhsa.dlmc, mhsa.weights);
 	DevMHSA res;
 
 	// TODO: Find a better name

@@ -1,69 +1,12 @@
 #pragma once
 
 #include "model.h"
-enum class BodyType
-{
-	Encoder,
-	Decoder
-};
-
-enum class AttentionMechanism
-{
-	SelfAttention,
-	CrossAttention
-};
 #include <vector>
 
 enum class SparseMatrixType
 {
 	CSC,
 	CSR
-};
-
-struct DLMCHeader
-{
-	size_t n_rows{}, n_cols{}, nnz{};
-};
-
-/**
- * A tensor of the 4 weight matrices
- * of a single layer
- */
-struct Tensor
-{
-	size_t b_size = 0;
-
-	std::filesystem::path path;
-
-	// Headers for W_Q, W_K, W_V, W_O
-	std::array<DLMCHeader, 4> shape;
-};
-
-/**
- * Packs whatever is needed for reading the DLMC dataset
- * given a pruning_method and sparsity
- */
-struct DLMC
-{
-	std::string base_path = "data/dlmc/transformer/";
-	std::string pruning_method = "l0_regularization/";
-	std::string sparsity = "0.5/";
-
-	std::array<const char*, 4> suffixes = { "q.smtx", "k.smtx", "v.smtx", "output_transform.smtx" };
-
-	// NOTE: Will default construct Tensors...
-	std::array<Tensor, MAX_N_LAYERS> enc_self_attention_tensors{};
-	std::array<Tensor, MAX_N_LAYERS> dec_self_attention_tensors{};
-
-	// std::array<Tensor, MAX_N_LAYERS> enc_cross_attention_tensors{};
-	// std::array<Tensor, MAX_N_LAYERS> dec_cross_attention_tensors{};
-
-	DLMC(const std::string& _base_data_path,
-		const std::string&  _pruning_method,
-		const std::string&  _sparsity) :
-		base_path(_base_data_path),
-		pruning_method(_pruning_method),
-		sparsity(_sparsity) {}
 };
 
 /**
@@ -151,13 +94,10 @@ void mhsa_load_host_csr(
 	AttentionMechanism am);
 
 void mhsa_load_host_csc(
-	MHSA<CSC, CSR>&    mhsa,
-	const Config&      config,
-	Weights<CSC>&      weights,
-	const std::string& base_data_path,
-	const std::string& pruning_method,
-	const std::string& sparsity,
-	AttentionMechanism am);
+	MHSA<CSC, CSR>& mhsa,
+	const Config&   config,
+	DLMC&           dlmc,
+	Weights<CSC>&   weights);
 
 std::vector<float> csr_to_row_major(const CSR& mat);
 std::vector<float> csc_to_col_major(const CSC& mat);

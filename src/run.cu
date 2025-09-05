@@ -223,12 +223,6 @@ int main(int argc, char* argv[])
 			// Run the entire pipeline
 			MHSA<CSC, CSR> mhsa;
 
-			const char* base_data_path = "data/dlmc/transformer/";
-			const char* s_pruning_method = "l0_regularization/";
-			const char* sparsity = "0.5/";
-
-			mhsa_load_host_csc(mhsa, mhsa.config, mhsa.weights, base_data_path, s_pruning_method, sparsity, AttentionMechanism::SelfAttention);
-
 			run_mhsa(mhsa);
 			cuda_dealloc_host(mhsa.host);
 			cuda_dealloc_device(mhsa.dev);

@@ -309,24 +309,40 @@ static CSC read_mat(void* dst, const BodyType bt, const AttentionMechanism am, c
 	return mat;
 }
 
-void mhsa_load_host_csr(
-	MHSA<CSR, CSR>     mhsa,
-	const Config&      config,
-	Weights<CSR>&      weights,
+SpmmMemoryHandle spmm_load_host_csc(
+	size_t             input_size,
 	const std::string& base_data_path,
 	const std::string& pruning_method,
-	const std::string& sparsity,
-	AttentionMechanism am)
+	const std::string& sparsity)
 {
-	DLMC dlmc = { base_data_path, pruning_method, sparsity };
+	SpmmMemoryHandle handle;
 
+	size_t b_sparse_size = MAT_SIZE * MAT_SIZE * sizeof(float);
+	size_t b_dense_size = input_size * MAT_SIZE * sizeof(float);
+
+	handle.host = cuda_malloc_host(b_sparse_size + b_dense_size);
+
+	float* dense = reinterpret_cast<float*>(handle.host);
+	generate_token_embeddings(dense, input_size);
+
+	CSC sparse = read_mat(dense + b_dense_size, BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
+
+	return handle;
+}
+
+void mhsa_load_host_csr(
+	MHSA<CSR, CSR> mhsa,
+	const Config&  config,
+	DLMC&          dlmc,
+	Weights<CSR>&  weights)
+{
 	assert(config.n_layers < MAX_N_LAYERS);
 	mhsa.b_size = 0;
 	for (size_t i = 0; i < config.n_layers; ++i) {
 		// WARN: Doing only decoder for now
 		// dlmc.enc_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Encoder, am, i);
 
-		dlmc.dec_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Decoder, am, i, SparseMatrixType::CSR);
+		dlmc.dec_self_attention_tensors[i] = read_tensor(dlmc, dlmc.bt, dlmc.am, i, SparseMatrixType::CSR);
 		mhsa.b_size += dlmc.dec_self_attention_tensors[i].b_size;
 	}
 
@@ -383,26 +399,21 @@ void mhsa_load_host_csr(
 }
 
 void mhsa_load_host_csc(
-	MHSA<CSC, CSR>&    mhsa,
-	const Config&      config,
-	Weights<CSC>&      weights,
-	const std::string& base_data_path,
-	const std::string& pruning_method,
-	const std::string& sparsity,
-	AttentionMechanism am)
+	MHSA<CSC, CSR>& mhsa,
+	const Config&   config,
+	DLMC&           dlmc,
+	Weights<CSC>&   weights)
 {
-	DLMC dlmc = { base_data_path, pruning_method, sparsity };
-
-	assert(config.n_layers < MAX_N_LAYERS);
-	for (size_t i = 0; i < config.n_layers; ++i) {
+	assert(mhsa.config.n_layers < MAX_N_LAYERS);
+	for (size_t i = 0; i < mhsa.config.n_layers; ++i) {
 		// WARN: Doing only decoder for now
 		// dlmc.enc_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Encoder, am, i);
 
-		dlmc.dec_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Decoder, am, i, SparseMatrixType::CSC);
+		dlmc.dec_self_attention_tensors[i] = read_tensor(dlmc, dlmc.bt, dlmc.am, i, SparseMatrixType::CSC);
 		mhsa.b_size += dlmc.dec_self_attention_tensors[i].b_size;
 	}
 
-	size_t b_embeddings_size = config.input_sequence_size * dlmc.dec_self_attention_tensors[0].shape[0].n_rows * sizeof(float);
+	size_t b_embeddings_size = mhsa.config.input_sequence_size * dlmc.dec_self_attention_tensors[0].shape[0].n_rows * sizeof(float);
 	mhsa.b_size += b_embeddings_size;
 
 	mhsa.mask = read_mask(dlmc, mhsa.config.input_sequence_size, 2, 95);
