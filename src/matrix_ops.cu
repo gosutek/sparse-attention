@@ -339,9 +339,9 @@ static __global__ void deserialization_kernel(float* const h_sparse_ptr, float* 
 static __host__ LoadBinaryOutput load_binary_into_global_mem(const std::filesystem::path& filepath)
 {
 	if (!std::filesystem::exists(filepath) || !std::filesystem::is_regular_file(filepath))
-		THROW_RUNTIME_ERROR("Invalid file given");
+		throw std::runtime_error("Invalid file given: " + filepath.string());
 	if (filepath.extension() != ".spmm")
-		THROW_RUNTIME_ERROR("Invalid file type given, expected: '.spmm'");
+		throw std::runtime_error("Invalid file type given, expected: '.spmm' -> given: " + filepath.string());
 
 	LoadBinaryOutput res;
 	void*            host_serialized_ptr = nullptr;

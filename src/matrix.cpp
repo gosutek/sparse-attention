@@ -163,7 +163,7 @@ Tensor read_tensor(const DLMC& dlmc, const BodyType bt, const AttentionMechanism
 	for (size_t i = 0; i < dlmc.suffixes.size(); ++i) {
 		const auto full_path = tensor.path.string() + dlmc.suffixes[i];
 		if (!std::filesystem::exists(full_path) || !std::filesystem::is_regular_file(full_path)) {
-			THROW_RUNTIME_ERROR("Tensor component doesn't exist\n");
+			throw std::runtime_error("Tensor component doesn't exist: " + full_path);
 		}
 
 		std::ifstream file_stream(full_path);
@@ -186,7 +186,7 @@ static CSR read_mask(const DLMC& dlmc, const size_t sequence_size, const size_t 
 		sequence_size, band_size_ratio, sparsity);
 
 	if (!std::filesystem::exists(path) || !std::filesystem::is_regular_file(path)) {
-		THROW_RUNTIME_ERROR("Mask doesn't exist\n");
+		throw std::runtime_error("Mask file doesn't exist: " + path.stem().string());
 	}
 
 	std::ifstream file_stream(path);
@@ -200,7 +200,7 @@ static CSR parse_csr_dlmc(void* dst, const std::filesystem::path& filepath)
 	std::ifstream file_stream(filepath, std::ios_base::in);
 
 	if (!file_stream) {
-		THROW_RUNTIME_ERROR(filepath.string());
+		throw std::runtime_error("Failed to open file stream for filepath: " + filepath.stem().string());
 	}
 
 	CSR        res;
@@ -249,7 +249,7 @@ static CSC parse_csc_dlmc(void* dst, const std::filesystem::path& filepath)
 	std::ifstream file_stream(filepath, std::ios_base::in);
 
 	if (!file_stream) {
-		THROW_RUNTIME_ERROR(filepath.string());
+		throw std::runtime_error("Failed to open file stream for filepath: " + filepath.stem().string());
 	}
 
 	DLMCHeader header = parse_dlmc_header(file_stream);
@@ -300,7 +300,7 @@ static CSC read_mat(void* dst, const BodyType bt, const AttentionMechanism am, c
 	path += "_q.smtx";
 
 	if (!std::filesystem::exists(path) || !std::filesystem::is_regular_file(path)) {
-		THROW_RUNTIME_ERROR("Matrix doesn't exist\n");
+		throw std::runtime_error("Matrix doesn't exist: " + path.stem().string());
 	}
 	std::ifstream file_stream(path);
 
@@ -350,7 +350,7 @@ void mhsa_load_host_csr(
 	mhsa.host = cuda_malloc_host(mhsa.b_size);
 
 	if (!mhsa.host) {
-		THROW_RUNTIME_ERROR("Failed to allocate page-locked host memory\n");
+		throw std::runtime_error("Failed to allocate page-locked host memory.");
 	}
 
 	mhsa.x = reinterpret_cast<float*>(mhsa.host);
@@ -421,7 +421,7 @@ void mhsa_load_host_csc(
 	mhsa.host = cuda_malloc_host(mhsa.b_size);
 
 	if (!mhsa.host) {
-		THROW_RUNTIME_ERROR("Failed to allocate page-locked host memory\n");
+		throw std::runtime_error("Failed to allocate page-locked host memory.");
 	}
 
 	try {
