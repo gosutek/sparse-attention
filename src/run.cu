@@ -1,9 +1,12 @@
 #include <cusparse.h>
+#include <format>
+#include <iostream>
 
-#include "common.h"
 #include "matrix.h"
 #include "model.h"
 #include "spmm.cuh"
+
+constexpr size_t MAT_SIZE = 512;
 
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \
@@ -133,14 +136,6 @@ void run_spmm(MHSA<CSC, CSR>& mhsa, float* res)
 
 	// TODO: can this be async?
 	CUDA_CHECK(cudaMemcpy(res, q_res, sizeof(float) * kv_size, cudaMemcpyDeviceToHost));
-}
-
-void print_x(float* x, size_t size)
-{
-	for (size_t i = 0; i < 5; ++i) {
-		std::cout << std::format("x[{}]: {}\n", i, x[i]);
-	}
-	std::cout << "---------------------------------------------------" << std::endl;
 }
 
 void print_help()

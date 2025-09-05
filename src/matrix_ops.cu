@@ -1,7 +1,14 @@
+#include <algorithm>
+#include <cstdio>
+#include <filesystem>
+#include <format>
+#include <fstream>
+#include <iostream>
+#include <numeric>
+#include <stdexcept>
+#include <vector>
 
 #include "matrix_ops.cuh"
-#include <algorithm>
-#include <numeric>
 
 // __float2half(const float a)
 // __float2half_rd(const float a) ~ round down

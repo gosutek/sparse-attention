@@ -1,17 +1,6 @@
 #pragma once
 
-#include "common.h"
 #include "model.h"
-
-/*
- * C = A*B
- * MxNxK
- * where
- * A is MxK
- * B is KxN
- * C is MxN
- */
-
 enum class BodyType
 {
 	Encoder,
@@ -23,6 +12,7 @@ enum class AttentionMechanism
 	SelfAttention,
 	CrossAttention
 };
+#include <vector>
 
 enum class SparseMatrixType
 {

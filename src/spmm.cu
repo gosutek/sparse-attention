@@ -1,6 +1,11 @@
-#include "common.h"
 #include "matrix.h"
 #include "model.h"
+
+#include <cassert>
+#include <cstdio>
+#include <filesystem>
+#include <format>
+#include <iostream>
 
 #ifndef MAT_SIZE
 #	define MAT_SIZE 512

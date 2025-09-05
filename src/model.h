@@ -1,6 +1,10 @@
 #pragma once
 
-#include "common.h"
+#include <array>
+#include <filesystem>
+#include <string>
+
+constexpr size_t MAX_N_LAYERS = 6;
 
 struct Config
 {

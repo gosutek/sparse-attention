@@ -1,7 +1,19 @@
 #pragma once
 
-#include "common.h"
 #include "cuda_fp16.h"
+#include <array>
+#include <filesystem>
+#include <vector>
+
+#include "utils.h"
+
+constexpr uint8_t TM = 32;
+constexpr uint8_t TK = 16;
+constexpr uint8_t brick_m = 16;
+constexpr uint8_t brick_k = 4;
+
+constexpr uint8_t ALIGNMENT = 128;
+constexpr uint8_t ROW_PANEL_SIZE = 32;  // I think this should be the same as TM
 
 struct COOElement
 {

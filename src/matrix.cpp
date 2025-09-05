@@ -1,9 +1,17 @@
 #include "matrix.h"
-#include "common.h"
 #include "model.h"
 
 #include <cassert>
+#include <filesystem>
+#include <format>
+#include <fstream>
 #include <random>
+#include <stdexcept>
+#include <string>
+
+constexpr size_t MAT_SIZE = 512;
+// 5 = w_q, w_k, w_v, w_o, x
+constexpr size_t MAX_ALLOC = MAX_N_LAYERS * (5 * MAT_SIZE * MAT_SIZE);
 
 void* cuda_malloc_host(size_t size);
 void  cuda_dealloc_host(void* ptr);
