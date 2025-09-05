@@ -347,19 +347,22 @@ static __host__ LoadBinaryOutput load_binary_into_global_mem(const std::filesyst
 	void*            host_serialized_ptr = nullptr;
 	size_t           filesize = std::filesystem::file_size(filepath);
 
+	if (!std::in_range<std::streamsize>(filesize)) {
+		throw std::overflow_error("Filesize overflowed 'std::streamsize' {aka 'long int'}");
+	}
 	std::cout << std::format(
 		"File {} with a filesize of {} bytes will be loaded into global memory\n",
 		filepath.c_str(), filesize);
 	CUDA_CHECK(cudaMallocHost(&host_serialized_ptr, filesize));
 
 	std::ifstream ifs(filepath, std::ios::binary);
-	ifs.read(reinterpret_cast<char*>(host_serialized_ptr), filesize);
+	ifs.read(reinterpret_cast<char*>(host_serialized_ptr), static_cast<std::streamsize>(filesize));
 
 	res.rows = *reinterpret_cast<uint32_t*>(host_serialized_ptr);
 	res.cols = *(reinterpret_cast<uint32_t*>(host_serialized_ptr) + 1);
 
-	uint32_t chunk_size = sizeof(res.rows) + sizeof(res.cols);  // the bytes occupied by the first two members (rows and cols)
-	uint32_t padding = calculate_padding(chunk_size);           // padding applied to the first two members (rows and cols)
+	size_t chunk_size = sizeof(res.rows) + sizeof(res.cols);  // the bytes occupied by the first two members (rows and cols)
+	size_t padding = calculate_padding(chunk_size);           // padding applied to the first two members (rows and cols)
 
 	const void* const host_data_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(host_serialized_ptr) + chunk_size + padding);  // should point to the start of sparse_elements
 
@@ -389,10 +392,10 @@ __host__ SpmmInput deserialize(const std::filesystem::path& filepath)
 	// Access with T* pElement = (T*)((char*)BaseAddress + Row * pitch) + Column
 	CUDA_CHECK(cudaMallocPitch(&pitched_ptr, &pitch, binary.cols * sizeof(__half), 2 * binary.rows));
 
-	dim3           block_size(16, 16);                                                      // 256 threads per block
-	const uint32_t blocks_to_cover_cols = (binary.cols + block_size.x - 1) / block_size.x;  // ceil-ed
-	const uint32_t blocks_to_cover_rows = (binary.rows + block_size.y - 1) / block_size.y;  // ceil-ed
-	dim3           grid_size(2 * blocks_to_cover_cols, 2 * blocks_to_cover_rows);           // there are two of them
+	dim3         block_size(16, 16);                                                      // 256 threads per block
+	const size_t blocks_to_cover_cols = (binary.cols + block_size.x - 1) / block_size.x;  // ceil-ed
+	const size_t blocks_to_cover_rows = (binary.rows + block_size.y - 1) / block_size.y;  // ceil-ed
+	dim3         grid_size(2 * blocks_to_cover_cols, 2 * blocks_to_cover_rows);           // there are two of them
 
 	size_t        chunk_size = binary.rows * binary.cols * sizeof(float);  // the size of sparse_elements in bytes
 	size_t        padding = calculate_padding(chunk_size);                 // padding applied to sparse_elements
