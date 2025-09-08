@@ -1,17 +1,14 @@
 #include "matrix.h"
-#include "model.h"
+#include "handle.h"
 
 #include <cassert>
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <iostream>
 #include <random>
 #include <stdexcept>
 #include <string>
-
-constexpr size_t MAT_SIZE = 512;
-// 5 = w_q, w_k, w_v, w_o, x
-constexpr size_t MAX_ALLOC = MAX_N_LAYERS * (5 * MAT_SIZE * MAT_SIZE);
 
 void* cuda_malloc_host(size_t size);
 void  cuda_dealloc_host(void* ptr);
@@ -24,16 +21,15 @@ void  cuda_dealloc_host(void* ptr);
  * x
  */
 
-static void generate_token_embeddings(void* dst, size_t input_sequence)
+void generate_token_embeddings(void* dst, size_t size)
 {
-	size_t total_size = input_sequence * MAT_SIZE;
 	float* ptr = reinterpret_cast<float*>(dst);
 
 	std::random_device                    rd;
 	std::minstd_rand                      rng(rd());
 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
 
-	for (size_t i = 0; i < total_size; ++i) {
+	for (size_t i = 0; i < size; ++i) {
 		ptr[i] = uni_real_dist(rng);
 	}
 }
@@ -41,7 +37,7 @@ static void generate_token_embeddings(void* dst, size_t input_sequence)
 /*
  * WARN: This moves the filestream pointer
  */
-static DLMCHeader parse_dlmc_header(std::ifstream& file_stream)
+DLMCHeader parse_dlmc_header(std::ifstream& file_stream)
 {
 	DLMCHeader  res;
 	std::string token;
@@ -66,7 +62,7 @@ static DLMCHeader parse_dlmc_header(std::ifstream& file_stream)
  * Accounts for non-square matrices
  * n: main dimension's size (cols for CSC, rows for CSR)
  */
-size_t calc_byte_size_compressed_sparse(const size_t n, const size_t nnz)
+size_t calc_sparse_b_size(const size_t n, const size_t nnz)
 {
 	size_t b_ptr_size = (n + 1) * sizeof(uint32_t);
 	size_t b_idx_size = nnz * sizeof(uint32_t);
@@ -136,9 +132,9 @@ float measure_sparsity(void* s, size_t size)
 	return nz / size;
 }
 
-static std::filesystem::path construct_path(const std::filesystem::path base_path, const BodyType bt, const AttentionMechanism am, const size_t layer)
+std::string construct_path(const std::filesystem::path base_path, const BodyType bt, const AttentionMechanism am, const size_t layer)
 {
-	std::filesystem::path path = base_path;
+	std::string path = base_path;
 	if (bt == BodyType::Encoder) {
 		path += "body_encoder_";
 	} else {
@@ -158,7 +154,7 @@ Tensor read_tensor(const DLMC& dlmc, const BodyType bt, const AttentionMechanism
 {
 	Tensor tensor;
 
-	tensor.path = construct_path(dlmc.base_path + dlmc.pruning_method + dlmc.sparsity, bt, am, layer);
+	std::string data_dir_string = construct_path(dlmc.base_path + dlmc.pruning_method + dlmc.sparsity, bt, am, layer);
 
 	for (size_t i = 0; i < dlmc.suffixes.size(); ++i) {
 		const auto full_path = tensor.path.string() + dlmc.suffixes[i];
@@ -170,9 +166,9 @@ Tensor read_tensor(const DLMC& dlmc, const BodyType bt, const AttentionMechanism
 		DLMCHeader    header = parse_dlmc_header(file_stream);
 
 		if (sparse_matrix_type == SparseMatrixType::CSC) {
-			tensor.b_size += calc_byte_size_compressed_sparse(header.n_cols, header.nnz);
+			tensor.b_size += calc_sparse_b_size(header.n_cols, header.nnz);
 		} else {
-			tensor.b_size += calc_byte_size_compressed_sparse(header.n_rows, header.nnz);
+			tensor.b_size += calc_sparse_b_size(header.n_rows, header.nnz);
 		}
 		tensor.shape[i] = std::move(header);
 	}
@@ -244,7 +240,7 @@ static CSR parse_csr_dlmc(void* dst, const std::filesystem::path& filepath)
 	return res;
 }
 
-static CSC parse_csc_dlmc(void* dst, const std::filesystem::path& filepath)
+CSC parse_csc_dlmc(void* dst, const std::filesystem::path& filepath)
 {
 	std::ifstream file_stream(filepath, std::ios_base::in);
 
@@ -296,8 +292,10 @@ static CSC read_mat(void* dst, const BodyType bt, const AttentionMechanism am, c
 {
 	const std::filesystem::path base_path = "data/dlmc/transformer/l0_regularization/0.5/";
 
-	std::filesystem::path path = construct_path(base_path, bt, am, layer);
-	path += "_q.smtx";
+	std::string data_dir_string = construct_path(base_path, bt, am, layer);
+	data_dir_string += "_q.smtx";
+
+	std::filesystem::path path = { data_dir_string };
 
 	if (!std::filesystem::exists(path) || !std::filesystem::is_regular_file(path)) {
 		throw std::runtime_error("Matrix doesn't exist: " + path.stem().string());
@@ -309,159 +307,138 @@ static CSC read_mat(void* dst, const BodyType bt, const AttentionMechanism am, c
 	return mat;
 }
 
-SpmmMemoryHandle spmm_load_host_csc(
-	size_t             input_size,
-	const std::string& base_data_path,
-	const std::string& pruning_method,
-	const std::string& sparsity)
-{
-	SpmmMemoryHandle handle;
-
-	size_t b_sparse_size = MAT_SIZE * MAT_SIZE * sizeof(float);
-	size_t b_dense_size = input_size * MAT_SIZE * sizeof(float);
-
-	handle.host = cuda_malloc_host(b_sparse_size + b_dense_size);
-
-	float* dense = reinterpret_cast<float*>(handle.host);
-	generate_token_embeddings(dense, input_size);
-
-	CSC sparse = read_mat(dense + b_dense_size, BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
-
-	return handle;
-}
-
-void mhsa_load_host_csr(
-	MHSA<CSR, CSR> mhsa,
-	const Config&  config,
-	DLMC&          dlmc,
-	Weights<CSR>&  weights)
-{
-	assert(config.n_layers < MAX_N_LAYERS);
-	mhsa.b_size = 0;
-	for (size_t i = 0; i < config.n_layers; ++i) {
-		// WARN: Doing only decoder for now
-		// dlmc.enc_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Encoder, am, i);
-
-		dlmc.dec_self_attention_tensors[i] = read_tensor(dlmc, dlmc.bt, dlmc.am, i, SparseMatrixType::CSR);
-		mhsa.b_size += dlmc.dec_self_attention_tensors[i].b_size;
-	}
-
-	size_t b_embeddings_size = config.input_sequence_size * dlmc.dec_self_attention_tensors[0].shape[0].n_rows * sizeof(float);
-	mhsa.b_size += b_embeddings_size;
-
-	mhsa.mask = read_mask(dlmc, mhsa.config.input_sequence_size, 2, 95);
-	mhsa.b_size += mhsa.mask.b_size;
-
-	/*
-     * Allocate for
-     * x (input_sequence_size, 512) float
-     * w_q (512, 512) float
-     * w_k (512, 512) float
-     * w_v (512, 512) float
-     * w_o (512, 512) float
-     * mask
-     */
-
-	assert(mhsa.b_size < MAX_ALLOC);
-	mhsa.host = cuda_malloc_host(mhsa.b_size);
-
-	if (!mhsa.host) {
-		throw std::runtime_error("Failed to allocate page-locked host memory.");
-	}
-
-	mhsa.x = reinterpret_cast<float*>(mhsa.host);
-	generate_token_embeddings(mhsa.x, config.input_sequence_size);
-	try {
-		void* block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(mhsa.host) + b_embeddings_size);
-		for (size_t i = 0; i < config.n_layers; ++i) {
-			void* w_q_ptr = block_start;
-			weights.w_q[i] = parse_csr_dlmc(w_q_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[0]);
-
-			size_t b_size = calc_byte_size_compressed_sparse(dlmc.dec_self_attention_tensors[i].shape[0].n_rows, dlmc.dec_self_attention_tensors[i].shape[0].nnz);
-			void*  w_k_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_q_ptr) + b_size);
-			weights.w_k[i] = parse_csr_dlmc(w_k_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[1]);
-
-			b_size = calc_byte_size_compressed_sparse(dlmc.dec_self_attention_tensors[i].shape[1].n_rows, dlmc.dec_self_attention_tensors[i].shape[1].nnz);
-			void* w_v_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_k_ptr) + b_size);
-			weights.w_v[i] = parse_csr_dlmc(w_v_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[2]);
-
-			b_size = calc_byte_size_compressed_sparse(dlmc.dec_self_attention_tensors[i].shape[2].n_rows, dlmc.dec_self_attention_tensors[i].shape[2].nnz);
-			void* w_o_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_v_ptr) + b_size);
-			weights.w_o[i] = parse_csr_dlmc(w_o_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[3]);
-
-			block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(block_start) + dlmc.dec_self_attention_tensors[i].b_size);
-		}
-
-	} catch (const std::exception& e) {
-		cuda_dealloc_host(mhsa.host);
-		throw;
-	}
-}
-
-void mhsa_load_host_csc(
-	MHSA<CSC, CSR>& mhsa,
-	const Config&   config,
-	DLMC&           dlmc,
-	Weights<CSC>&   weights)
-{
-	assert(mhsa.config.n_layers < MAX_N_LAYERS);
-	for (size_t i = 0; i < mhsa.config.n_layers; ++i) {
-		// WARN: Doing only decoder for now
-		// dlmc.enc_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Encoder, am, i);
-
-		dlmc.dec_self_attention_tensors[i] = read_tensor(dlmc, dlmc.bt, dlmc.am, i, SparseMatrixType::CSC);
-		mhsa.b_size += dlmc.dec_self_attention_tensors[i].b_size;
-	}
-
-	size_t b_embeddings_size = mhsa.config.input_sequence_size * dlmc.dec_self_attention_tensors[0].shape[0].n_rows * sizeof(float);
-	mhsa.b_size += b_embeddings_size;
-
-	mhsa.mask = read_mask(dlmc, mhsa.config.input_sequence_size, 2, 95);
-	mhsa.b_size += mhsa.mask.b_size;
-
-	/*
-     * Allocate for
-     * w_q (512, 512) float
-     * w_k (512, 512) float
-     * w_v (512, 512) float
-     * w_o (512, 512) float
-     * x (input_sequence_size, 512) float
-     */
-
-	assert(mhsa.b_size < MAX_ALLOC);
-	mhsa.host = cuda_malloc_host(mhsa.b_size);
-
-	if (!mhsa.host) {
-		throw std::runtime_error("Failed to allocate page-locked host memory.");
-	}
-
-	try {
-		mhsa.x = reinterpret_cast<float*>(mhsa.host);
-		generate_token_embeddings(mhsa.x, config.input_sequence_size);
-		void* block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(mhsa.host) + b_embeddings_size);
-		for (size_t i = 0; i < config.n_layers; ++i) {
-			void* w_q_ptr = block_start;
-			weights.w_q[i] = parse_csc_dlmc(w_q_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[0]);
-
-			size_t b_size = calc_byte_size_compressed_sparse(dlmc.dec_self_attention_tensors[i].shape[0].n_cols, dlmc.dec_self_attention_tensors[i].shape[0].nnz);
-			void*  w_k_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_q_ptr) + b_size);
-			weights.w_k[i] = parse_csc_dlmc(w_k_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[1]);
-
-			b_size = calc_byte_size_compressed_sparse(dlmc.dec_self_attention_tensors[i].shape[1].n_cols, dlmc.dec_self_attention_tensors[i].shape[1].nnz);
-			void* w_v_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_k_ptr) + b_size);
-			weights.w_v[i] = parse_csc_dlmc(w_v_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[2]);
-
-			b_size = calc_byte_size_compressed_sparse(dlmc.dec_self_attention_tensors[i].shape[2].n_cols, dlmc.dec_self_attention_tensors[i].shape[2].nnz);
-			void* w_o_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_v_ptr) + b_size);
-			weights.w_o[i] = parse_csc_dlmc(w_o_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[3]);
-
-			block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(block_start) + dlmc.dec_self_attention_tensors[i].b_size);
-		}
-
-		// TODO: fix the way path is passed
-		mhsa.mask = parse_csr_dlmc(reinterpret_cast<void*>(block_start), dlmc.base_path + dlmc.pruning_method + dlmc.sparsity + "m_32_02_95.smtx");
-	} catch (const std::exception& e) {
-		cuda_dealloc_host(mhsa.host);
-		throw;
-	}
-}
+// void mhsa_load_host_csr(
+// 	MHSA<CSR, CSR> mhsa,
+// 	const Config&  config,
+// 	DLMC&          dlmc,
+// 	Weights<CSR>&  weights)
+// {
+// 	assert(config.n_layers < MAX_N_LAYERS);
+// 	mhsa.b_size = 0;
+// 	for (size_t i = 0; i < config.n_layers; ++i) {
+// 		// WARN: Doing only decoder for now
+// 		// dlmc.enc_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Encoder, am, i);
+//
+// 		dlmc.dec_self_attention_tensors[i] = read_tensor(dlmc, dlmc.bt, dlmc.am, i, SparseMatrixType::CSR);
+// 		mhsa.b_size += dlmc.dec_self_attention_tensors[i].b_size;
+// 	}
+//
+// 	size_t b_embeddings_size = config.input_sequence_size * dlmc.dec_self_attention_tensors[0].shape[0].n_rows * sizeof(float);
+// 	mhsa.b_size += b_embeddings_size;
+//
+// 	mhsa.mask = read_mask(dlmc, mhsa.config.input_sequence_size, 2, 95);
+// 	mhsa.b_size += mhsa.mask.b_size;
+//
+// 	/*
+//      * Allocate for
+//      * x (input_sequence_size, 512) float
+//      * w_q (512, 512) float
+//      * w_k (512, 512) float
+//      * w_v (512, 512) float
+//      * w_o (512, 512) float
+//      * mask
+//      */
+//
+// 	assert(mhsa.b_size < MAX_ALLOC);
+// 	mhsa.host = cuda_malloc_host(mhsa.b_size);
+//
+// 	if (!mhsa.host) {
+// 		throw std::runtime_error("Failed to allocate page-locked host memory.");
+// 	}
+//
+// 	mhsa.x = reinterpret_cast<float*>(mhsa.host);
+// 	generate_token_embeddings(mhsa.x, config.input_sequence_size * MAT_SIZE);
+// 	try {
+// 		void* block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(mhsa.host) + b_embeddings_size);
+// 		for (size_t i = 0; i < config.n_layers; ++i) {
+// 			void* w_q_ptr = block_start;
+// 			weights.w_q[i] = parse_csr_dlmc(w_q_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[0]);
+//
+// 			size_t b_size = calc_sparse_b_size(dlmc.dec_self_attention_tensors[i].shape[0].n_rows, dlmc.dec_self_attention_tensors[i].shape[0].nnz);
+// 			void*  w_k_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_q_ptr) + b_size);
+// 			weights.w_k[i] = parse_csr_dlmc(w_k_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[1]);
+//
+// 			b_size = calc_sparse_b_size(dlmc.dec_self_attention_tensors[i].shape[1].n_rows, dlmc.dec_self_attention_tensors[i].shape[1].nnz);
+// 			void* w_v_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_k_ptr) + b_size);
+// 			weights.w_v[i] = parse_csr_dlmc(w_v_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[2]);
+//
+// 			b_size = calc_sparse_b_size(dlmc.dec_self_attention_tensors[i].shape[2].n_rows, dlmc.dec_self_attention_tensors[i].shape[2].nnz);
+// 			void* w_o_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_v_ptr) + b_size);
+// 			weights.w_o[i] = parse_csr_dlmc(w_o_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[3]);
+//
+// 			block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(block_start) + dlmc.dec_self_attention_tensors[i].b_size);
+// 		}
+//
+// 	} catch (const std::exception& e) {
+// 		cuda_dealloc_host(mhsa.host);
+// 		throw;
+// 	}
+// }
+//
+// void mhsa_load_host_csc(
+// 	MHSA<CSC, CSR>& mhsa,
+// 	const Config&   config,
+// 	DLMC&           dlmc,
+// 	Weights<CSC>&   weights)
+// {
+// 	assert(mhsa.config.n_layers < MAX_N_LAYERS);
+// 	for (size_t i = 0; i < mhsa.config.n_layers; ++i) {
+// 		// WARN: Doing only decoder for now
+// 		// dlmc.enc_self_attention_tensors[i] = read_tensor(dlmc, BodyType::Encoder, am, i);
+//
+// 		dlmc.dec_self_attention_tensors[i] = read_tensor(dlmc, dlmc.bt, dlmc.am, i, SparseMatrixType::CSC);
+// 		mhsa.b_size += dlmc.dec_self_attention_tensors[i].b_size;
+// 	}
+//
+// 	size_t b_embeddings_size = mhsa.config.input_sequence_size * dlmc.dec_self_attention_tensors[0].shape[0].n_rows * sizeof(float);
+// 	mhsa.b_size += b_embeddings_size;
+//
+// 	mhsa.mask = read_mask(dlmc, mhsa.config.input_sequence_size, 2, 95);
+// 	mhsa.b_size += mhsa.mask.b_size;
+//
+// 	/*
+//      * Allocate for
+//      * w_q (512, 512) float
+//      * w_k (512, 512) float
+//      * w_v (512, 512) float
+//      * w_o (512, 512) float
+//      * x (input_sequence_size, 512) float
+//      */
+//
+// 	assert(mhsa.b_size < MAX_ALLOC);
+// 	mhsa.host = cuda_malloc_host(mhsa.b_size);
+//
+// 	if (!mhsa.host) {
+// 		throw std::runtime_error("Failed to allocate page-locked host memory.");
+// 	}
+//
+// 	try {
+// 		mhsa.x = reinterpret_cast<float*>(mhsa.host);
+// 		generate_token_embeddings(mhsa.x, config.input_sequence_size * MAT_SIZE);
+// 		void* block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(mhsa.host) + b_embeddings_size);
+// 		for (size_t i = 0; i < config.n_layers; ++i) {
+// 			void* w_q_ptr = block_start;
+// 			weights.w_q[i] = parse_csc_dlmc(w_q_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[0]);
+//
+// 			size_t b_size = calc_sparse_b_size(dlmc.dec_self_attention_tensors[i].shape[0].n_cols, dlmc.dec_self_attention_tensors[i].shape[0].nnz);
+// 			void*  w_k_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_q_ptr) + b_size);
+// 			weights.w_k[i] = parse_csc_dlmc(w_k_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[1]);
+//
+// 			b_size = calc_sparse_b_size(dlmc.dec_self_attention_tensors[i].shape[1].n_cols, dlmc.dec_self_attention_tensors[i].shape[1].nnz);
+// 			void* w_v_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_k_ptr) + b_size);
+// 			weights.w_v[i] = parse_csc_dlmc(w_v_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[2]);
+//
+// 			b_size = calc_sparse_b_size(dlmc.dec_self_attention_tensors[i].shape[2].n_cols, dlmc.dec_self_attention_tensors[i].shape[2].nnz);
+// 			void* w_o_ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(w_v_ptr) + b_size);
+// 			weights.w_o[i] = parse_csc_dlmc(w_o_ptr, dlmc.dec_self_attention_tensors[i].path.string() + dlmc.suffixes[3]);
+//
+// 			block_start = reinterpret_cast<void*>(reinterpret_cast<char*>(block_start) + dlmc.dec_self_attention_tensors[i].b_size);
+// 		}
+//
+// 		// TODO: fix the way path is passed
+// 		mhsa.mask = parse_csr_dlmc(reinterpret_cast<void*>(block_start), dlmc.base_path + dlmc.pruning_method + dlmc.sparsity + "m_32_02_95.smtx");
+// 	} catch (const std::exception& e) {
+// 		cuda_dealloc_host(mhsa.host);
+// 		throw;
+// 	}
+// }

@@ -2,11 +2,9 @@
 #include <format>
 #include <iostream>
 
+#include "handle.h"
 #include "matrix.h"
-#include "model.h"
 #include "spmm.cuh"
-
-constexpr size_t MAT_SIZE = 512;
 
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \
@@ -93,50 +91,50 @@ void run_cusparse_spmm(cusparseHandle_t handle, void* col_ptr, void* row_idx, vo
 	cuda_dealloc_device(work_buffer);
 }
 
-void run_spmm(MHSA<CSC, CSR>& mhsa, float* res)
-{
-	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;  // k OR v's size
-	size_t res_b_size = sizeof(float) * kv_size;
-	mhsa.dev = cuda_malloc_device(mhsa.b_size + res_b_size);
-	CUDA_CHECK(cudaMemcpy(mhsa.dev, mhsa.host, mhsa.b_size, cudaMemcpyHostToDevice));
-
-	float* x = reinterpret_cast<float*>(mhsa.dev);
-	size_t b_x_size = sizeof(float) * kv_size;
-
-	char* ptr = reinterpret_cast<char*>(x) + b_x_size;
-
-	CSC d_wq = mhsa.weights.w_q[0];
-	d_wq.partition(ptr);
-	ptr += d_wq.b_size;
-
-	CSC d_wk = mhsa.weights.w_k[0];
-	d_wk.partition(ptr);
-	ptr += d_wk.b_size;
-
-	CSC d_wv = mhsa.weights.w_v[0];
-	d_wv.partition(ptr);
-	ptr += d_wv.b_size;
-
-	CSC d_wo = mhsa.weights.w_o[0];
-	d_wo.partition(ptr);
-	ptr += d_wo.b_size;
-
-	float* q_res = reinterpret_cast<float*>(ptr);
-
-	const size_t m = mhsa.config.input_sequence_size;
-	const size_t k = d_wq.rows;
-	const size_t n = d_wq.cols;
-
-	cusparseHandle_t handle;
-	cusparseCreate(&handle);
-	run_cusparse_spmm(handle, d_wq.col_ptr, d_wq.row_idx, d_wq.val, m, k, n, d_wq.nnz, x, q_res, 1, 0);
-	cusparseDestroy(handle);
-
-	CUDA_CHECK(cudaDeviceSynchronize());
-
-	// TODO: can this be async?
-	CUDA_CHECK(cudaMemcpy(res, q_res, sizeof(float) * kv_size, cudaMemcpyDeviceToHost));
-}
+// void run_spmm(MHSA<CSC, CSR>& mhsa, float* res)
+// {
+// 	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;  // k OR v's size
+// 	size_t res_b_size = sizeof(float) * kv_size;
+// 	mhsa.dev = cuda_malloc_device(mhsa.b_size + res_b_size);
+// 	CUDA_CHECK(cudaMemcpy(mhsa.dev, mhsa.host, mhsa.b_size, cudaMemcpyHostToDevice));
+//
+// 	float* x = reinterpret_cast<float*>(mhsa.dev);
+// 	size_t b_x_size = sizeof(float) * kv_size;
+//
+// 	char* ptr = reinterpret_cast<char*>(x) + b_x_size;
+//
+// 	CSC d_wq = mhsa.weights.w_q[0];
+// 	d_wq.partition(ptr);
+// 	ptr += d_wq.b_size;
+//
+// 	CSC d_wk = mhsa.weights.w_k[0];
+// 	d_wk.partition(ptr);
+// 	ptr += d_wk.b_size;
+//
+// 	CSC d_wv = mhsa.weights.w_v[0];
+// 	d_wv.partition(ptr);
+// 	ptr += d_wv.b_size;
+//
+// 	CSC d_wo = mhsa.weights.w_o[0];
+// 	d_wo.partition(ptr);
+// 	ptr += d_wo.b_size;
+//
+// 	float* q_res = reinterpret_cast<float*>(ptr);
+//
+// 	const size_t m = mhsa.config.input_sequence_size;
+// 	const size_t k = d_wq.rows;
+// 	const size_t n = d_wq.cols;
+//
+// 	cusparseHandle_t handle;
+// 	cusparseCreate(&handle);
+// 	run_cusparse_spmm(handle, d_wq.col_ptr, d_wq.row_idx, d_wq.val, m, k, n, d_wq.nnz, x, q_res, 1, 0);
+// 	cusparseDestroy(handle);
+//
+// 	CUDA_CHECK(cudaDeviceSynchronize());
+//
+// 	// TODO: can this be async?
+// 	CUDA_CHECK(cudaMemcpy(res, q_res, sizeof(float) * kv_size, cudaMemcpyDeviceToHost));
+// }
 
 void print_help()
 {
@@ -162,6 +160,9 @@ void list_kernels()
 	std::cout << kernel_msg << "\n";
 }
 
+void print_benchmarking_results()
+{}
+
 void benchmark_spmm()
 {
 	// 1. Read weight
@@ -172,9 +173,26 @@ void benchmark_spmm()
 	// 3.3 Run 100-1000 times each
 	// 3.4 Calculate FLOPs
 	//
-	//
 	// TODO: Write a prepare_spmm() function that loads everything needed into host/dev and aligns pointers.
-	// TODO: Split run() to prepare_mhsa() and the run part.
+
+	SPMM<CSC>   spmm;
+	std::string data_dir_path = construct_path("data/dlmc/transformer/l0_regularization/0.5/", BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
+	spmm.sparse_path = data_dir_path + "q.smtx";
+
+	prepare_spmm(spmm);
+
+	for (const uint16_t size : BENCHMARKING_DENSE_N_ROWS) {
+		// warmup_spmm(spmm);
+
+		for (size_t i = 0; i < BENCHMARKING_ROUNDS; ++i) {
+			// run_spmm(spmm);
+		}
+	}
+
+	// print_benchmarking_results();
+
+	cuda_dealloc_host(spmm.host.data);
+	cuda_dealloc_device(spmm.dev.data);
 }
 
 int main(int argc, char* argv[])
@@ -205,7 +223,7 @@ int main(int argc, char* argv[])
 			switch (kernel) {
 			case 1:
 				std::cout << "Benchmark SpMM\n";
-				// benchmark_spmm();
+				benchmark_spmm();
 				break;
 			case 2:
 				std::cout << "Benchmark SDDMM\n";
@@ -221,11 +239,11 @@ int main(int argc, char* argv[])
 			list_kernels();
 		} else if (argv[i][1] == 'm') {
 			// Run the entire pipeline
-			MHSA<CSC, CSR> mhsa;
-
-			run_mhsa(mhsa);
-			cuda_dealloc_host(mhsa.host);
-			cuda_dealloc_device(mhsa.dev);
+			// MHSA<CSC, CSR> mhsa;
+			//
+			// run_mhsa(mhsa);
+			// cuda_dealloc_host(mhsa.host.data);
+			// cuda_dealloc_device(mhsa.dev.data);
 		} else if (argv[i][1] == 'p') {
 			print_device_properties();
 		}

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "model.h"
+#include "handle.h"
 #include <vector>
 
 enum class SparseMatrixType
@@ -84,23 +84,27 @@ struct CSC
 	}
 };
 
-void mhsa_load_host_csr(
-	MHSA<CSR, CSR>     mhsa,
-	const Config&      config,
-	Weights<CSR>&      weights,
-	const std::string& base_data_path,
-	const std::string& pruning_method,
-	const std::string& sparsity,
-	AttentionMechanism am);
-
-void mhsa_load_host_csc(
-	MHSA<CSC, CSR>& mhsa,
-	const Config&   config,
-	DLMC&           dlmc,
-	Weights<CSC>&   weights);
+// void mhsa_load_host_csr(
+// 	MHSA<CSR, CSR>     mhsa,
+// 	const Config&      config,
+// 	Weights<CSR>&      weights,
+// 	const std::string& base_data_path,
+// 	const std::string& pruning_method,
+// 	const std::string& sparsity,
+// 	AttentionMechanism am);
+//
+// void mhsa_load_host_csc(
+// 	MHSA<CSC, CSR>& mhsa,
+// 	const Config&   config,
+// 	DLMC&           dlmc,
+// 	Weights<CSC>&   weights);
 
 std::vector<float> csr_to_row_major(const CSR& mat);
 std::vector<float> csc_to_col_major(const CSC& mat);
 float              measure_sparsity(void* s, size_t size);
-size_t             calc_byte_size_compressed_sparse(const size_t n, const size_t nnz);
+size_t             calc_sparse_b_size(const size_t n, const size_t nnz);
 Tensor             read_tensor(const DLMC& dlmc, const BodyType bt, const AttentionMechanism am, const size_t layer, const SparseMatrixType sparse_matrix_type);
+DLMCHeader         parse_dlmc_header(std::ifstream& file_stream);
+void               generate_token_embeddings(void* dst, size_t size);
+CSC                parse_csc_dlmc(void* dst, const std::filesystem::path& filepath);
+std::string        construct_path(const std::filesystem::path base_path, const BodyType bt, const AttentionMechanism am, const size_t layer);
