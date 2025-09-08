@@ -1,4 +1,3 @@
-#include <cusparse.h>
 #include <format>
 #include <iostream>
 
@@ -16,125 +15,35 @@
 		}                                                                                                \
 	} while (0)
 
-#define CUSPARSE_CHECK(x)                                                                                    \
-	do {                                                                                                     \
-		cusparseStatus_t err = x;                                                                            \
-		if (err != CUSPARSE_STATUS_SUCCESS) {                                                                \
-			fprintf(stderr, "CUSPARSE error in %s at %s:%d: %s (%s=%d)\n", __FUNCTION__, __FILE__, __LINE__, \
-				cusparseGetErrorString(err), cusparseGetErrorName(err), err);                                \
-			abort();                                                                                         \
-		}                                                                                                    \
-	} while (0)
-
-void  print_device_properties();
-void  cuda_dealloc_host(void* ptr);
-void  cuda_dealloc_device(void* ptr);
-void* cuda_malloc_device(size_t b_size);
-void  run(MHSA<CSC, CSR>& mhsa, float* res);
-void  test_dev_spmm();
-bool  verify_res(const float* const actual, const float* const expected, size_t n);
-
-void run_cusparse_spmm(cusparseHandle_t handle, void* col_ptr, void* row_idx, void* val,
-	size_t m, size_t k, size_t n, size_t nnz, void* x, void* res, float alpha, float beta)
+void print_device_properties()
 {
-	cusparseSpMatDescr_t a;
-	CUSPARSE_CHECK(cusparseCreateCsc(&a,
-		k, n, nnz,
-		col_ptr, row_idx, val,
-		CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
+	cudaDeviceProp dev_prop = {};
+	CUDA_CHECK(cudaGetDeviceProperties(&dev_prop, 0));
 
-	cusparseDnMatDescr_t b, c;
-	// CUSPARSE_CHECK(cusparseCreateDnMat(&b, k, m, k, x, CUDA_R_32F, CUSPARSE_ORDER_COL));
-	// CUSPARSE_CHECK(cusparseCreateDnMat(&c, n, m, n, res, CUDA_R_32F, CUSPARSE_ORDER_COL));
-
-	CUSPARSE_CHECK(cusparseCreateDnMat(&b, m, k, k, x, CUDA_R_32F, CUSPARSE_ORDER_ROW));
-	CUSPARSE_CHECK(cusparseCreateDnMat(&c, n, m, n, res, CUDA_R_32F, CUSPARSE_ORDER_COL));
-
-	size_t work_buffer_size = 0;
-	CUSPARSE_CHECK(cusparseSpMM_bufferSize(handle,
-		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
-		&alpha, a, b, &beta, c,
-		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, &work_buffer_size));
-
-	void* work_buffer = cuda_malloc_device(work_buffer_size);
-
-	CUSPARSE_CHECK(cusparseSpMM_preprocess(handle,
-		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
-		&alpha, a, b, &beta, c,
-		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, work_buffer));
-
-#if defined(__CHRONO__)
-	cudaEvent_t start, stop;
-	float       time;
-
-	CUDA_CHECK(cudaEventCreate(&start));
-	CUDA_CHECK(cudaEventCreate(&stop));
-
-	CUDA_CHECK(cudaEventRecord(start, 0));
-#endif
-
-	CUSPARSE_CHECK(cusparseSpMM(handle,
-		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
-		&alpha, a, b, &beta, c, CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT, work_buffer));
-
-#if defined(__CHRONO__)
-	CUDA_CHECK(cudaEventRecord(stop, 0));
-	CUDA_CHECK(cudaEventSynchronize(stop));
-
-	CUDA_CHECK(cudaEventElapsedTime(&time, start, stop));
-	CUDA_CHECK(cudaEventDestroy(start));
-	CUDA_CHECK(cudaEventDestroy(stop));
-
-	std::cout << std::format("cuSparse kernel: {} ms\n", time);
-#endif
-
-	cuda_dealloc_device(work_buffer);
+	std::cout << std::format(
+		"- {:30}: {}\n"
+		"- {:30}: {}.{}\n"
+		"- {:30}: {}\n"
+		"- {:30}: {}\n"
+		"- {:30}: {}\n"
+		"- {:30}: {}\n"
+		"- {:30}: {}\n"
+		"- {:30}: {} MB\n"
+		"- {:30}: {} KB\n"
+		"- {:30}: {} B\n"
+		"- {:30}: {}\n",
+		"Name", dev_prop.name,
+		"Compute Capability", dev_prop.major, dev_prop.minor,
+		"Max threads per block", dev_prop.maxThreadsPerBlock,
+		"Max threads per SM", dev_prop.maxThreadsPerMultiProcessor,
+		"Threads per warp", dev_prop.warpSize,
+		"Max regs per block", dev_prop.regsPerBlock,
+		"Max regs per SM", dev_prop.regsPerMultiprocessor,
+		"Total Global Memory", static_cast<uint32_t>(dev_prop.totalGlobalMem / 1e6),
+		"Max shared memory per block", static_cast<uint32_t>(dev_prop.sharedMemPerBlock / 1e3),
+		"Max shared memory per SM", dev_prop.sharedMemPerMultiprocessor,
+		"SM count", dev_prop.multiProcessorCount);
 }
-
-// void run_spmm(MHSA<CSC, CSR>& mhsa, float* res)
-// {
-// 	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;  // k OR v's size
-// 	size_t res_b_size = sizeof(float) * kv_size;
-// 	mhsa.dev = cuda_malloc_device(mhsa.b_size + res_b_size);
-// 	CUDA_CHECK(cudaMemcpy(mhsa.dev, mhsa.host, mhsa.b_size, cudaMemcpyHostToDevice));
-//
-// 	float* x = reinterpret_cast<float*>(mhsa.dev);
-// 	size_t b_x_size = sizeof(float) * kv_size;
-//
-// 	char* ptr = reinterpret_cast<char*>(x) + b_x_size;
-//
-// 	CSC d_wq = mhsa.weights.w_q[0];
-// 	d_wq.partition(ptr);
-// 	ptr += d_wq.b_size;
-//
-// 	CSC d_wk = mhsa.weights.w_k[0];
-// 	d_wk.partition(ptr);
-// 	ptr += d_wk.b_size;
-//
-// 	CSC d_wv = mhsa.weights.w_v[0];
-// 	d_wv.partition(ptr);
-// 	ptr += d_wv.b_size;
-//
-// 	CSC d_wo = mhsa.weights.w_o[0];
-// 	d_wo.partition(ptr);
-// 	ptr += d_wo.b_size;
-//
-// 	float* q_res = reinterpret_cast<float*>(ptr);
-//
-// 	const size_t m = mhsa.config.input_sequence_size;
-// 	const size_t k = d_wq.rows;
-// 	const size_t n = d_wq.cols;
-//
-// 	cusparseHandle_t handle;
-// 	cusparseCreate(&handle);
-// 	run_cusparse_spmm(handle, d_wq.col_ptr, d_wq.row_idx, d_wq.val, m, k, n, d_wq.nnz, x, q_res, 1, 0);
-// 	cusparseDestroy(handle);
-//
-// 	CUDA_CHECK(cudaDeviceSynchronize());
-//
-// 	// TODO: can this be async?
-// 	CUDA_CHECK(cudaMemcpy(res, q_res, sizeof(float) * kv_size, cudaMemcpyDeviceToHost));
-// }
 
 void print_help()
 {
@@ -172,8 +81,6 @@ void benchmark_spmm()
 	// 3.2 Verify result
 	// 3.3 Run 100-1000 times each
 	// 3.4 Calculate FLOPs
-	//
-	// TODO: Write a prepare_spmm() function that loads everything needed into host/dev and aligns pointers.
 
 	SPMM<CSC>   spmm;
 	std::string data_dir_path = construct_path("data/dlmc/transformer/l0_regularization/0.5/", BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
@@ -181,11 +88,10 @@ void benchmark_spmm()
 
 	prepare_spmm(spmm);
 
-	for (const uint16_t size : BENCHMARKING_DENSE_N_ROWS) {
-		// warmup_spmm(spmm);
-
-		for (size_t i = 0; i < BENCHMARKING_ROUNDS; ++i) {
-			// run_spmm(spmm);
+	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		warmup_spmm(spmm, 0);
+		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
+			run_spmm(spmm, i);
 		}
 	}
 

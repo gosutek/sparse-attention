@@ -1,14 +1,17 @@
-#include "handle.h"
-#include "matrix.h"
-#include "spmm.cuh"
-
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
+#include <cusparse.h>
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <iostream>
+#include <iterator>
 #include <stdexcept>
+
+#include "handle.h"
+#include "matrix.h"
+#include "spmm.cuh"
+#include "utils.h"
 
 // TODO: This *can* leak memory
 #define CUDA_CHECK(x)                                                                                    \
@@ -19,6 +22,16 @@
 				cudaGetErrorString(err), cudaGetErrorName(err), err);                                    \
 			abort();                                                                                     \
 		}                                                                                                \
+	} while (0)
+
+#define CUSPARSE_CHECK(x)                                                                                    \
+	do {                                                                                                     \
+		cusparseStatus_t err = x;                                                                            \
+		if (err != CUSPARSE_STATUS_SUCCESS) {                                                                \
+			fprintf(stderr, "CUSPARSE error in %s at %s:%d: %s (%s=%d)\n", __FUNCTION__, __FILE__, __LINE__, \
+				cusparseGetErrorString(err), cusparseGetErrorName(err), err);                                \
+			abort();                                                                                         \
+		}                                                                                                    \
 	} while (0)
 
 enum class KernelType
@@ -55,36 +68,6 @@ void cuda_dealloc_host(void* ptr)
 void cuda_dealloc_device(void* ptr)
 {
 	CUDA_CHECK(cudaFree(ptr));
-}
-
-void print_device_properties()
-{
-	cudaDeviceProp dev_prop = {};
-	CUDA_CHECK(cudaGetDeviceProperties(&dev_prop, 0));
-
-	std::cout << std::format(
-		"- {:30}: {}\n"
-		"- {:30}: {}.{}\n"
-		"- {:30}: {}\n"
-		"- {:30}: {}\n"
-		"- {:30}: {}\n"
-		"- {:30}: {}\n"
-		"- {:30}: {}\n"
-		"- {:30}: {} MB\n"
-		"- {:30}: {} KB\n"
-		"- {:30}: {} B\n"
-		"- {:30}: {}\n",
-		"Name", dev_prop.name,
-		"Compute Capability", dev_prop.major, dev_prop.minor,
-		"Max threads per block", dev_prop.maxThreadsPerBlock,
-		"Max threads per SM", dev_prop.maxThreadsPerMultiProcessor,
-		"Threads per warp", dev_prop.warpSize,
-		"Max regs per block", dev_prop.regsPerBlock,
-		"Max regs per SM", dev_prop.regsPerMultiprocessor,
-		"Total Global Memory", static_cast<uint32_t>(dev_prop.totalGlobalMem / 1e6),
-		"Max shared memory per block", static_cast<uint32_t>(dev_prop.sharedMemPerBlock / 1e3),
-		"Max shared memory per SM", dev_prop.sharedMemPerMultiprocessor,
-		"SM count", dev_prop.multiProcessorCount);
 }
 
 __device__ inline static float get_elem_rm(const float* const a, size_t n_cols, size_t row, size_t col)
@@ -127,7 +110,7 @@ __global__ void spmm_csc(
 		y = blockIdx.y * blockDim.y + threadIdx.y;
 	}
 
-	if (x >= n || y >= m) {  // not really needed
+	if (x >= n || y >= m) {  // not really needed since sizes are powers of 2
 		return;
 	}
 
@@ -242,7 +225,7 @@ void prepare_spmm(SPMM<CSC>& spmm)
     * Once for the input
     * Twice for the result
     **/
-	spmm.host.data = cuda_malloc_host(sparse_b_size + 2 * BENCHMARKING_TOTAL_DENSE_SIZE * sizeof(float));
+	spmm.host.data = cuda_malloc_host(sparse_b_size + 2 * BENCHMARKING_TOTAL_DENSE_B_SIZE);
 	spmm.host.d[0] = reinterpret_cast<float*>(spmm.host.data);
 
 	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
@@ -252,14 +235,15 @@ void prepare_spmm(SPMM<CSC>& spmm)
 		}
 	}
 
-	void* start_of_sparse = spmm.host.d[std::size(BENCHMARKING_DENSE_N_ROWS) - 1] + BENCHMARKING_DENSE_N_ROWS[std::size(BENCHMARKING_DENSE_N_ROWS) - 1];
+	void* start_of_sparse = spmm.host.d[std::size(BENCHMARKING_DENSE_N_ROWS) - 1] +                          // from the last ptr of spmm.host.d
+	                        BENCHMARKING_DENSE_N_ROWS[std::size(BENCHMARKING_DENSE_N_ROWS) - 1] * MAT_SIZE;  // skip 512 * 512 floats
 	spmm.host.s = parse_csc_dlmc(start_of_sparse, spmm.sparse_path);
 
 	float* ptr = spmm.host.s.val + spmm.host.s.val_size;
 
 	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		spmm.host.r[i] = ptr;
-		ptr += BENCHMARKING_DENSE_N_ROWS[i];
+		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
 	}
 
 	/*
@@ -269,27 +253,106 @@ void prepare_spmm(SPMM<CSC>& spmm)
       * +------------------------------------------HOST/DEVICE------------------------------------------------+
    */
 
-	spmm.dev.data = cuda_malloc_device(spmm.host.s.b_size + 2 * BENCHMARKING_TOTAL_DENSE_SIZE * sizeof(float));
-	CUDA_CHECK(cudaMemcpy(spmm.dev.data, spmm.host.data, spmm.host.s.b_size + BENCHMARKING_TOTAL_DENSE_SIZE * sizeof(float), cudaMemcpyHostToDevice));
+	spmm.dev.data = cuda_malloc_device(spmm.host.s.b_size + 2 * BENCHMARKING_TOTAL_DENSE_B_SIZE);
+	CUDA_CHECK(cudaMemcpy(spmm.dev.data, spmm.host.data, spmm.host.s.b_size + BENCHMARKING_TOTAL_DENSE_B_SIZE, cudaMemcpyHostToDevice));
 
 	// Partition dev
 	ptr = reinterpret_cast<float*>(spmm.dev.data);
 
 	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		spmm.dev.d[i] = ptr;
-		ptr += std::size(BENCHMARKING_DENSE_N_ROWS);
+		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
 	}
 
+	// TODO: This trashes the previous empty object and makes a new one. Make a good copy assignment operator function instead.
+	spmm.dev.s = CSC(spmm.host.s.rows, spmm.host.s.cols, spmm.host.s.nnz);
 	spmm.dev.s.partition(ptr);
+
+	ptr = spmm.dev.s.val + spmm.dev.s.val_size;
 
 	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		spmm.dev.r[i] = ptr;
-		ptr += std::size(BENCHMARKING_DENSE_N_ROWS);
+		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
 	}
 }
 
-void run_spmm(SPMM<CSC>& spmm)
-{}
+void run_cusparse_spmm(SPMM<CSC>& spmm, cusparseHandle_t handle, void* col_ptr, void* row_idx, void* val,
+	size_t m, size_t k, size_t n, size_t nnz, void* x, void* res, float alpha, float beta)
+{
+	cusparseSpMatDescr_t a;
+	CUSPARSE_CHECK(cusparseCreateCsc(&a,
+		k, n, nnz,
+		col_ptr, row_idx, val,
+		CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
+
+	cusparseDnMatDescr_t b, c;
+
+	CUSPARSE_CHECK(cusparseCreateDnMat(&b, m, k, k, x, CUDA_R_32F, CUSPARSE_ORDER_ROW));
+	CUSPARSE_CHECK(cusparseCreateDnMat(&c, n, m, n, res, CUDA_R_32F, CUSPARSE_ORDER_COL));
+
+	size_t work_buffer_size = 0;
+	CUSPARSE_CHECK(cusparseSpMM_bufferSize(handle,
+		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+		&alpha, a, b, &beta, c,
+		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, &work_buffer_size));
+
+	void* work_buffer = cuda_malloc_device(work_buffer_size);
+
+	CUSPARSE_CHECK(cusparseSpMM_preprocess(handle,
+		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+		&alpha, a, b, &beta, c,
+		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, work_buffer));
+
+	CUSPARSE_CHECK(cusparseSpMM(handle,
+		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+		&alpha, a, b, &beta, c, CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT, work_buffer));
+
+	cuda_dealloc_device(work_buffer);
+
+	cusparseDestroySpMat(a);
+	cusparseDestroyDnMat(b);
+	cusparseDestroyDnMat(c);
+}
+
+void warmup_spmm(SPMM<CSC>& spmm, const uint8_t size_idx)
+{
+	// PERF: Bounds check
+	assert(size_idx < std::size(BENCHMARKING_DENSE_N_ROWS) - 1);
+	run_spmm(spmm, size_idx);
+
+	size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
+	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
+
+	cusparseHandle_t handle;
+	cusparseCreate(&handle);
+	// Writes result at the next index's result spot.
+	run_cusparse_spmm(spmm, handle, spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, BENCHMARKING_DENSE_N_ROWS[size_idx], spmm.dev.s.rows, spmm.dev.s.cols, spmm.dev.s.nnz, spmm.dev.d[size_idx], spmm.dev.r[size_idx + 1], 1, 0);
+	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx + 1], spmm.dev.r[size_idx + 1], res_size * sizeof(float), cudaMemcpyDeviceToHost));
+	cusparseDestroy(handle);
+
+	verify_res(spmm.host.r[size_idx], spmm.host.r[size_idx + 1], res_size);
+}
+
+void run_spmm(SPMM<CSC>& spmm, const uint8_t idx)
+{
+	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+	const size_t k = spmm.dev.s.rows;
+	const size_t n = spmm.dev.s.cols;
+
+	// One thread per element of the output.
+	// One thread block stretched across a row of the output
+	// (32x512)*(512x512)=(32x512)
+	dim3 spmm_block_sm(512);
+	dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
+
+	spmm_csc<KernelType::SharedMemory, OutputFormat::RM>
+		<<<spmm_grid_sm, spmm_block_sm>>>(
+			spmm.dev.d[idx],
+			spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
+			m, k, n, spmm.dev.r[idx]);
+
+	CUDA_CHECK(cudaDeviceSynchronize());
+}
 
 // void prepare_mhsa(MHSA<CSC, CSR>& mhsa)
 // {

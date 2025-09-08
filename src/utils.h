@@ -3,6 +3,8 @@
 #include <iostream>
 #include <vector>
 
+bool verify_res(const float* const actual, const float* const expected, size_t n);
+
 template <typename T>
 std::ostream& operator<<(std::ostream& out_stream, const std::vector<T>& vec)
 {
