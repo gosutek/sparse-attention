@@ -332,8 +332,6 @@ void run_spmm(SPMM<CSC>& spmm, const uint8_t idx)
 			spmm.dev.d[idx],
 			spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
 			m, k, n, spmm.dev.r[idx]);
-
-	CUDA_CHECK(cudaDeviceSynchronize());
 }
 
 // void prepare_mhsa(MHSA<CSC, CSR>& mhsa)
