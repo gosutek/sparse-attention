@@ -61,8 +61,17 @@ void list_kernels()
 	std::cout << kernel_msg << "\n";
 }
 
-void print_benchmarking_results()
-{}
+void print_benchmarking_results(const float time, const uint8_t size_idx, const size_t nnz)
+{
+	float  avg_time = time / BENCHMARKING_ROUNDS;
+	double flops = 2 * BENCHMARKING_DENSE_N_ROWS[size_idx] * nnz;
+
+	std::cout << std::format(
+		"Number of rows: {}\n"
+		"Avg. time: {:.6f} s\n"
+		"Flops: {:.6f} GFLOPs/s\n",
+		BENCHMARKING_DENSE_N_ROWS[size_idx], avg_time, (BENCHMARKING_ROUNDS * flops * 1e-9) / time);
+}
 
 void benchmark_spmm()
 {
@@ -95,6 +104,10 @@ void benchmark_spmm()
 		cudaEventSynchronize(start);
 		cudaEventSynchronize(stop);
 		cudaEventElapsedTime(&time, start, stop);
+
+		print_benchmarking_results(time * 1e-3, i, spmm.host.s.nnz);
+	}
+
 	cudaEventDestroy(start);
 	cudaEventDestroy(stop);
 
