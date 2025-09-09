@@ -52,10 +52,11 @@ void print_help()
 void list_kernels()
 {
 	const std::string kernel_msg =
-		"List of kernels:\n\n"
-		"1. SpMM\n"
-		"2. SDDMM\n"
-		"3. SoftMax\n";
+		"List of kernels for benchmarking:\n\n"
+		"1. cuSparse\n"
+		"2. SpMM\n"
+		"3. SDDMM\n"
+		"4. softMax\n";
 
 	std::cout << kernel_msg << "\n";
 }
@@ -119,14 +120,20 @@ int main(int argc, char* argv[])
 
 			switch (kernel) {
 			case 1:
+				std::cout << "Benchmark cuSparse\n";
+				benchmark_cusparse();
+				break;
+			case 2:
 				std::cout << "Benchmark SpMM\n";
 				benchmark_spmm();
 				break;
-			case 2:
-				std::cout << "Benchmark SDDMM\n";
-				break;
 			case 3:
-				std::cout << "Benchmark wtf\n";
+				std::cout << "Benchmark SDDMM\n";
+				// benchmark_sddmm();
+				break;
+			case 4:
+				std::cout << "Benchamrk softMax\n";
+				// benchmark_softmax();
 				break;
 			default:
 				print_help();
