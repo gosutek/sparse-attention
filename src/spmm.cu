@@ -1,9 +1,9 @@
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <cusparse.h>
 #include <filesystem>
-#include <format>
 #include <fstream>
 #include <iterator>
 #include <stdexcept>
@@ -187,6 +187,32 @@ __global__ void softmax(
 
 	float val = e / *acc;
 	set_elem_rm(res, k, y, x, val);
+}
+
+void prepare_cusparse(SPMM<CSC>& spmm, CuSparse& cusparse)
+{
+	CUSPARSE_CHECK(cusparseCreateCsc(&cusparse.sparse,
+		spmm.dev.s.rows, spmm.dev.s.cols, spmm.host.s.nnz,
+		spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
+		CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
+
+	size_t tmp = 0;
+	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.dense[i], BENCHMARKING_DENSE_N_ROWS[i], spmm.dev.s.rows, spmm.dev.s.rows, spmm.dev.d[i], CUDA_R_32F, CUSPARSE_ORDER_ROW));
+		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.res[i], spmm.dev.s.cols, BENCHMARKING_DENSE_N_ROWS[i], spmm.dev.s.cols, spmm.dev.r[i], CUDA_R_32F, CUSPARSE_ORDER_COL));
+
+		CUSPARSE_CHECK(cusparseSpMM_bufferSize(cusparse.handle,
+			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+			&cusparse.alpha, cusparse.sparse, cusparse.dense[i], &cusparse.beta, cusparse.res[i],
+			CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, &tmp));
+
+		cusparse.work_buffer_size += tmp;
+	}
+
+	cusparse.work_buffer = cuda_malloc_device(cusparse.work_buffer_size);
+	if (!cusparse.work_buffer) {
+		throw std::runtime_error("Failed to allocate work buffer of size: " + std::to_string(cusparse.work_buffer_size));
+	}
 }
 
 void prepare_spmm(SPMM<CSC>& spmm)

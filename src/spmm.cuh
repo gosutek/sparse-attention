@@ -34,5 +34,6 @@ void prepare_spmm(SPMM<CSC>& spmm);
 void warmup_spmm(SPMM<CSC>& spmm, const uint8_t size_idx);
 void run_spmm(SPMM<CSC>& spmm, const uint8_t idx);
 
+void prepare_cusparse(SPMM<CSC>& spmm, CuSparse& cusparse);
 void prepare_mhsa(MHSA<CSC, CSR>& mhsa);
 void run_mhsa(MHSA<CSC, CSR>& mhsa);
