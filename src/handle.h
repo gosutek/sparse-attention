@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cusparse.h>
 #include <filesystem>
 #include <string>
 
@@ -74,6 +75,19 @@ struct DLMC
 		base_path(_base_data_path),
 		pruning_method(_pruning_method),
 		sparsity(_sparsity) {}
+};
+
+struct CuSparse
+{
+	cusparseHandle_t handle;
+
+	cusparseSpMatDescr_t sparse;
+	cusparseDnMatDescr_t dense[5], res[5];
+
+	void*  work_buffer = nullptr;
+	size_t work_buffer_size{};
+
+	float alpha = 1.0f, beta = 0.0f;
 };
 
 template <typename WeightFormat>

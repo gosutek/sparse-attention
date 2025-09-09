@@ -1,3 +1,4 @@
+#include <cusparse.h>
 #include <format>
 #include <iostream>
 
