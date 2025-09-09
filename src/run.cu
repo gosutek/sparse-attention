@@ -80,14 +80,31 @@ void benchmark_spmm()
 
 	prepare_spmm(spmm);
 
+	float       time;
+	cudaEvent_t start, stop;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+
 	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		warmup_spmm(spmm, 0);
+		cudaEventRecord(start);
 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
 			run_spmm(spmm, i);
 		}
+		cudaEventRecord(stop);
+		cudaEventSynchronize(start);
+		cudaEventSynchronize(stop);
+		cudaEventElapsedTime(&time, start, stop);
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
+
+	cuda_dealloc_host(spmm.host.data);
+	cuda_dealloc_device(spmm.dev.data);
+}
+
 	}
 
-	// print_benchmarking_results();
+	cudaEventDestroy(start);
 
 	cuda_dealloc_host(spmm.host.data);
 	cuda_dealloc_device(spmm.dev.data);
