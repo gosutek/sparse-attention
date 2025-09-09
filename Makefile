@@ -33,13 +33,11 @@ CUFLAGS+=-Wno-deprecated-gpu-targets
 
 all: $(BUILD_DIR)/cute
 
-chrono: CUFLAGS+=-Xcompiler "-D__CHRONO__"
-chrono: $(BUILD_DIR)/cute
+opt: OPT= -O3
+opt: $(BUILD_DIR)/cute
 
-test: $(BUILD_DIR)/cute_test
-
-bounds: CUFLAGS+=-Xcompiler "-D_GLIBCXX_DEBUG"
-bounds: $(BUILD_DIR)/cute
+debug: CUFLAGS+=-Xcompiler "-D_GLIBCXX_DEBUG" --ptxas-options=-v
+debug: $(BUILD_DIR)/cute
 
 $(BUILD_DIR)/cute: $(OBJECTS)
 	@mkdir -p $(@D)
