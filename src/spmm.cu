@@ -281,44 +281,6 @@ void prepare_spmm(SPMM<CSC>& spmm)
 	}
 }
 
-void run_cusparse_spmm(SPMM<CSC>& spmm, cusparseHandle_t handle, void* col_ptr, void* row_idx, void* val,
-	size_t m, size_t k, size_t n, size_t nnz, void* x, void* res, float alpha, float beta)
-{
-	cusparseSpMatDescr_t a;
-	CUSPARSE_CHECK(cusparseCreateCsc(&a,
-		k, n, nnz,
-		col_ptr, row_idx, val,
-		CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
-
-	cusparseDnMatDescr_t b, c;
-
-	CUSPARSE_CHECK(cusparseCreateDnMat(&b, m, k, k, x, CUDA_R_32F, CUSPARSE_ORDER_ROW));
-	CUSPARSE_CHECK(cusparseCreateDnMat(&c, n, m, n, res, CUDA_R_32F, CUSPARSE_ORDER_COL));
-
-	size_t work_buffer_size = 0;
-	CUSPARSE_CHECK(cusparseSpMM_bufferSize(handle,
-		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
-		&alpha, a, b, &beta, c,
-		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, &work_buffer_size));
-
-	void* work_buffer = cuda_malloc_device(work_buffer_size);
-
-	CUSPARSE_CHECK(cusparseSpMM_preprocess(handle,
-		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
-		&alpha, a, b, &beta, c,
-		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, work_buffer));
-
-	CUSPARSE_CHECK(cusparseSpMM(handle,
-		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
-		&alpha, a, b, &beta, c, CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT, work_buffer));
-
-	cuda_dealloc_device(work_buffer);
-
-	cusparseDestroySpMat(a);
-	cusparseDestroyDnMat(b);
-	cusparseDestroyDnMat(c);
-}
-
 void warmup_spmm(SPMM<CSC>& spmm, const uint8_t size_idx)
 {
 	// PERF: Bounds check
@@ -328,12 +290,27 @@ void warmup_spmm(SPMM<CSC>& spmm, const uint8_t size_idx)
 	size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
 	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
 
-	cusparseHandle_t handle;
-	cusparseCreate(&handle);
-	// Writes result at the next index's result spot.
-	run_cusparse_spmm(spmm, handle, spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, BENCHMARKING_DENSE_N_ROWS[size_idx], spmm.dev.s.rows, spmm.dev.s.cols, spmm.dev.s.nnz, spmm.dev.d[size_idx], spmm.dev.r[size_idx + 1], 1, 0);
-	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx + 1], spmm.dev.r[size_idx + 1], res_size * sizeof(float), cudaMemcpyDeviceToHost));
-	cusparseDestroy(handle);
+	// WARN: Temporary hack
+	std::memcpy(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size * sizeof(float));
+
+	CuSparse cusparse;
+	cusparseCreate(&cusparse.handle);
+	prepare_cusparse(spmm, cusparse);
+
+	CUSPARSE_CHECK(cusparseSpMM(cusparse.handle,
+		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+		&cusparse.alpha, cusparse.sparse, cusparse.dense[size_idx], &cusparse.beta, cusparse.res[size_idx], CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT, cusparse.work_buffer));
+	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
+
+	cuda_dealloc_device(cusparse.work_buffer);
+
+	cusparseDestroySpMat(cusparse.sparse);
+
+	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		cusparseDestroyDnMat(cusparse.dense[i]);
+		cusparseDestroyDnMat(cusparse.res[i]);
+	}
+	cusparseDestroy(cusparse.handle);
 
 	verify_res(spmm.host.r[size_idx], spmm.host.r[size_idx + 1], res_size);
 }
