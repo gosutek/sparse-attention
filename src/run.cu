@@ -115,9 +115,63 @@ void benchmark_spmm()
 	cuda_dealloc_device(spmm.dev.data);
 }
 
+void benchmark_cusparse()
+{
+	// WARN: This function throws but doesn't gracefuly exit!1!
+	SPMM<CSC> spmm;
+
+	CuSparse cusparse;
+	cusparseCreate(&cusparse.handle);
+
+	std::string data_dir_path = construct_path("data/dlmc/transformer/l0_regularization/0.5/", BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
+	spmm.sparse_path = data_dir_path + "q.smtx";
+
+	// WARN: Calling both of these is necessary at the moment but does double work.
+	prepare_spmm(spmm);
+	prepare_cusparse(spmm, cusparse);
+
+	float       time;
+	cudaEvent_t start, stop;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+
+	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		// Warmup
+		CUSPARSE_CHECK(cusparseSpMM_preprocess(cusparse.handle,
+			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+			&cusparse.alpha, cusparse.sparse, cusparse.dense[0], &cusparse.beta, cusparse.res[0],
+			CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, cusparse.work_buffer));
+
+		CUSPARSE_CHECK(cusparseSpMM(cusparse.handle,
+			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+			&cusparse.alpha, cusparse.sparse, cusparse.dense[0], &cusparse.beta, cusparse.res[0], CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT, cusparse.work_buffer));
+
+		cudaEventRecord(start);
+		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
+			CUSPARSE_CHECK(cusparseSpMM(cusparse.handle,
+				CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+				&cusparse.alpha, cusparse.sparse, cusparse.dense[i], &cusparse.beta, cusparse.res[i], CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT, cusparse.work_buffer));
+		}
+		cudaEventRecord(stop);
+		cudaEventSynchronize(start);
+		cudaEventSynchronize(stop);
+		cudaEventElapsedTime(&time, start, stop);
+
+		print_benchmarking_results(time * 1e-3, i, spmm.host.s.nnz);
 	}
+	CUDA_CHECK(cudaDeviceSynchronize());
 
 	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
+	cuda_dealloc_device(cusparse.work_buffer);
+
+	cusparseDestroySpMat(cusparse.sparse);
+
+	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		cusparseDestroyDnMat(cusparse.dense[i]);
+		cusparseDestroyDnMat(cusparse.res[i]);
+	}
+	cusparseDestroy(cusparse.handle);
 
 	cuda_dealloc_host(spmm.host.data);
 	cuda_dealloc_device(spmm.dev.data);
