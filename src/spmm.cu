@@ -254,7 +254,33 @@ __global__ void softmax(
 	set_elem_rm(res, k, y, x, val);
 }
 
-void prepare_cusparse(SPMM<CSC>& spmm, CuSparse& cusparse)
+void prepare_cusparse_csr(SPMM<CSR>& spmm, CuSparse& cusparse)
+{
+	CUSPARSE_CHECK(cusparseCreateCsr(&cusparse.sparse,
+		spmm.dev.s.rows, spmm.dev.s.cols, spmm.host.s.nnz,
+		spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val,
+		CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
+
+	size_t tmp = 0;
+	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.dense[i], BENCHMARKING_DENSE_N_ROWS[i], spmm.dev.s.rows, spmm.dev.s.rows, spmm.dev.d[i], CUDA_R_32F, CUSPARSE_ORDER_ROW));
+		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.res[i], spmm.dev.s.cols, BENCHMARKING_DENSE_N_ROWS[i], spmm.dev.s.cols, spmm.dev.r[i], CUDA_R_32F, CUSPARSE_ORDER_COL));
+
+		CUSPARSE_CHECK(cusparseSpMM_bufferSize(cusparse.handle,
+			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+			&cusparse.alpha, cusparse.sparse, cusparse.dense[i], &cusparse.beta, cusparse.res[i],
+			CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, &tmp));
+
+		cusparse.work_buffer_size += tmp;
+	}
+
+	cusparse.work_buffer = cuda_malloc_device(cusparse.work_buffer_size);
+	if (!cusparse.work_buffer) {
+		throw std::runtime_error("Failed to allocate work buffer of size: " + std::to_string(cusparse.work_buffer_size));
+	}
+}
+
+void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse)
 {
 	CUSPARSE_CHECK(cusparseCreateCsc(&cusparse.sparse,
 		spmm.dev.s.rows, spmm.dev.s.cols, spmm.host.s.nnz,
@@ -280,7 +306,73 @@ void prepare_cusparse(SPMM<CSC>& spmm, CuSparse& cusparse)
 	}
 }
 
-void prepare_spmm(SPMM<CSC>& spmm)
+void prepare_spmm_csr(SPMM<CSR>& spmm)
+{
+	if (!std::filesystem::exists(spmm.sparse_path) || !std::filesystem::is_regular_file(spmm.sparse_path)) {
+		throw std::runtime_error("Invalid file given: " + spmm.sparse_path.string());
+	}
+
+	std::ifstream file_stream = { spmm.sparse_path };
+	DLMCHeader    header = parse_dlmc_header(file_stream);
+	size_t        sparse_b_size = (sizeof(uint32_t) * (header.n_rows + 1) + sizeof(uint32_t) * header.nnz + sizeof(float) * header.nnz);
+
+	/**
+    * Twice the total size of the dense matrices.
+    * Once for the input
+    * Twice for the result
+    **/
+	spmm.host.data = cuda_malloc_host(sparse_b_size + 2 * BENCHMARKING_TOTAL_DENSE_B_SIZE);
+	spmm.host.d[0] = reinterpret_cast<float*>(spmm.host.data);
+
+	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		generate_token_embeddings(spmm.host.d[i], BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE);
+		if (i + 1 < std::size(BENCHMARKING_DENSE_N_ROWS)) {
+			spmm.host.d[i + 1] = spmm.host.d[i] + BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
+		}
+	}
+
+	void* start_of_sparse = spmm.host.d[std::size(BENCHMARKING_DENSE_N_ROWS) - 1] +                          // from the last ptr of spmm.host.d
+	                        BENCHMARKING_DENSE_N_ROWS[std::size(BENCHMARKING_DENSE_N_ROWS) - 1] * MAT_SIZE;  // skip 512 * 512 floats
+	spmm.host.s = parse_csr_dlmc(start_of_sparse, spmm.sparse_path);
+
+	float* ptr = spmm.host.s.val + spmm.host.s.val_size;
+
+	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		spmm.host.r[i] = ptr;
+		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
+	}
+
+	/*
+      * +------+------+-------+-------+-------+---------+---------+-----+------+------+-------+-------+-------+
+      * | x_32 | x_64 | x_128 | x_256 | x_512 | row_ptr | col_idx | val | r_32 | r_64 | r_128 | r_256 | r_512 |
+      * +------+------+-------+-------+-------+---------+---------+-----+------+------+-----+---+-------------+
+      * +------------------------------------------HOST/DEVICE------------------------------------------------+
+   */
+
+	spmm.dev.data = cuda_malloc_device(spmm.host.s.b_size + 2 * BENCHMARKING_TOTAL_DENSE_B_SIZE);
+	CUDA_CHECK(cudaMemcpy(spmm.dev.data, spmm.host.data, spmm.host.s.b_size + BENCHMARKING_TOTAL_DENSE_B_SIZE, cudaMemcpyHostToDevice));
+
+	// Partition dev
+	ptr = reinterpret_cast<float*>(spmm.dev.data);
+
+	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		spmm.dev.d[i] = ptr;
+		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
+	}
+
+	// TODO: This trashes the previous empty object and makes a new one. Make a good copy assignment operator function instead.
+	spmm.dev.s = CSR(spmm.host.s.rows, spmm.host.s.cols, spmm.host.s.nnz);
+	spmm.dev.s.partition(ptr);
+
+	ptr = spmm.dev.s.val + spmm.dev.s.val_size;
+
+	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		spmm.dev.r[i] = ptr;
+		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
+	}
+}
+
+void prepare_spmm_csc(SPMM<CSC>& spmm)
 {
 	if (!std::filesystem::exists(spmm.sparse_path) || !std::filesystem::is_regular_file(spmm.sparse_path)) {
 		throw std::runtime_error("Invalid file given: " + spmm.sparse_path.string());
@@ -346,11 +438,11 @@ void prepare_spmm(SPMM<CSC>& spmm)
 	}
 }
 
-void warmup_spmm(SPMM<CSC>& spmm, const uint8_t size_idx)
+void warmup_spmm_csr(SPMM<CSR>& spmm, const uint8_t size_idx)
 {
 	// PERF: Bounds check
 	assert(size_idx < std::size(BENCHMARKING_DENSE_N_ROWS) - 1);
-	run_spmm(spmm, size_idx);
+	run_spmm_csr(spmm, size_idx);
 
 	size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
 	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
@@ -360,7 +452,7 @@ void warmup_spmm(SPMM<CSC>& spmm, const uint8_t size_idx)
 
 	CuSparse cusparse;
 	cusparseCreate(&cusparse.handle);
-	prepare_cusparse(spmm, cusparse);
+	prepare_cusparse_csr(spmm, cusparse);
 
 	CUSPARSE_CHECK(cusparseSpMM(cusparse.handle,
 		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
@@ -377,10 +469,44 @@ void warmup_spmm(SPMM<CSC>& spmm, const uint8_t size_idx)
 	}
 	cusparseDestroy(cusparse.handle);
 
-	verify_res(spmm.host.r[size_idx], spmm.host.r[size_idx + 1], res_size);
+	verify_res(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size);
 }
 
-void run_spmm(SPMM<CSC>& spmm, const uint8_t idx)
+void warmup_spmm_csc(SPMM<CSC>& spmm, const uint8_t size_idx)
+{
+	// PERF: Bounds check
+	assert(size_idx < std::size(BENCHMARKING_DENSE_N_ROWS) - 1);
+	run_spmm_csc(spmm, size_idx);
+
+	size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
+	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
+
+	// WARN: Temporary hack
+	std::memcpy(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size * sizeof(float));
+
+	CuSparse cusparse;
+	cusparseCreate(&cusparse.handle);
+	prepare_cusparse_csc(spmm, cusparse);
+
+	CUSPARSE_CHECK(cusparseSpMM(cusparse.handle,
+		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+		&cusparse.alpha, cusparse.sparse, cusparse.dense[size_idx], &cusparse.beta, cusparse.res[size_idx], CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT, cusparse.work_buffer));
+	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
+
+	cuda_dealloc_device(cusparse.work_buffer);
+
+	cusparseDestroySpMat(cusparse.sparse);
+
+	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		cusparseDestroyDnMat(cusparse.dense[i]);
+		cusparseDestroyDnMat(cusparse.res[i]);
+	}
+	cusparseDestroy(cusparse.handle);
+
+	verify_res(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size);
+}
+
+void run_spmm_csr(SPMM<CSR>& spmm, const uint8_t idx)
 {
 	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
 	const size_t k = spmm.dev.s.rows;
@@ -389,10 +515,30 @@ void run_spmm(SPMM<CSC>& spmm, const uint8_t idx)
 	// One thread per element of the output.
 	// One thread block stretched across a row of the output
 	// (32x512)*(512x512)=(32x512)
+	// dim3 spmm_block_sm(MAT_SIZE / TN);
+	// dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
 	dim3 spmm_block_sm(512);
 	dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
 
-	spmm_csc<KernelType::SharedMemory, OutputFormat::RM>
+	spmm_coalesced<<<spmm_grid_sm, spmm_block_sm>>>(
+		spmm.dev.d[idx],
+		spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val,
+		m, k, n, spmm.dev.r[idx]);
+}
+
+void run_spmm_csc(SPMM<CSC>& spmm, const uint8_t idx)
+{
+	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+	const size_t k = spmm.dev.s.rows;
+	const size_t n = spmm.dev.s.cols;
+
+	// One thread per element of the output.
+	// One thread block stretched across a row of the output
+	// (32x512)*(512x512)=(32x512)
+	dim3 spmm_block_sm(MAT_SIZE / TN);
+	dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
+
+	spmm_csc_memio<OutputFormat::RM>
 		<<<spmm_grid_sm, spmm_block_sm>>>(
 			spmm.dev.d[idx],
 			spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,

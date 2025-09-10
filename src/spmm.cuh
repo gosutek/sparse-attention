@@ -30,11 +30,15 @@ void* cuda_malloc_host(size_t b_size);
 void  cuda_dealloc_host(void* ptr);
 void  cuda_dealloc_device(void* ptr);
 
-void prepare_spmm(SPMM<CSC>& spmm);
-void warmup_spmm(SPMM<CSC>& spmm, const uint8_t size_idx);
-void run_spmm(SPMM<CSC>& spmm, const uint8_t idx);
+void prepare_spmm_csr(SPMM<CSR>& spmm);
+void prepare_spmm_csc(SPMM<CSC>& spmm);
+void warmup_spmm_csr(SPMM<CSR>& spmm, const uint8_t size_idx);
+void warmup_spmm_csc(SPMM<CSC>& spmm, const uint8_t size_idx);
+void run_spmm_csr(SPMM<CSR>& spmm, const uint8_t idx);
+void run_spmm_csc(SPMM<CSC>& spmm, const uint8_t idx);
 
-void prepare_cusparse(SPMM<CSC>& spmm, CuSparse& cusparse);
+void prepare_cusparse_csr(SPMM<CSR>& spmm, CuSparse& cusparse);
+void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse);
 
 void prepare_mhsa(MHSA<CSC, CSR>& mhsa);
 void run_mhsa(MHSA<CSC, CSR>& mhsa);

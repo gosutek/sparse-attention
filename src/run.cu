@@ -83,11 +83,11 @@ void benchmark_spmm()
 	// 3.3 Run 100-1000 times each
 	// 3.4 Calculate FLOPs
 
-	SPMM<CSC>   spmm;
+	SPMM<CSR>   spmm;
 	std::string data_dir_path = construct_path("data/dlmc/transformer/l0_regularization/0.5/", BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
 	spmm.sparse_path = data_dir_path + "q.smtx";
 
-	prepare_spmm(spmm);
+	prepare_spmm_csr(spmm);
 
 	float       time;
 	cudaEvent_t start, stop;
@@ -95,10 +95,10 @@ void benchmark_spmm()
 	cudaEventCreate(&stop);
 
 	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		warmup_spmm(spmm, 0);
+		warmup_spmm_csr(spmm, 0);
 		cudaEventRecord(start);
 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
-			run_spmm(spmm, i);
+			run_spmm_csr(spmm, i);
 		}
 		cudaEventRecord(stop);
 		cudaEventSynchronize(start);
@@ -127,8 +127,8 @@ void benchmark_cusparse()
 	spmm.sparse_path = data_dir_path + "q.smtx";
 
 	// WARN: Calling both of these is necessary at the moment but does double work.
-	prepare_spmm(spmm);
-	prepare_cusparse(spmm, cusparse);
+	prepare_spmm_csc(spmm);
+	prepare_cusparse_csc(spmm, cusparse);
 
 	float       time;
 	cudaEvent_t start, stop;
