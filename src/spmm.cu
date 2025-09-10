@@ -145,6 +145,42 @@ __global__ void spmm_coalesced(
 
 	set_elem_rm(res, n, y, x, acc);
 }
+
+template <OutputFormat O>
+__global__ void spmm_csc_memio(
+	const float* __restrict__ a,  // expect row-major for coalesced access
+	const uint32_t* __restrict__ col_ptr,
+	const uint32_t* __restrict__ row_idx,
+	const float* __restrict__ val,
+	const size_t m,
+	const size_t k,
+	const size_t n,
+	float* __restrict__ res)
+{
+	uint32_t rect = threadIdx.x;
+	uint32_t y = blockIdx.x;
+
+	float            acc[TN] = { 0.0f };
+	__shared__ float x_row_sm[MAT_SIZE];
+
+	for (size_t x = rect * TN; x < rect * TN + TN; ++x) {
+		x_row_sm[x] = get_elem_rm(a, k, y, x);
+	}
+	__syncthreads();
+
+	for (size_t x = rect * TN; x < rect * TN + TN; ++x) {
+		size_t idx = x % TN;
+		for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
+			acc[idx] += x_row_sm[row_idx[i]] * val[i];
+		}
+		if constexpr (O == OutputFormat::RM) {
+			set_elem_rm(res, n, y, x, acc[idx]);
+		} else {
+			set_elem_cm(res, m, y, x, acc[idx]);
+		}
+	}
+}
+
 // TODO: Incorporate into the template
 __global__ void spmm_rm_csr_gm(
 	const float* __restrict__ a,
