@@ -89,14 +89,9 @@ __global__ void spmm_csc(
 		y = blockIdx.y * blockDim.y + threadIdx.y;
 	}
 
-	if (x >= n || y >= m) {  // not really needed since sizes are powers of 2
-		return;
-	}
-
 	float acc = 0.0f;
 	if constexpr (K == KernelType::SharedMemory) {
-		// TODO: Change hardcoded value
-		__shared__ float x_row_sm[512];
+		__shared__ float x_row_sm[MAT_SIZE];
 
 		x_row_sm[x] = get_elem_rm(a, k, y, x);
 
