@@ -191,7 +191,7 @@ static CSR read_mask(const DLMC& dlmc, const size_t sequence_size, const size_t 
 	return { header.n_rows, header.n_cols, header.nnz };
 }
 
-static CSR parse_csr_dlmc(void* dst, const std::filesystem::path& filepath)
+CSR parse_csr_dlmc(void* dst, const std::filesystem::path& filepath)
 {
 	std::ifstream file_stream(filepath, std::ios_base::in);
 
@@ -199,15 +199,8 @@ static CSR parse_csr_dlmc(void* dst, const std::filesystem::path& filepath)
 		throw std::runtime_error("Failed to open file stream for filepath: " + filepath.stem().string());
 	}
 
-	CSR        res;
 	DLMCHeader header = parse_dlmc_header(file_stream);
-	res.rows = header.n_rows;
-	res.cols = header.n_cols;
-	res.nnz = header.nnz;
-
-	res.row_ptr_size = header.n_rows + 1;
-	res.col_idx_size = header.nnz;
-	res.val_size = header.nnz;
+	CSR        res = { header.n_rows, header.n_cols, header.nnz };
 
 	res.row_ptr = reinterpret_cast<uint32_t*>(dst);
 
@@ -288,24 +281,24 @@ CSC parse_csc_dlmc(void* dst, const std::filesystem::path& filepath)
 	return res;
 }
 
-static CSC read_mat(void* dst, const BodyType bt, const AttentionMechanism am, const size_t layer)
-{
-	const std::filesystem::path base_path = "data/dlmc/transformer/l0_regularization/0.5/";
-
-	std::string data_dir_string = construct_path(base_path, bt, am, layer);
-	data_dir_string += "_q.smtx";
-
-	std::filesystem::path path = { data_dir_string };
-
-	if (!std::filesystem::exists(path) || !std::filesystem::is_regular_file(path)) {
-		throw std::runtime_error("Matrix doesn't exist: " + path.stem().string());
-	}
-	std::ifstream file_stream(path);
-
-	CSC mat = parse_csc_dlmc(dst, path);
-
-	return mat;
-}
+// static CSC read_mat(void* dst, const BodyType bt, const AttentionMechanism am, const size_t layer)
+// {
+// 	const std::filesystem::path base_path = "data/dlmc/transformer/l0_regularization/0.5/";
+//
+// 	std::string data_dir_string = construct_path(base_path, bt, am, layer);
+// 	data_dir_string += "_q.smtx";
+//
+// 	std::filesystem::path path = { data_dir_string };
+//
+// 	if (!std::filesystem::exists(path) || !std::filesystem::is_regular_file(path)) {
+// 		throw std::runtime_error("Matrix doesn't exist: " + path.stem().string());
+// 	}
+// 	std::ifstream file_stream(path);
+//
+// 	CSC mat = parse_csc_dlmc(dst, path);
+//
+// 	return mat;
+// }
 
 // void mhsa_load_host_csr(
 // 	MHSA<CSR, CSR> mhsa,
