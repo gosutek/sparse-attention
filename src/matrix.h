@@ -36,9 +36,20 @@ struct CSR
 		b_size = row_ptr_size * sizeof(uint32_t) + col_idx_size * sizeof(uint32_t) + val_size * sizeof(float);
 	}
 
-	CSR(const CSR& other) = default;
+	CSR(const CSR& other) :
+		rows(other.rows), cols(other.cols), nnz(other.nnz),
+		row_ptr_size(other.row_ptr_size), col_idx_size(other.col_idx_size), val_size(other.val_size),
+		b_size(other.b_size) {}
+
 	CSR& operator=(const CSR& other) = default;
 	CSR(CSR&& other) = default;
+
+	void partition(void* const ptr)
+	{
+		row_ptr = reinterpret_cast<uint32_t*>(ptr);
+		col_idx = row_ptr + row_ptr_size;
+		val = reinterpret_cast<float*>(col_idx + col_idx_size);
+	}
 };
 
 /**
