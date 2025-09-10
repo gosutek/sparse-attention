@@ -111,6 +111,40 @@ __global__ void spmm_csc(
 	}
 }
 
+__global__ void spmm_coalesced(
+	const float* __restrict__ a,
+	const uint32_t* __restrict__ row_ptr,
+	const uint32_t* __restrict__ col_idx,
+	const float* __restrict__ val,
+	const size_t m,
+	const size_t k,
+	const size_t n,
+	float* __restrict__ res)
+{
+	uint32_t x = threadIdx.x;
+	uint32_t y = blockIdx.x;
+
+	__shared__ float x_row_sm[MAT_SIZE];
+
+	// uint32_t tks = k / TN;
+	// for (size_t i = 0; i < TN; ++i) {
+	// 	size_t stride = i * tks;
+	// 	x_row_sm[x + stride] = get_elem_rm(a, k, y, x + stride);
+	// }
+	x_row_sm[x] = get_elem_rm(a, k, y, x);
+	__syncthreads();
+
+	float acc = 0.0f;
+	for (size_t row = 0; row < k; ++row) {
+		for (size_t i = row_ptr[row]; i < row_ptr[row + 1]; ++i) {
+			if (x == col_idx[i]) {
+				acc += x_row_sm[row] * val[i];
+			}
+		}
+	}
+
+	set_elem_rm(res, n, y, x, acc);
+}
 // TODO: Incorporate into the template
 __global__ void spmm_rm_csr_gm(
 	const float* __restrict__ a,
