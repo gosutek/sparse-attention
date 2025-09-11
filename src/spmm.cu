@@ -71,7 +71,7 @@ __device__ inline static void set_elem_cm(float* const a, size_t n_rows, size_t 
 
 template <KernelType K, OutputFormat O>
 __global__ void spmm_csc(
-	const float* __restrict__ a,  // expect row-major for coalesced access
+	const float* __restrict__ a,
 	const uint32_t* __restrict__ col_ptr,
 	const uint32_t* __restrict__ row_idx,
 	const float* __restrict__ val,
@@ -127,11 +127,6 @@ __global__ void spmm_coalesced(
 	__shared__ float x_row_sm[MAT_SIZE];
 	__shared__ float shared_acc[MAT_SIZE];
 
-	// uint32_t tks = k / TN;
-	// for (size_t i = 0; i < TN; ++i) {
-	// 	size_t stride = i * tks;
-	// 	x_row_sm[x + stride] = get_elem_rm(a, k, y, x + stride);
-	// }
 	for (uint32_t i = x; i < k; i += blockDim.x) {
 		x_row_sm[i] = get_elem_rm(a, k, y, i);
 		shared_acc[i] = 0.0f;
@@ -140,7 +135,7 @@ __global__ void spmm_coalesced(
 
 	for (uint32_t row = 0; row < k; ++row) {
 		for (uint32_t i = row_ptr[row] + x; i < row_ptr[row + 1]; i += blockDim.x) {
-			// shared_acc[col_idx[i]] += x_row_sm[row] * val[i];
+			// TODO: Figure out a way to remove atomicAdd
 			atomicAdd_block(&shared_acc[col_idx[i]], x_row_sm[row] * val[i]);
 		}
 	}
@@ -152,9 +147,50 @@ __global__ void spmm_coalesced(
 	}
 }
 
+__global__ void spmm_1d_blocktiling(
+	const float* __restrict__ a,
+	const uint32_t* __restrict__ row_ptr,
+	const uint32_t* __restrict__ col_idx,
+	const float* __restrict__ val,
+	const size_t m,
+	const size_t k,
+	const size_t n,
+	float* __restrict__ res)
+{
+	__shared__ float x_row_sm[MAT_SIZE];
+	__shared__ float shared_acc[MAT_SIZE];
+
+	uint32_t tns = n / TN;
+	uint32_t y = blockDim.x % tns;
+	uint32_t a_row = blockDim.x / tns;
+
+	for (size_t i = threadIdx.x; i < k; i += blockDim.x) {
+		x_row_sm[i] = get_elem_rm(a, k, a_row, i);
+	}
+	__syncthreads();
+
+	for (size_t r = 0; r < k; ++r) {
+		/**
+       * row_ptr[r] = 3
+       * row_ptr[r + 1] = 10
+       * non-zeros in indices 3,4,5,6,7,8,9
+       */
+		size_t partition = ceil((row_ptr[r + 1] - row_ptr[r] + 1) / (tns * 1.0f));
+		for (size_t i = row_ptr[r] + threadIdx.x; i < row_ptr[r] + partition * (y + 1); i += blockDim.x) {
+			atomicAdd_block(&shared_acc[col_idx[i]], val[i] * x_row_sm[r]);
+		}
+	}
+
+	__syncthreads();
+
+	for (size_t i = threadIdx.x * blockDim.x; i < k; i += blockDim.x) {
+		set_elem_rm(res, n, a_row, i, shared_acc[i]);
+	}
+}
+
 template <OutputFormat O>
 __global__ void spmm_csc_memio(
-	const float* __restrict__ a,  // expect row-major for coalesced access
+	const float* __restrict__ a,
 	const uint32_t* __restrict__ col_ptr,
 	const uint32_t* __restrict__ row_idx,
 	const float* __restrict__ val,
@@ -196,7 +232,7 @@ __global__ void spmm_rm_csr_gm(
 	const uint32_t m,
 	const uint32_t k,
 	const uint32_t n,
-	float* __restrict__ res)  // expect row-major for coalesced access
+	float* __restrict__ res)
 {
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
 	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -523,10 +559,12 @@ void run_spmm_csr(SPMM<CSR>& spmm, const uint8_t idx)
 	// (32x512)*(512x512)=(32x512)
 	// dim3 spmm_block_sm(MAT_SIZE / TN);
 	// dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
-	dim3 spmm_block_sm(256);
-	dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
+	// dim3 spmm_block_sm(256);
+	// dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
+	dim3 spmm_block_sm(256 / (MAT_SIZE / TN));
+	dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx] * MAT_SIZE / TN);
 
-	spmm_coalesced<<<spmm_grid_sm, spmm_block_sm>>>(
+	spmm_1d_blocktiling<<<spmm_grid_sm, spmm_block_sm>>>(
 		spmm.dev.d[idx],
 		spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val,
 		m, k, n, spmm.dev.r[idx]);
