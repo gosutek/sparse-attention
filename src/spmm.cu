@@ -125,25 +125,31 @@ __global__ void spmm_coalesced(
 	uint32_t y = blockIdx.x;
 
 	__shared__ float x_row_sm[MAT_SIZE];
+	__shared__ float shared_acc[MAT_SIZE];
 
 	// uint32_t tks = k / TN;
 	// for (size_t i = 0; i < TN; ++i) {
 	// 	size_t stride = i * tks;
 	// 	x_row_sm[x + stride] = get_elem_rm(a, k, y, x + stride);
 	// }
-	x_row_sm[x] = get_elem_rm(a, k, y, x);
+	for (uint32_t i = x; i < k; i += blockDim.x) {
+		x_row_sm[i] = get_elem_rm(a, k, y, i);
+		shared_acc[i] = 0.0f;
+	}
 	__syncthreads();
 
-	float acc = 0.0f;
-	for (size_t row = 0; row < k; ++row) {
-		for (size_t i = row_ptr[row]; i < row_ptr[row + 1]; ++i) {
-			if (x == col_idx[i]) {
-				acc += x_row_sm[row] * val[i];
-			}
+	for (uint32_t row = 0; row < k; ++row) {
+		for (uint32_t i = row_ptr[row] + x; i < row_ptr[row + 1]; i += blockDim.x) {
+			// shared_acc[col_idx[i]] += x_row_sm[row] * val[i];
+			atomicAdd_block(&shared_acc[col_idx[i]], x_row_sm[row] * val[i]);
 		}
 	}
 
-	set_elem_rm(res, n, y, x, acc);
+	__syncthreads();
+
+	for (uint32_t i = x; i < k; i += blockDim.x) {
+		set_elem_rm(res, n, y, i, shared_acc[i]);
+	}
 }
 
 template <OutputFormat O>
@@ -517,7 +523,7 @@ void run_spmm_csr(SPMM<CSR>& spmm, const uint8_t idx)
 	// (32x512)*(512x512)=(32x512)
 	// dim3 spmm_block_sm(MAT_SIZE / TN);
 	// dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
-	dim3 spmm_block_sm(512);
+	dim3 spmm_block_sm(256);
 	dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
 
 	spmm_coalesced<<<spmm_grid_sm, spmm_block_sm>>>(
@@ -535,10 +541,10 @@ void run_spmm_csc(SPMM<CSC>& spmm, const uint8_t idx)
 	// One thread per element of the output.
 	// One thread block stretched across a row of the output
 	// (32x512)*(512x512)=(32x512)
-	dim3 spmm_block_sm(MAT_SIZE / TN);
+	dim3 spmm_block_sm(512);
 	dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
 
-	spmm_csc_memio<OutputFormat::RM>
+	spmm_csc<KernelType::SharedMemory, OutputFormat::RM>
 		<<<spmm_grid_sm, spmm_block_sm>>>(
 			spmm.dev.d[idx],
 			spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
