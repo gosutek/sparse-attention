@@ -111,7 +111,7 @@ __global__ void spmm_csc(
 	}
 }
 
-__global__ void spmm_coalesced(
+__global__ void spmm_coalesced_csr(
 	const float* __restrict__ a,
 	const uint32_t* __restrict__ row_ptr,
 	const uint32_t* __restrict__ col_idx,
@@ -147,6 +147,22 @@ __global__ void spmm_coalesced(
 	}
 }
 
+__global__ void spmm_csc_1d_blocktiling(
+	const float* __restrict__ a,
+	const uint32_t* __restrict__ col_ptr,
+	const uint32_t* __restrict__ row_idx,
+	const float* __restrict__ val,
+	const size_t m,
+	const size_t k,
+	const size_t n,
+	float* __restrict__ res)
+{
+	__shared__ float x_row_sm[MAT_SIZE];
+
+	x_row_sm[threadIdx.x] = get_elem_rm(a, k, blockIdx.x, threadIdx.x);
+	__syncthreads();
+}
+
 __global__ void spmm_1d_blocktiling(
 	const float* __restrict__ a,
 	const uint32_t* __restrict__ row_ptr,
@@ -160,31 +176,30 @@ __global__ void spmm_1d_blocktiling(
 	__shared__ float x_row_sm[MAT_SIZE];
 	__shared__ float shared_acc[MAT_SIZE];
 
-	uint32_t tns = n / TN;
-	uint32_t y = blockDim.x % tns;
-	uint32_t a_row = blockDim.x / tns;
-
+	// Does indeed load the whole of row from A for every block (k / BN times)
 	for (size_t i = threadIdx.x; i < k; i += blockDim.x) {
-		x_row_sm[i] = get_elem_rm(a, k, a_row, i);
+		x_row_sm[i] = get_elem_rm(a, k, blockIdx.x, i);
+		shared_acc[i] = 0.0f;
 	}
 	__syncthreads();
 
 	for (size_t r = 0; r < k; ++r) {
-		/**
-       * row_ptr[r] = 3
-       * row_ptr[r + 1] = 10
-       * non-zeros in indices 3,4,5,6,7,8,9
-       */
-		size_t partition = ceil((row_ptr[r + 1] - row_ptr[r] + 1) / (tns * 1.0f));
-		for (size_t i = row_ptr[r] + threadIdx.x; i < row_ptr[r] + partition * (y + 1); i += blockDim.x) {
-			atomicAdd_block(&shared_acc[col_idx[i]], val[i] * x_row_sm[r]);
+		size_t bound = min(static_cast<unsigned long>(row_ptr[r + 1]), row_ptr[r] + (blockIdx.y + 1) * BN);
+		for (size_t i = row_ptr[r] + blockIdx.y * BN + threadIdx.x; i < bound; i += blockDim.x) {
+			atomicAdd(&shared_acc[col_idx[i]], val[i] * x_row_sm[r]);
+			// if (blockIdx.y == 0 && blockIdx.x == 0 && threadIdx.x == 0) {
+			// 	printf("Multiplying val[%lu](%.2f) * x_row_sm[%lu](%.2f) and storing at shared_acc[%lu](%.2f)\n",
+			// 		i, val[i], r, x_row_sm[r], col_idx[i], shared_acc[col_idx[i]]);
+			// }
 		}
 	}
 
 	__syncthreads();
 
-	for (size_t i = threadIdx.x * blockDim.x; i < k; i += blockDim.x) {
-		set_elem_rm(res, n, a_row, i, shared_acc[i]);
+	for (size_t i = threadIdx.x; i < MAT_SIZE; i += blockDim.x) {
+		if (shared_acc[i] != 0) {
+			set_elem_rm(res, n, blockIdx.x, i, shared_acc[i]);
+		}
 	}
 }
 
@@ -561,10 +576,10 @@ void run_spmm_csr(SPMM<CSR>& spmm, const uint8_t idx)
 	// dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
 	// dim3 spmm_block_sm(256);
 	// dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
-	dim3 spmm_block_sm(256 / (MAT_SIZE / TN));
-	dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx] * MAT_SIZE / TN);
+	dim3 spmm_1d_blocktiling_grid_size(BENCHMARKING_DENSE_N_ROWS[idx], n / BN);
+	dim3 spmm_1d_blocktiling_block_size(BN / TN);
 
-	spmm_1d_blocktiling<<<spmm_grid_sm, spmm_block_sm>>>(
+	spmm_1d_blocktiling<<<spmm_1d_blocktiling_grid_size, spmm_1d_blocktiling_block_size>>>(
 		spmm.dev.d[idx],
 		spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val,
 		m, k, n, spmm.dev.r[idx]);
@@ -576,17 +591,13 @@ void run_spmm_csc(SPMM<CSC>& spmm, const uint8_t idx)
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
-	// One thread per element of the output.
-	// One thread block stretched across a row of the output
-	// (32x512)*(512x512)=(32x512)
-	dim3 spmm_block_sm(512);
-	dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
+	dim3 spmm_grid_sm(n);
+	dim3 spmm_block_sm(k);
 
-	spmm_csc<KernelType::SharedMemory, OutputFormat::RM>
-		<<<spmm_grid_sm, spmm_block_sm>>>(
-			spmm.dev.d[idx],
-			spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
-			m, k, n, spmm.dev.r[idx]);
+	spmm_csr_1d_blocktiling<<<spmm_grid_sm, spmm_block_sm>>>(
+		spmm.dev.d[idx],
+		spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
+		m, k, n, spmm.dev.r[idx]);
 }
 
 // void prepare_mhsa(MHSA<CSC, CSR>& mhsa)
