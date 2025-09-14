@@ -159,8 +159,125 @@ __global__ void spmm_csc_1d_blocktiling(
 {
 	__shared__ float x_row_sm[MAT_SIZE];
 
-	x_row_sm[threadIdx.x] = get_elem_rm(a, k, blockIdx.x, threadIdx.x);
+	for (size_t i = threadIdx.x; i < MAT_SIZE; i += blockDim.x) {
+		x_row_sm[i] = get_elem_rm(a, k, blockIdx.y, i);
+	}
 	__syncthreads();
+
+	float acc = 0.0f;
+	for (size_t i = col_ptr[blockIdx.x] + threadIdx.x; i < col_ptr[blockIdx.x + 1]; i += blockDim.x) {
+		acc += x_row_sm[row_idx[i]] * val[i];
+	}
+	__syncthreads();
+
+	for (uint8_t i = WARP_SIZE / 2; i > 0; i /= 2) {
+		acc += __shfl_xor_sync(0xffffffff, acc, i, WARP_SIZE);
+	}
+
+	uint32_t lane_id = threadIdx.x & 0x1f;
+	uint32_t warp_id = threadIdx.x / WARP_SIZE;
+
+	constexpr uint8_t n_warps = N_THREADS / WARP_SIZE;
+	__shared__ float  warp_sums[n_warps];
+
+	if (lane_id == 0) {
+		warp_sums[warp_id] = acc;
+	}
+
+	__syncthreads();
+
+	if (warp_id == 0) {
+		// WARN: some threads point to garbage
+		float acc = warp_sums[lane_id];
+
+		constexpr uint32_t mask = 0xFF;
+
+		for (uint8_t i = n_warps / 2; i > 0; i /= 2) {
+			acc += __shfl_xor_sync(mask, acc, i, WARP_SIZE);
+		}
+
+		if (lane_id == 0) {
+			set_elem_rm(res, n, blockIdx.y, blockIdx.x, acc);
+		}
+	}
+}
+
+__global__ void spmm_csc_2d_blocktiling(
+	const float* __restrict__ a,
+	const uint32_t* __restrict__ col_ptr,
+	const uint32_t* __restrict__ row_idx,
+	const float* __restrict__ val,
+	const size_t m,
+	const size_t k,
+	const size_t n,
+	float* __restrict__ res)
+{
+	__shared__ float x_row_sm[MAT_SIZE];
+
+	// for (size_t i = blockIdx.z * BK + threadIdx.x * TK; i < (blockIdx.z + 1) * BK; i += blockDim.x * TK) {
+	for (size_t i = threadIdx.x * TK; i < MAT_SIZE; i += blockDim.x * TK) {
+		float4 tmp = reinterpret_cast<const float4*>(&a[blockIdx.y * k + i])[0];
+#pragma unroll
+		for (uint8_t t = 0; t < TK; t++) {
+			x_row_sm[i + t] = ((float*)&tmp)[t];
+		}
+	}
+	__syncthreads();
+
+	float  acc = 0.0f;
+	size_t nz_start = col_ptr[blockIdx.x];
+	size_t nz_end = col_ptr[blockIdx.x + 1];
+	size_t nnz_per_block = (nz_end - nz_start + gridDim.z - 1) / gridDim.z;
+
+	size_t block_start = nz_start + blockIdx.z * nnz_per_block;
+	size_t block_end = min(block_start + nnz_per_block, nz_end);
+
+	for (size_t i = block_start + threadIdx.x * TK;
+		i < block_end;
+		i += blockDim.x * TK) {
+		size_t thread_end = min(i + TK, block_end);
+#pragma unroll
+		for (size_t j = i; j < thread_end; ++j) {
+			acc += x_row_sm[row_idx[j]] * val[j];
+		}
+	}
+	__syncthreads();
+
+	for (uint8_t i = WARP_SIZE / 2; i > 0; i /= 2) {
+		acc += __shfl_xor_sync(0xffffffff, acc, i, WARP_SIZE);
+	}
+
+	uint32_t lane_id = threadIdx.x & 0x1f;
+	uint32_t warp_id = threadIdx.x / WARP_SIZE;
+
+	constexpr uint8_t n_warps = N_THREADS / WARP_SIZE;
+	__shared__ float  warp_sums[n_warps];
+
+	// at this point the first thread (lane_id == 0) of every warp in this block
+	// has the result from TN non-zeros for this col
+	// this is essentially warp-wide reduction
+	if (lane_id == 0) {
+		warp_sums[warp_id] = acc;
+	}
+	// we write the warp-wide results to a block-wide memory location (SMEM)
+	// so that we can perform block-wide reduction
+
+	__syncthreads();
+
+	// we assign the block-wide reduction to warp-0
+	if (warp_id == 0) {
+		// WARN: some threads point to garbage
+		float acc = warp_sums[lane_id];
+
+		constexpr uint32_t mask = 0x3;
+
+		for (uint8_t i = n_warps / 2; i > 0; i /= 2) {
+			acc += __shfl_xor_sync(mask, acc, i, WARP_SIZE);
+		}
+		if (lane_id == 0) {
+			atomicAdd(&res[blockIdx.y * n + blockIdx.x], acc);
+		}
+	}
 }
 
 __global__ void spmm_1d_blocktiling(
@@ -591,10 +708,18 @@ void run_spmm_csc(SPMM<CSC>& spmm, const uint8_t idx)
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
-	dim3 spmm_grid_sm(n);
-	dim3 spmm_block_sm(k);
+	// NOTE: 1d_blocktiling
+	// dim3 spmm_grid_sm(n, BENCHMARKING_DENSE_N_ROWS[idx]);
+	// dim3 spmm_block_sm(128);
+	// spmm_csc_1d_blocktiling<<<spmm_grid_sm, spmm_block_sm>>>(
+	// 	spmm.dev.d[idx],
+	// 	spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
+	// 	m, k, n, spmm.dev.r[idx]);
 
-	spmm_csr_1d_blocktiling<<<spmm_grid_sm, spmm_block_sm>>>(
+	// NOTE: 2d_blocktiling
+	dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], k / BK);
+	dim3 block(N_THREADS);
+	spmm_csc_2d_blocktiling<<<grid, block>>>(
 		spmm.dev.d[idx],
 		spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
 		m, k, n, spmm.dev.r[idx]);
