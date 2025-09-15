@@ -236,6 +236,7 @@ __global__ void spmm_csc_2d_blocktiling(
 		i < block_end;
 		i += blockDim.x * TK) {
 		size_t thread_end = min(i + TK, block_end);
+		// TODO: Make into vectorized loads
 #pragma unroll
 		for (size_t j = i; j < thread_end; ++j) {
 			acc += x_row_sm[row_idx[j]] * val[j];
@@ -272,7 +273,7 @@ __global__ void spmm_csc_2d_blocktiling(
 		constexpr uint32_t mask = 0x3;
 
 		for (uint8_t i = n_warps / 2; i > 0; i /= 2) {
-			acc += __shfl_xor_sync(mask, acc, i, WARP_SIZE);
+			acc += __shfl_xor_sync(mask, acc, i, n_warps);
 		}
 		if (lane_id == 0) {
 			atomicAdd(&res[blockIdx.y * n + blockIdx.x], acc);
@@ -618,7 +619,7 @@ void warmup_spmm_csr(SPMM<CSR>& spmm, const uint8_t size_idx)
 	assert(size_idx < std::size(BENCHMARKING_DENSE_N_ROWS) - 1);
 	run_spmm_csr(spmm, size_idx);
 
-	size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
+	const size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
 	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
 
 	// WARN: Temporary hack
@@ -652,7 +653,7 @@ void warmup_spmm_csc(SPMM<CSC>& spmm, const uint8_t size_idx)
 	assert(size_idx < std::size(BENCHMARKING_DENSE_N_ROWS) - 1);
 	run_spmm_csc(spmm, size_idx);
 
-	size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
+	const size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
 	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
 
 	// WARN: Temporary hack
@@ -710,13 +711,17 @@ void run_spmm_csc(SPMM<CSC>& spmm, const uint8_t idx)
 
 	// NOTE: 1d_blocktiling
 	// dim3 spmm_grid_sm(n, BENCHMARKING_DENSE_N_ROWS[idx]);
-	// dim3 spmm_block_sm(128);
+	// dim3 spmm_block_sm(N_THREADS);
 	// spmm_csc_1d_blocktiling<<<spmm_grid_sm, spmm_block_sm>>>(
 	// 	spmm.dev.d[idx],
 	// 	spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
 	// 	m, k, n, spmm.dev.r[idx]);
 
 	// NOTE: 2d_blocktiling
+	// // PERF: Hack ~ find a better way to deal with having to add instead of set the result
+	const size_t res_size = BENCHMARKING_DENSE_N_ROWS[idx] * MAT_SIZE * sizeof(float);
+	CUDA_CHECK(cudaMemset(spmm.dev.r[idx], 0, res_size));
+	CUDA_CHECK(cudaDeviceSynchronize());
 	dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], k / BK);
 	dim3 block(N_THREADS);
 	spmm_csc_2d_blocktiling<<<grid, block>>>(
