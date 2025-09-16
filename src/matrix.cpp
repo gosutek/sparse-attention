@@ -244,11 +244,16 @@ CSC parse_csc_dlmc(void* dst, const std::filesystem::path& filepath)
 	DLMCHeader header = parse_dlmc_header(file_stream);
 	CSC        res(header.n_rows, header.n_cols, header.nnz);
 
-	res.col_ptr = reinterpret_cast<uint32_t*>(dst);
+	uintptr_t ptr = reinterpret_cast<uintptr_t>(dst);
+	res.col_ptr = reinterpret_cast<uint32_t*>(ptr);
 
-	res.row_idx = res.col_ptr + res.col_ptr_size;
+	size_t b_size = res.col_ptr_size * sizeof(uint32_t);
+	ptr += b_size + calc_padding_bytes(b_size, ALIGNMENT_BYTES);
+	res.row_idx = reinterpret_cast<uint32_t*>(ptr);
 
-	res.val = reinterpret_cast<float*>(res.row_idx + res.row_idx_size);
+	b_size = res.row_idx_size * sizeof(uint32_t);
+	ptr += b_size + calc_padding_bytes(b_size, ALIGNMENT_BYTES);
+	res.val = reinterpret_cast<float*>(ptr);
 
 	std::vector<uint32_t> row_ptr_vec(header.n_rows + 1, 0);
 

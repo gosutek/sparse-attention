@@ -1,6 +1,7 @@
 #pragma once
 
 #include "handle.h"
+#include "utils.h"
 #include <vector>
 
 enum class SparseMatrixType
@@ -76,7 +77,13 @@ struct CSC
 		row_idx_size = nnz;
 		val_size = nnz;
 
-		b_size = col_ptr_size * sizeof(uint32_t) + row_idx_size * sizeof(uint32_t) + val_size * sizeof(float);
+		size_t col_ptr_b_size = col_ptr_size * sizeof(uint32_t);
+		size_t row_idx_b_size = row_idx_size * sizeof(uint32_t);
+		size_t val_b_size = val_size * sizeof(float);
+
+		b_size = col_ptr_b_size + calc_padding_bytes(col_ptr_b_size, ALIGNMENT_BYTES) +
+		         row_idx_b_size + calc_padding_bytes(row_idx_b_size, ALIGNMENT_BYTES) +
+		         val_b_size + calc_padding_bytes(val_b_size, ALIGNMENT_BYTES);
 	}
 
 	CSC(const CSC& other) :
@@ -87,11 +94,17 @@ struct CSC
 	CSC& operator=(const CSC& other) = default;
 	CSC(CSC&& other) = default;
 
-	void partition(void* const ptr)
+	void partition(uintptr_t ptr)
 	{
 		col_ptr = reinterpret_cast<uint32_t*>(ptr);
-		row_idx = col_ptr + col_ptr_size;
-		val = reinterpret_cast<float*>(row_idx + row_idx_size);
+
+		size_t b_size = col_ptr_size * sizeof(uint32_t);
+		ptr += b_size + calc_padding_bytes(b_size, ALIGNMENT_BYTES);
+		row_idx = reinterpret_cast<uint32_t*>(ptr);
+
+		b_size = row_idx_size * sizeof(uint32_t);
+		ptr += b_size + calc_padding_bytes(b_size, ALIGNMENT_BYTES);
+		val = reinterpret_cast<float*>(ptr);
 	}
 };
 

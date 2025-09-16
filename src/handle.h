@@ -7,26 +7,27 @@
 
 constexpr size_t MAX_N_LAYERS = 6;
 constexpr size_t MAT_SIZE = 512;
+constexpr size_t ALIGNMENT_BYTES = 128;
 // 5 = w_q, w_k, w_v, w_o, x
 constexpr size_t   MAX_ALLOC = MAX_N_LAYERS * (5 * MAT_SIZE * MAT_SIZE);
 constexpr uint16_t BENCHMARKING_DENSE_N_ROWS[] = { 32, 64, 128, 256, 512 };
 constexpr uint32_t BENCHMARKING_TOTAL_DENSE_B_SIZE = []() {uint32_t acc = 0; for ( const uint16_t size : BENCHMARKING_DENSE_N_ROWS) { acc += sizeof(float) * size * MAT_SIZE;} return acc; }();
-constexpr size_t   BENCHMARKING_ROUNDS = 1;
+constexpr size_t   BENCHMARKING_ROUNDS = 1000;
 
-// NOTE: 2D blocktiling
+// NOTE: better
 constexpr size_t N_THREADS = 64;
 constexpr size_t WARP_SIZE = 32;
 
 constexpr size_t BK = 256;
 constexpr size_t TK = 4;
 
-// NOTE: 1D blocktiling
+// NOTE: worse
 // constexpr size_t N_THREADS = 128;
 // constexpr size_t WARP_SIZE = 32;
 //
 // constexpr size_t BK = 128;
 // constexpr size_t TK = 2;
-
+//
 constexpr size_t BN = 64;
 constexpr size_t TN = 4;
 
@@ -110,8 +111,7 @@ struct CuSparse
 template <typename WeightFormat>
 struct SpmmMemHandle
 {
-	void*  data = nullptr;
-	size_t b_size = 0;
+	void* data = nullptr;
 
 	float*       d[std::size(BENCHMARKING_DENSE_N_ROWS)] = {};
 	WeightFormat s;
@@ -122,6 +122,7 @@ template <typename WeightFormat>
 struct SPMM
 {
 	std::filesystem::path sparse_path;
+	size_t                b_size = 0;
 
 	SpmmMemHandle<WeightFormat> host;
 	SpmmMemHandle<WeightFormat> dev;

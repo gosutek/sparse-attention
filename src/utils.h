@@ -5,6 +5,11 @@
 
 bool verify_res(const float* const actual, const float* const expected, size_t n);
 
+inline size_t calc_padding_bytes(size_t b_size, size_t alignment_bytes)
+{
+	return (alignment_bytes - (b_size & (alignment_bytes - 1))) & (alignment_bytes - 1);
+}
+
 template <typename T>
 std::ostream& operator<<(std::ostream& out_stream, const std::vector<T>& vec)
 {

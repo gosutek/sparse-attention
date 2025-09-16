@@ -555,14 +555,21 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
 
 	std::ifstream file_stream = { spmm.sparse_path };
 	DLMCHeader    header = parse_dlmc_header(file_stream);
-	size_t        sparse_b_size = (sizeof(uint32_t) * (header.n_cols + 1) + sizeof(uint32_t) * header.nnz + sizeof(float) * header.nnz);
+
+	size_t col_ptr_b_size = sizeof(uint32_t) * (header.n_cols + 1);
+	size_t row_idx_b_size = sizeof(uint32_t) * header.nnz;
+	size_t val_b_size = sizeof(float) * header.nnz;
+	size_t sparse_b_size_aligned = col_ptr_b_size + calc_padding_bytes(col_ptr_b_size, ALIGNMENT_BYTES) +
+	                               row_idx_b_size + calc_padding_bytes(row_idx_b_size, ALIGNMENT_BYTES) +
+	                               val_b_size + calc_padding_bytes(val_b_size, ALIGNMENT_BYTES);
 
 	/**
     * Twice the total size of the dense matrices.
     * Once for the input
     * Twice for the result
     **/
-	spmm.host.data = cuda_malloc_host(sparse_b_size + 2 * BENCHMARKING_TOTAL_DENSE_B_SIZE);
+	spmm.b_size = sparse_b_size_aligned + 2 * BENCHMARKING_TOTAL_DENSE_B_SIZE;
+	spmm.host.data = cuda_malloc_host(spmm.b_size);
 	spmm.host.d[0] = reinterpret_cast<float*>(spmm.host.data);
 
 	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
@@ -572,16 +579,37 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
 		}
 	}
 
+	assert((reinterpret_cast<uintptr_t>(spmm.host.d[0]) & (ALIGNMENT_BYTES - 1)) == 0);
+	assert((reinterpret_cast<uintptr_t>(spmm.host.d[1]) & (ALIGNMENT_BYTES - 1)) == 0);
+	assert((reinterpret_cast<uintptr_t>(spmm.host.d[2]) & (ALIGNMENT_BYTES - 1)) == 0);
+	assert((reinterpret_cast<uintptr_t>(spmm.host.d[3]) & (ALIGNMENT_BYTES - 1)) == 0);
+	assert((reinterpret_cast<uintptr_t>(spmm.host.d[4]) & (ALIGNMENT_BYTES - 1)) == 0);
+
 	void* start_of_sparse = spmm.host.d[std::size(BENCHMARKING_DENSE_N_ROWS) - 1] +                          // from the last ptr of spmm.host.d
 	                        BENCHMARKING_DENSE_N_ROWS[std::size(BENCHMARKING_DENSE_N_ROWS) - 1] * MAT_SIZE;  // skip 512 * 512 floats
+
+	// start_of_sparse is 128-byte aligned guaranteed
 	spmm.host.s = parse_csc_dlmc(start_of_sparse, spmm.sparse_path);
 
-	float* ptr = spmm.host.s.val + spmm.host.s.val_size;
+	assert((reinterpret_cast<uintptr_t>(spmm.host.s.col_ptr) & (ALIGNMENT_BYTES - 1)) == 0);
+	assert((reinterpret_cast<uintptr_t>(spmm.host.s.row_idx) & (ALIGNMENT_BYTES - 1)) == 0);
+	assert((reinterpret_cast<uintptr_t>(spmm.host.s.val) & (ALIGNMENT_BYTES - 1)) == 0);
 
+	uintptr_t ptr = reinterpret_cast<uintptr_t>(start_of_sparse) + spmm.host.s.b_size;
+
+	// TODO: use uintptr_t instead of pointer arithmetic on float* (??)
 	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		spmm.host.r[i] = ptr;
-		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
+		spmm.host.r[i] = reinterpret_cast<float*>(ptr);
+		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
 	}
+	assert((reinterpret_cast<uintptr_t>(spmm.host.r[0]) & (ALIGNMENT_BYTES - 1)) == 0);
+	assert((reinterpret_cast<uintptr_t>(spmm.host.r[1]) & (ALIGNMENT_BYTES - 1)) == 0);
+	assert((reinterpret_cast<uintptr_t>(spmm.host.r[2]) & (ALIGNMENT_BYTES - 1)) == 0);
+	assert((reinterpret_cast<uintptr_t>(spmm.host.r[3]) & (ALIGNMENT_BYTES - 1)) == 0);
+	assert((reinterpret_cast<uintptr_t>(spmm.host.r[4]) & (ALIGNMENT_BYTES - 1)) == 0);
+
+	// WARN: asserts cost
+	assert(sparse_b_size_aligned == spmm.host.s.b_size);
 
 	/*
       * +------+------+-------+-------+-------+---------+---------+-----+------+------+-------+-------+-------+
@@ -590,26 +618,26 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
       * +------------------------------------------HOST/DEVICE------------------------------------------------+
    */
 
-	spmm.dev.data = cuda_malloc_device(spmm.host.s.b_size + 2 * BENCHMARKING_TOTAL_DENSE_B_SIZE);
+	spmm.dev.data = cuda_malloc_device(spmm.b_size);
 	CUDA_CHECK(cudaMemcpy(spmm.dev.data, spmm.host.data, spmm.host.s.b_size + BENCHMARKING_TOTAL_DENSE_B_SIZE, cudaMemcpyHostToDevice));
 
 	// Partition dev
-	ptr = reinterpret_cast<float*>(spmm.dev.data);
+	ptr = reinterpret_cast<uintptr_t>(spmm.dev.data);
 
 	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		spmm.dev.d[i] = ptr;
-		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
+		spmm.dev.d[i] = reinterpret_cast<float*>(ptr);
+		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
 	}
 
 	// TODO: This trashes the previous empty object and makes a new one. Make a good copy assignment operator function instead.
 	spmm.dev.s = CSC(spmm.host.s.rows, spmm.host.s.cols, spmm.host.s.nnz);
 	spmm.dev.s.partition(ptr);
 
-	ptr = spmm.dev.s.val + spmm.dev.s.val_size;
+	ptr += spmm.host.s.b_size;
 
 	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		spmm.dev.r[i] = ptr;
-		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
+		spmm.dev.r[i] = reinterpret_cast<float*>(ptr);
+		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
 	}
 }
 
@@ -710,24 +738,24 @@ void run_spmm_csc(SPMM<CSC>& spmm, const uint8_t idx)
 	const size_t n = spmm.dev.s.cols;
 
 	// NOTE: 1d_blocktiling
-	// dim3 spmm_grid_sm(n, BENCHMARKING_DENSE_N_ROWS[idx]);
-	// dim3 spmm_block_sm(N_THREADS);
-	// spmm_csc_1d_blocktiling<<<spmm_grid_sm, spmm_block_sm>>>(
-	// 	spmm.dev.d[idx],
-	// 	spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
-	// 	m, k, n, spmm.dev.r[idx]);
-
-	// NOTE: 2d_blocktiling
-	// // PERF: Hack ~ find a better way to deal with having to add instead of set the result
-	const size_t res_size = BENCHMARKING_DENSE_N_ROWS[idx] * MAT_SIZE * sizeof(float);
-	CUDA_CHECK(cudaMemset(spmm.dev.r[idx], 0, res_size));
-	CUDA_CHECK(cudaDeviceSynchronize());
-	dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], k / BK);
-	dim3 block(N_THREADS);
-	spmm_csc_2d_blocktiling<<<grid, block>>>(
+	dim3 spmm_grid_sm(n, BENCHMARKING_DENSE_N_ROWS[idx]);
+	dim3 spmm_block_sm(N_THREADS);
+	spmm_csc_1d_blocktiling<<<spmm_grid_sm, spmm_block_sm>>>(
 		spmm.dev.d[idx],
 		spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
 		m, k, n, spmm.dev.r[idx]);
+
+	// NOTE: 2d_blocktiling
+	// // PERF: Hack ~ find a better way to deal with having to add instead of set the result
+	// const size_t res_size = BENCHMARKING_DENSE_N_ROWS[idx] * MAT_SIZE * sizeof(float);
+	// CUDA_CHECK(cudaMemset(spmm.dev.r[idx], 0, res_size));
+	// CUDA_CHECK(cudaDeviceSynchronize());
+	// dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], k / BK);
+	// dim3 block(N_THREADS);
+	// spmm_csc_2d_blocktiling<<<grid, block>>>(
+	// 	spmm.dev.d[idx],
+	// 	spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
+	// 	m, k, n, spmm.dev.r[idx]);
 }
 
 // void prepare_mhsa(MHSA<CSC, CSR>& mhsa)
