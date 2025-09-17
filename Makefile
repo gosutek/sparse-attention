@@ -14,7 +14,7 @@ SOURCES:=$(wildcard $(SRC_DIR)/*.cu) $(wildcard $(SRC_DIR)/*.cpp)
 OBJECTS:=$(SOURCES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
 
 CFLAGS=-g $(ERROR_FLAGS) $(OPT)
-CFLAGS+=-fopenmp -mf16c -mavx2 -mfma -std=c++20
+CFLAGS+= -mf16c -mavx2 -mfma -std=c++20
 CFLAGS+=-I/opt/cuda/targets/x86_64-linux/include/
 
 CUFLAGS=-g $(OPT) -lineinfo
@@ -32,6 +32,10 @@ CUFLAGS+=-L/opt/cuda/targets/x86_64-linux/lib/ -lcusparse
 CUFLAGS+=-Wno-deprecated-gpu-targets
 
 all: $(BUILD_DIR)/cute
+
+remote: CXX=/various/dgal/gcc/gcc-12.2.0/gcc_bin/bin/g++
+remote: NVCC=/usr/local/cuda/bin/nvcc
+remote: $(BUILD_DIR)/cute
 
 opt: OPT= -O3
 opt: $(BUILD_DIR)/cute
