@@ -71,6 +71,15 @@ size_t calc_sparse_b_size(const size_t n, const size_t nnz)
 	return b_ptr_size + b_idx_size + b_val_size;
 }
 
+size_t calc_max_nnz_per_col(const CSC& csc)
+{
+	uint32_t res = 0;
+	for (size_t i = 0; i < csc.col_ptr_size - 1; ++i) {
+		res = std::max(res, csc.col_ptr[i + 1] - csc.col_ptr[i]);
+	}
+	return res;
+}
+
 std::vector<float> csr_to_row_major(const CSR& mat)
 {
 	std::vector<float> res(mat.rows * mat.cols, 0.0f);
