@@ -55,6 +55,11 @@ __device__ inline static bool is_aligned(const void* addr, const size_t alignmen
 	return (reinterpret_cast<uintptr_t>(addr) & (alignment_bytes - 1)) == 0;
 }
 
+__device__ inline static uintptr_t align(const void* addr, const size_t alignment_bytes)
+{
+	return (reinterpret_cast<uintptr_t>(addr) + (alignment_bytes - 1)) & ~size_t(alignment_bytes - 1);
+}
+
 __device__ inline static float get_elem_rm(const float* const a, size_t n_cols, size_t row, size_t col)
 {
 	return a[row * n_cols + col];
@@ -259,16 +264,15 @@ __global__ void spmm_csc_2d_blocktiling(
 
 	uint32_t* scalar_row_idx_smem = reinterpret_cast<uint32_t*>(dyn_smem);
 
-	bool   aligned = is_aligned(&row_idx[row_idx_block_aligned_start], 16);
-	while (!aligned) {
-		++row_idx_block_aligned_start;
-		aligned = is_aligned(&row_idx[row_idx_block_aligned_start], 16);
 	size_t row_idx_gmem_unaligned_start_idx = base_unaligned_idx + block_nnz * blockIdx.z;
 	size_t row_idx_gmem_aligned_start_idx = row_idx_gmem_unaligned_start_idx;
+	while (!is_aligned(&row_idx[row_idx_gmem_aligned_start_idx], 16)) {
+		++row_idx_gmem_aligned_start_idx;
 	}
-	uint32_t*    scalar_row_idx_smem = vectorized_row_idx_smem + (block_nnz - row_idx_block_unaligned_cnt);
 
 	const size_t row_idx_gmem_unaligned_cnt = row_idx_gmem_aligned_start_idx - row_idx_gmem_unaligned_start_idx;  // exclusive of block_aligned_start, because it will be vectorized
+	uint32_t*    vectorized_row_idx_smem = reinterpret_cast<uint32_t*>(align(scalar_row_idx_smem + row_idx_gmem_unaligned_cnt, 16));
+	uint32_t*    rem_row_idx_smem = reinterpret_cast<uint32_t*>(align(vectorized_row_idx_smem + block_nnz, 16));
 
 	// PERF: at most 3 iterations -> warp divergence
 	// TODO: Functionize
@@ -276,20 +280,21 @@ __global__ void spmm_csc_2d_blocktiling(
 		scalar_row_idx_smem[threadIdx.x] = row_idx[i];
 	}
 
-	aligned = is_aligned(&val[val_block_aligned_start], 16);
-	while (!aligned) {
-		++val_block_aligned_start;
-		aligned = is_aligned(&val[val_block_aligned_start], 16);
 	size_t val_gmem_unaligned_start_idx = base_unaligned_idx + block_nnz * blockIdx.z;
-	float*       vectorized_val_smem = reinterpret_cast<float*>(vectorized_row_idx_smem + ((block_nnz - row_idx_block_unaligned_cnt + 15) & ~size_t(15)));
-	float*       scalar_val_smem = vectorized_val_smem + (block_nnz - val_block_unaligned_cnt);
 	size_t val_gmem_aligned_start_idx = val_gmem_unaligned_start_idx;
+	while (!is_aligned(&val[val_gmem_aligned_start_idx], 16)) {
+		++val_gmem_aligned_start_idx;
+	}
+
 	const size_t val_gmem_unaligned_cnt = val_gmem_aligned_start_idx - val_gmem_unaligned_start_idx;  // exclusive of block_aligned_start, because it will be vectorized
 																									  // the closest(rounded up) aligned address after
 																									  // 1. the first batch of unaligned addresses
 																									  // 2. the vectorizable addresses
 																									  // 3. any possible scalar remainder
 																									  // BUG: This is wrong, instead of calculating addresses, you work with elements
+	float* scalar_val_smem = reinterpret_cast<float*>(align(rem_row_idx_smem + block_nnz_rem, 16));
+	float* vectorized_val_smem = reinterpret_cast<float*>(align(scalar_val_smem + val_gmem_unaligned_cnt, 16));
+	float* rem_val_smem = reinterpret_cast<float*>(align(vectorized_val_smem + block_nnz, 16));
 
 	// PERF: at most gridDim.z iterations -> warp divergence
 	for (size_t i = val_gmem_unaligned_start_idx + threadIdx.x; i < val_gmem_aligned_start_idx; ++i) {
