@@ -264,7 +264,7 @@ __global__ void spmm_csc_2d_blocktiling(
 
 	uint32_t* scalar_row_idx_smem = reinterpret_cast<uint32_t*>(dyn_smem);
 
-	size_t row_idx_gmem_unaligned_start_idx = base_unaligned_idx + block_nnz * blockIdx.z;
+	size_t row_idx_gmem_unaligned_start_idx = base_unaligned_idx + (block_nnz + block_nnz_rem) * blockIdx.z;
 	size_t row_idx_gmem_aligned_start_idx = row_idx_gmem_unaligned_start_idx;
 	while (!is_aligned(&row_idx[row_idx_gmem_aligned_start_idx], 16)) {
 		++row_idx_gmem_aligned_start_idx;
@@ -280,7 +280,7 @@ __global__ void spmm_csc_2d_blocktiling(
 		scalar_row_idx_smem[threadIdx.x] = row_idx[i];
 	}
 
-	size_t val_gmem_unaligned_start_idx = base_unaligned_idx + block_nnz * blockIdx.z;
+	size_t val_gmem_unaligned_start_idx = base_unaligned_idx + (block_nnz + block_nnz_rem) * blockIdx.z;
 	size_t val_gmem_aligned_start_idx = val_gmem_unaligned_start_idx;
 	while (!is_aligned(&val[val_gmem_aligned_start_idx], 16)) {
 		++val_gmem_aligned_start_idx;
