@@ -247,71 +247,77 @@ __global__ void spmm_csc_2d_blocktiling(
 		// 		}
 	}
 
-	const size_t base_unaligned = col_ptr[blockIdx.x];  // 2 LDG (but hardware performs a single load)
-	const size_t col_end = col_ptr[blockIdx.x + 1];     // per block
+	const size_t base_unaligned_idx = col_ptr[blockIdx.x];  // 2 LDG (but hardware performs a single load)
+	const size_t col_end_idx = col_ptr[blockIdx.x + 1];     // per block
 
-	const size_t col_nnz = col_end - base_unaligned + 1;  // count[base_unaligned - col_end]
+	const size_t col_nnz = col_end_idx - base_unaligned_idx + 1;  // count[base_unaligned - col_end]
 	const size_t block_nnz = col_nnz / gridDim.z;
 	// WARN: You're counting double here. Rem includes the first scalar batch
 	const uint32_t block_nnz_rem = block_nnz % gridDim.z;
 
 	extern __shared__ char dyn_smem[];
 
-	uint32_t* vectorized_row_idx_smem = reinterpret_cast<uint32_t*>(dyn_smem);
+	uint32_t* scalar_row_idx_smem = reinterpret_cast<uint32_t*>(dyn_smem);
 
-	size_t row_idx_block_unaligned_start = base_unaligned + block_nnz * blockIdx.z;
-	size_t row_idx_block_aligned_start = row_idx_block_unaligned_start;
 	bool   aligned = is_aligned(&row_idx[row_idx_block_aligned_start], 16);
 	while (!aligned) {
 		++row_idx_block_aligned_start;
 		aligned = is_aligned(&row_idx[row_idx_block_aligned_start], 16);
+	size_t row_idx_gmem_unaligned_start_idx = base_unaligned_idx + block_nnz * blockIdx.z;
+	size_t row_idx_gmem_aligned_start_idx = row_idx_gmem_unaligned_start_idx;
 	}
-	const size_t row_idx_block_unaligned_cnt = row_idx_block_aligned_start - row_idx_block_unaligned_start;  // exclusive of block_aligned_start, because it will be vectorized
 	uint32_t*    scalar_row_idx_smem = vectorized_row_idx_smem + (block_nnz - row_idx_block_unaligned_cnt);
+
+	const size_t row_idx_gmem_unaligned_cnt = row_idx_gmem_aligned_start_idx - row_idx_gmem_unaligned_start_idx;  // exclusive of block_aligned_start, because it will be vectorized
 
 	// PERF: at most 3 iterations -> warp divergence
 	// TODO: Functionize
-	for (size_t i = row_idx_block_unaligned_start + threadIdx.x; i < row_idx_block_aligned_start; ++i) {
+	for (size_t i = row_idx_gmem_unaligned_start_idx + threadIdx.x; i < row_idx_gmem_aligned_start_idx; ++i) {
 		scalar_row_idx_smem[threadIdx.x] = row_idx[i];
 	}
 
-	size_t val_block_unaligned_start = base_unaligned + block_nnz * blockIdx.z;
-	size_t val_block_aligned_start = val_block_unaligned_start;
 	aligned = is_aligned(&val[val_block_aligned_start], 16);
 	while (!aligned) {
 		++val_block_aligned_start;
 		aligned = is_aligned(&val[val_block_aligned_start], 16);
-	}
-
-	const size_t val_block_unaligned_cnt = val_block_aligned_start - val_block_unaligned_start;  // exclusive of block_aligned_start, because it will be vectorized
+	size_t val_gmem_unaligned_start_idx = base_unaligned_idx + block_nnz * blockIdx.z;
 	float*       vectorized_val_smem = reinterpret_cast<float*>(vectorized_row_idx_smem + ((block_nnz - row_idx_block_unaligned_cnt + 15) & ~size_t(15)));
 	float*       scalar_val_smem = vectorized_val_smem + (block_nnz - val_block_unaligned_cnt);
-	//
-	// PERF: at most 3 iterations -> warp divergence
-	for (size_t i = val_block_unaligned_start + threadIdx.x; i < val_block_aligned_start; ++i) {
+	size_t val_gmem_aligned_start_idx = val_gmem_unaligned_start_idx;
+	const size_t val_gmem_unaligned_cnt = val_gmem_aligned_start_idx - val_gmem_unaligned_start_idx;  // exclusive of block_aligned_start, because it will be vectorized
+																									  // the closest(rounded up) aligned address after
+																									  // 1. the first batch of unaligned addresses
+																									  // 2. the vectorizable addresses
+																									  // 3. any possible scalar remainder
+																									  // BUG: This is wrong, instead of calculating addresses, you work with elements
+
+	// PERF: at most gridDim.z iterations -> warp divergence
+	for (size_t i = val_gmem_unaligned_start_idx + threadIdx.x; i < val_gmem_aligned_start_idx; ++i) {
 		scalar_val_smem[threadIdx.x] = val[i];
 	}
 
-	const size_t block_end = row_idx_block_aligned_start + block_nnz;
+	size_t       block_end = row_idx_gmem_aligned_start_idx + block_nnz;
 	const size_t thread_start = threadIdx.x * TK;
 
-	for (size_t i = row_idx_block_aligned_start + thread_start, cnt = 0; i < block_end; i += blockDim.x * TK, ++cnt) {
+	for (size_t i = row_idx_gmem_aligned_start_idx + thread_start, cnt = 0; i < block_end; i += blockDim.x * TK, ++cnt) {
 		// TODO: Test this vs manually unrolling times
 		reinterpret_cast<uint4*>(&vectorized_row_idx_smem[thread_start + cnt * blockDim.x * TK])[0] =
 			reinterpret_cast<const uint4*>(&row_idx[i])[0];
 	}
 
-	for (size_t i = val_block_aligned_start + thread_start, cnt = 0; i < block_end; i += blockDim.x * TK, ++cnt) {
-		reinterpret_cast<float4*>(&vectorized_val_smem[thread_start + cnt * blockDim.x * TK])[0] =
-			reinterpret_cast<const float4*>(&val[i])[0];
-	}
+	// for (size_t i = row_idx_block_aligned_start + block_nnz + thread_start, cnt = 0; i < block_end; i += blockDim.x * TK, ++cnt) {
+	// 	rem_row_idx_smem[thread_start + cnt * blockDim.x * TK] = row_idx[i];
+	// }
 
-	const size_t block_end_rem = block_end + block_nnz_rem;
-	// const size_t rem_start = col_end - rem_per_block;
-	// const size_t vectorized_end = unaligned_count + vectorized_nnz_per_block;
-	// for (size_t i = rem_start + threadIdx.x; i < col_end; ++i) {
-	// 	row_idx_smem[vectorized_end + threadIdx.x] = row_idx[i];
-	// 	val_smem[vectorized_end + threadIdx.x] = val[i];
+	block_end = val_gmem_aligned_start_idx + block_nnz;
+
+	// for (size_t i = val_block_aligned_start + thread_start, cnt = 0; i < block_end; i += blockDim.x * TK, ++cnt) {
+	// 	reinterpret_cast<float4*>(&vectorized_val_smem[thread_start + cnt * blockDim.x * TK])[0] =
+	// 		reinterpret_cast<const float4*>(&val[i])[0];
+	// }
+	//
+	// for (size_t i = val_block_aligned_start + block_nnz + thread_start, cnt = 0; i < block_end; i += blockDim.x * TK, ++cnt) {
+	// 	rem_val_smem[thread_start + cnt * blockDim.x * TK] = val[i];
 	// }
 
 	__syncthreads();
@@ -331,7 +337,7 @@ __global__ void spmm_csc_2d_blocktiling(
 	// }
 
 	float        acc = 0.0f;
-	const size_t nnz_per_block = col_end - base_unaligned;
+	const size_t nnz_per_block = col_end_idx - base_unaligned_idx;
 
 	for (size_t i = threadIdx.x * TK; i < min(threadIdx.x * TK + TK, nnz_per_block); ++i) {
 		acc += vectorized_row_idx_smem[i] * vectorized_val_smem[i];
@@ -844,7 +850,11 @@ void run_spmm_csc(SPMM<CSC>& spmm, const uint8_t idx)
 	// NOTE: 2d_blocktiling
 	// // PERF: Hack ~ find a better way to deal with having to add instead of set the result
 	const size_t res_size = BENCHMARKING_DENSE_N_ROWS[idx] * MAT_SIZE * sizeof(float);
-	const size_t dyn_mem_b_size = spmm.host.s.max_nnz_per_col * sizeof(float) + spmm.host.s.max_nnz_per_col * sizeof(uint32_t) + 2 * 16;  // + TK for ensuring alignment of val_smem
+	// BUG: Hardcoded value
+	// ensures there is enough space for alignment
+	// doing 4 alignments at 16-byte each
+	const size_t padding = 4 * 16;
+	const size_t dyn_mem_b_size = spmm.host.s.max_nnz_per_col * sizeof(float) + spmm.host.s.max_nnz_per_col * sizeof(uint32_t) + padding;  // + TK for ensuring alignment of val_smem
 	CUDA_CHECK(cudaMemset(spmm.dev.r[idx], 0, res_size));
 	CUDA_CHECK(cudaDeviceSynchronize());
 	dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], k / 128);
