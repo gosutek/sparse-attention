@@ -255,7 +255,7 @@ __global__ void spmm_csc_2d_blocktiling(
 	const size_t base_unaligned_idx = col_ptr[blockIdx.x];  // 2 LDG (but hardware performs a single load)
 	const size_t col_end_idx = col_ptr[blockIdx.x + 1];     // per block
 
-	const size_t col_nnz = col_end_idx - base_unaligned_idx + 1;  // count[base_unaligned - col_end]
+	const size_t col_nnz = col_end_idx - base_unaligned_idx;  // count[base_unaligned_idx - col_end_idx)
 	const size_t block_nnz = col_nnz / gridDim.z;
 	// WARN: You're counting double here. Rem includes the first scalar batch
 	const uint32_t block_nnz_rem = block_nnz % gridDim.z;
