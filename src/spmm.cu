@@ -272,7 +272,7 @@ __global__ void spmm_csc_2d_blocktiling(
 
 	const size_t row_idx_gmem_unaligned_cnt = row_idx_gmem_aligned_start_idx - row_idx_gmem_unaligned_start_idx;  // exclusive of block_aligned_start, because it will be vectorized
 	uint32_t*    vectorized_row_idx_smem = reinterpret_cast<uint32_t*>(align(scalar_row_idx_smem + row_idx_gmem_unaligned_cnt, 16));
-	uint32_t*    rem_row_idx_smem = reinterpret_cast<uint32_t*>(align(vectorized_row_idx_smem + block_nnz, 16));
+	uint32_t*    rem_row_idx_smem = reinterpret_cast<uint32_t*>(align(scalar_row_idx_smem + block_nnz, 16));
 
 	// PERF: at most 3 iterations -> warp divergence
 	// TODO: Functionize
@@ -294,14 +294,14 @@ __global__ void spmm_csc_2d_blocktiling(
 																									  // BUG: This is wrong, instead of calculating addresses, you work with elements
 	float* scalar_val_smem = reinterpret_cast<float*>(align(rem_row_idx_smem + block_nnz_rem, 16));
 	float* vectorized_val_smem = reinterpret_cast<float*>(align(scalar_val_smem + val_gmem_unaligned_cnt, 16));
-	float* rem_val_smem = reinterpret_cast<float*>(align(vectorized_val_smem + block_nnz, 16));
+	float* rem_val_smem = reinterpret_cast<float*>(align(scalar_val_smem + block_nnz, 16));
 
 	// PERF: at most gridDim.z iterations -> warp divergence
 	for (size_t i = val_gmem_unaligned_start_idx + threadIdx.x; i < val_gmem_aligned_start_idx; ++i) {
 		scalar_val_smem[threadIdx.x] = val[i];
 	}
 
-	size_t       block_end = row_idx_gmem_aligned_start_idx + block_nnz;
+	size_t       block_end = row_idx_gmem_unaligned_start_idx + block_nnz + block_nnz_rem;
 	const size_t thread_start = threadIdx.x * TK;
 
 	for (size_t i = row_idx_gmem_aligned_start_idx + thread_start, cnt = 0; i < block_end; i += blockDim.x * TK, ++cnt) {
@@ -310,11 +310,11 @@ __global__ void spmm_csc_2d_blocktiling(
 			reinterpret_cast<const uint4*>(&row_idx[i])[0];
 	}
 
-	// for (size_t i = row_idx_block_aligned_start + block_nnz + thread_start, cnt = 0; i < block_end; i += blockDim.x * TK, ++cnt) {
-	// 	rem_row_idx_smem[thread_start + cnt * blockDim.x * TK] = row_idx[i];
-	// }
+	for (size_t i = row_idx_gmem_aligned_start_idx + block_nnz + thread_start, cnt = 0; i < block_end; i += blockDim.x * TK, ++cnt) {
+		rem_row_idx_smem[thread_start + cnt * blockDim.x * TK] = row_idx[i];
+	}
 
-	block_end = val_gmem_aligned_start_idx + block_nnz;
+	block_end = val_gmem_unaligned_start_idx + block_nnz + block_nnz_rem;
 
 	// for (size_t i = val_block_aligned_start + thread_start, cnt = 0; i < block_end; i += blockDim.x * TK, ++cnt) {
 	// 	reinterpret_cast<float4*>(&vectorized_val_smem[thread_start + cnt * blockDim.x * TK])[0] =
@@ -328,24 +328,27 @@ __global__ void spmm_csc_2d_blocktiling(
 	__syncthreads();
 
 	// if (threadIdx.x == 0) {
-	// 	for (size_t i = 0; i < nnz_per_block; ++i) {
+	// 	for (size_t i = 0; i < block_nnz + block_nnz_rem; ++i) {
 	// 		printf("row_idx_smem[%lu] = %u\n", i, row_idx_smem[i]);
 	// 	}
 	// }
 
 	// if (threadIdx.x == 0) {
-	// 	for (size_t i = 0; i < nnz_per_block; ++i) {
+	// 	for (size_t i = 0; i < block_nnz; ++i) {
 	// 		if (row_idx_smem[i] >= MAT_SIZE) {
 	// 			printf("row_idx_smem[%lu] = %u\n", i, row_idx_smem[i]);
 	// 		}
 	// 	}
 	// }
+	__syncthreads();
 
 	float        acc = 0.0f;
 	const size_t nnz_per_block = col_end_idx - base_unaligned_idx;
 
+	const uint32_t* const base_row_idx_smem = scalar_row_idx_smem;
+	const float* const    base_val_smem = scalar_val_smem;
 	for (size_t i = threadIdx.x * TK; i < min(threadIdx.x * TK + TK, nnz_per_block); ++i) {
-		acc += vectorized_row_idx_smem[i] * vectorized_val_smem[i];
+		acc += x_row_smem[base_row_idx_smem[i]] * base_val_smem[i];
 	}
 
 	__syncwarp();
