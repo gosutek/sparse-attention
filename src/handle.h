@@ -15,18 +15,18 @@ constexpr uint32_t BENCHMARKING_TOTAL_DENSE_B_SIZE = []() {uint32_t acc = 0; for
 constexpr size_t   BENCHMARKING_ROUNDS = 1;
 
 // TODO: Move these to each kernel's scope.
-// constexpr size_t N_THREADS = 64;
-// constexpr size_t WARP_SIZE = 32;
-//
-// constexpr size_t BK = 256;
-// constexpr size_t TK = 4;
-
-// NOTE: better
 constexpr size_t N_THREADS = 64;
 constexpr size_t WARP_SIZE = 32;
 
 constexpr size_t BK = 256;
 constexpr size_t TK = 4;
+
+// NOTE: better
+// constexpr size_t N_THREADS = 64;
+// constexpr size_t WARP_SIZE = 32;
+//
+// constexpr size_t BK = 256;
+// constexpr size_t TK = 4;
 
 // NOTE: worse
 // constexpr size_t N_THREADS = 128;
