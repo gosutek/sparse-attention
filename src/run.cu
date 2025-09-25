@@ -96,9 +96,9 @@ void benchmark_spmm()
 
 	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		bool correct = warmup_spmm_csc(spmm, 0);
-		if (!correct) {
-			return;
-		}
+		// if (!correct) {
+		// 	return;
+		// }
 		cudaEventRecord(start);
 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
 			run_spmm_csc(spmm, i);

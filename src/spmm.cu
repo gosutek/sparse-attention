@@ -553,12 +553,13 @@ __global__ void spmm_csc_2d_blocktiling_regs(
 
 	const size_t col_end_i = col_ptr[blockIdx.x + 1];
 
-	const size_t  col_nnz = col_end_i - ri_aligned_i;     // count[ri_aligned_i - col_end_i)
+	const size_t  col_nnz = col_end_i - ri_aligned_i;     // count[ri_aligned_i - col_end_i) (261)
 	const uint8_t n_tail_loads = col_nnz & (TK - 1);      // ( 261 % 4 = 1)
-	const size_t  n_vloads = col_nnz / TK;                // (261 // 4 = 65)
+	const size_t  n_velems = col_nnz - n_tail_loads;      // 261 - 1 = 260
+	const size_t  n_vloads = n_velems / TK;               // (260 / 4 = 65)
 	const size_t  n_vloads_block = n_vloads / gridDim.z;  // (65 // 2 = 32)
 	const size_t  rem_n_vloads = n_vloads % gridDim.z;    // (65 % 2 = 1)
-	const size_t  nnz_block = col_nnz / gridDim.z;
+	const size_t  nnz_block = n_velems / gridDim.z;       // 260 / 2 = 130
 	const uint8_t n_scalar_loads = n_tail_loads + ri_unaligned_cnt;
 
 	// assert(blockDim.x >= n_vloads_block);  // at least as many threads per block as vectorized loads per block
@@ -574,44 +575,63 @@ __global__ void spmm_csc_2d_blocktiling_regs(
 
 	if (blockIdx.z == 0 && warp == 0 && lane == 0) {
 		for (size_t i = 0; i < ri_unaligned_cnt; ++i) {  // up to 3 iterations
-			if (blockIdx.x == 0 && blockIdx.y == 0) {
-				printf("[%u] Multiplying x_row_smem[row_idx[%lu]] * val[%lu] = x_row_smem[%u] * val[%lu] = %.4f * %.4f = %.4f\n",
-					blockIdx.z, base_unaligned_i + i, base_unaligned_i + i, row_idx[base_unaligned_i + i], base_unaligned_i + i,
-					x_row_smem[row_idx[base_unaligned_i + i]], val[base_unaligned_i + i], x_row_smem[row_idx[base_unaligned_i + i]] * val[base_unaligned_i + i]);
-			}
+			// if (blockIdx.x == 0 && blockIdx.y == 0) {
+			// 	printf("[%u - Unaligned] Multiplying x_row_smem[row_idx[%lu]] * val[%lu] = x_row_smem[%u] * val[%lu] = %.4f * %.4f = %.4f\n",
+			// 		blockIdx.z, base_unaligned_i + i, base_unaligned_i + i, row_idx[base_unaligned_i + i], base_unaligned_i + i,
+			// 		x_row_smem[row_idx[base_unaligned_i + i]], val[base_unaligned_i + i], x_row_smem[row_idx[base_unaligned_i + i]] * val[base_unaligned_i + i]);
+			// }
 			acc += x_row_smem[row_idx[base_unaligned_i + i]] * val[base_unaligned_i + i];
 		}
 		for (size_t i = 0; i < n_tail_loads; ++i) {  // up to 3 iterations
-			if (blockIdx.x == 0 && blockIdx.y == 0) {
-				printf("[%u] Multiplying x_row_smem[row_idx[%lu]] * val[%lu] = x_row_smem[%u] * val[%lu] = %.4f * %.4f = %.4f\n",
-					blockIdx.z, ri_aligned_i + nnz_block + i, ri_aligned_i + nnz_block + i, row_idx[ri_aligned_i + nnz_block + i], ri_aligned_i + nnz_block + i,
-					x_row_smem[row_idx[ri_aligned_i + nnz_block + i]], val[ri_aligned_i + nnz_block + i], x_row_smem[row_idx[ri_aligned_i + nnz_block + i]] * val[ri_aligned_i + nnz_block + i]);
-			}
+			// if (blockIdx.x == 0 && blockIdx.y == 0) {
+			// 	printf("[%u - Tail] Multiplying x_row_smem[row_idx[%lu]] * val[%lu] = x_row_smem[%u] * val[%lu] = %.4f * %.4f = %.4f\n",
+			// 		blockIdx.z, ri_aligned_i + nnz_block + i, ri_aligned_i + nnz_block + i, row_idx[ri_aligned_i + nnz_block + i], ri_aligned_i + nnz_block + i,
+			// 		x_row_smem[row_idx[ri_aligned_i + nnz_block + i]], val[ri_aligned_i + nnz_block + i], x_row_smem[row_idx[ri_aligned_i + nnz_block + i]] * val[ri_aligned_i + nnz_block + i]);
+			// }
 			acc += x_row_smem[row_idx[ri_aligned_i + nnz_block + i]] * val[ri_aligned_i + nnz_block + i];
 		}
 	}
 
-	const size_t block_start = ri_aligned_i + blockIdx.z * n_vloads_block * TK + min(static_cast<size_t>(blockIdx.z), rem_n_vloads) * TK;
-	size_t       block_end = block_start + n_vloads_block * TK;
-	if (blockIdx.z < rem_n_vloads) {
-		block_end += TK;
+	const size_t block_start = ri_aligned_i + rem_n_vloads * TK + blockIdx.z * n_vloads_block * TK;
+	const size_t block_end = block_start + n_vloads_block * TK;
+
+	if (blockIdx.z == 0 && warp == 0 && lane == 0) {
+		reinterpret_cast<uint4*>(&t_row_idx)[0] = reinterpret_cast<const uint4*>(&row_idx[ri_aligned_i])[0];
+		reinterpret_cast<float4*>(&t_val)[0] = reinterpret_cast<const float4*>(&val[ri_aligned_i])[0];
+
+		// if (blockIdx.x == 0 && blockIdx.y == 0) {
+		// 	printf("[%u - Vectorized Remainder] Multiplying x_row_smem[t_row_idx[0]] * t_val[0] = x_row_smem[%u] * t_val[0] = %.4f * %.4f = %.4f\n",
+		// 		blockIdx.z, t_row_idx[0], x_row_smem[t_row_idx[0]], t_val[0], x_row_smem[t_row_idx[0]] * t_val[0]);
+		// 	printf("[%u - Vectorized Remainder] Multiplying x_row_smem[t_row_idx[1]] * t_val[1] = x_row_smem[%u] * t_val[1] = %.4f * %.4f = %.4f\n",
+		// 		blockIdx.z, t_row_idx[1], x_row_smem[t_row_idx[1]], t_val[1], x_row_smem[t_row_idx[1]] * t_val[1]);
+		// 	printf("[%u - Vectorized Remainder] Multiplying x_row_smem[t_row_idx[2]] * t_val[2] = x_row_smem[%u] * t_val[2] = %.4f * %.4f = %.4f\n",
+		// 		blockIdx.z, t_row_idx[2], x_row_smem[t_row_idx[2]], t_val[2], x_row_smem[t_row_idx[2]] * t_val[2]);
+		// 	printf("[%u - Vectorized Remainder] Multiplying x_row_smem[t_row_idx[3]] * t_val[3] = x_row_smem[%u] * t_val[3] = %.4f * %.4f = %.4f\n",
+		// 		blockIdx.z, t_row_idx[3], x_row_smem[t_row_idx[3]], t_val[3], x_row_smem[t_row_idx[3]] * t_val[3]);
+		// }
+
+		acc += x_row_smem[t_row_idx[0]] * t_val[0];
+		acc += x_row_smem[t_row_idx[1]] * t_val[1];
+		acc += x_row_smem[t_row_idx[2]] * t_val[2];
+		acc += x_row_smem[t_row_idx[3]] * t_val[3];
 	}
-	for (size_t i = block_start + threadIdx.x * TK; i + TK <= block_end; i += blockDim.x * TK) {
+
+	for (size_t i = block_start + threadIdx.x * TK; i < block_end; i += blockDim.x * TK) {
 		reinterpret_cast<uint4*>(&t_row_idx)[0] =
 			reinterpret_cast<const uint4*>(&row_idx[i])[0];
 		reinterpret_cast<float4*>(&t_val)[0] =
 			reinterpret_cast<const float4*>(&val[i])[0];
 
-		if (blockIdx.x == 0 && blockIdx.y == 0) {
-			printf("[%u] Multiplying x_row_smem[t_row_idx[0]] * t_val[0] = x_row_smem[%u] * t_val[0] = %.4f * %.4f = %.4f\n",
-				blockIdx.z, t_row_idx[0], x_row_smem[t_row_idx[0]], t_val[0], x_row_smem[t_row_idx[0]] * t_val[0]);
-			printf("[%u] Multiplying x_row_smem[t_row_idx[1]] * t_val[1] = x_row_smem[%u] * t_val[1] = %.4f * %.4f = %.4f\n",
-				blockIdx.z, t_row_idx[1], x_row_smem[t_row_idx[1]], t_val[1], x_row_smem[t_row_idx[1]] * t_val[1]);
-			printf("[%u] Multiplying x_row_smem[t_row_idx[2]] * t_val[2] = x_row_smem[%u] * t_val[2] = %.4f * %.4f = %.4f\n",
-				blockIdx.z, t_row_idx[2], x_row_smem[t_row_idx[2]], t_val[2], x_row_smem[t_row_idx[2]] * t_val[2]);
-			printf("[%u] Multiplying x_row_smem[t_row_idx[3]] * t_val[3] = x_row_smem[%u] * t_val[3] = %.4f * %.4f = %.4f\n",
-				blockIdx.z, t_row_idx[3], x_row_smem[t_row_idx[3]], t_val[3], x_row_smem[t_row_idx[3]] * t_val[3]);
-		}
+		// if (blockIdx.x == 0 && blockIdx.y == 0) {
+		// 	printf("[%u - Vectorized Normal] Multiplying x_row_smem[t_row_idx[0]] * t_val[0] = x_row_smem[%u] * t_val[0] = %.4f * %.4f = %.4f\n",
+		// 		blockIdx.z, t_row_idx[0], x_row_smem[t_row_idx[0]], t_val[0], x_row_smem[t_row_idx[0]] * t_val[0]);
+		// 	printf("[%u - Vectorized Normal] Multiplying x_row_smem[t_row_idx[1]] * t_val[1] = x_row_smem[%u] * t_val[1] = %.4f * %.4f = %.4f\n",
+		// 		blockIdx.z, t_row_idx[1], x_row_smem[t_row_idx[1]], t_val[1], x_row_smem[t_row_idx[1]] * t_val[1]);
+		// 	printf("[%u - Vectorized Normal] Multiplying x_row_smem[t_row_idx[2]] * t_val[2] = x_row_smem[%u] * t_val[2] = %.4f * %.4f = %.4f\n",
+		// 		blockIdx.z, t_row_idx[2], x_row_smem[t_row_idx[2]], t_val[2], x_row_smem[t_row_idx[2]] * t_val[2]);
+		// 	printf("[%u - Vectorized Normal] Multiplying x_row_smem[t_row_idx[3]] * t_val[3] = x_row_smem[%u] * t_val[3] = %.4f * %.4f = %.4f\n",
+		// 		blockIdx.z, t_row_idx[3], x_row_smem[t_row_idx[3]], t_val[3], x_row_smem[t_row_idx[3]] * t_val[3]);
+		// }
 		acc += x_row_smem[t_row_idx[0]] * t_val[0];
 		acc += x_row_smem[t_row_idx[1]] * t_val[1];
 		acc += x_row_smem[t_row_idx[2]] * t_val[2];
@@ -653,10 +673,10 @@ __global__ void spmm_csc_2d_blocktiling_regs(
 			acc += __shfl_xor_sync(mask, acc, i, n_warps);
 		}
 		if (lane == 0) {
-			if (blockIdx.x == 0 && blockIdx.y == 0) {
-				printf("FINAL ACC: %.4f\n", acc);
-				printf("Before it was: %.4f\n", res[blockIdx.y * n + blockIdx.x]);
-			}
+			// if (blockIdx.x == 0 && blockIdx.y == 0) {
+			// 	printf("FINAL ACC: %.4f\n", acc);
+			// 	printf("Before it was: %.4f\n", res[blockIdx.y * n + blockIdx.x]);
+			// }
 			atomicAdd(&res[blockIdx.y * n + blockIdx.x], acc);
 		}
 	}
@@ -1122,20 +1142,20 @@ void run_spmm_csc(SPMM<CSC>& spmm, const uint8_t idx)
 	const size_t n = spmm.dev.s.cols;
 
 	// NOTE: 1d_blocktiling
-	// dim3 spmm_grid_sm(n, BENCHMARKING_DENSE_N_ROWS[idx]);
-	// dim3 spmm_block_sm(N_THREADS);
-	// spmm_csc_1d_blocktiling<<<spmm_grid_sm, spmm_block_sm>>>(
-	// 	spmm.dev.d[idx],
-	// 	spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
-	// 	m, k, n, spmm.dev.r[idx]);
-
-	// NOTE: 2d_blocktiling_reg
-	dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], k / BK);
-	dim3 block(N_THREADS);
-	spmm_csc_2d_blocktiling_regs<<<grid, block>>>(
+	dim3 spmm_grid_sm(n, BENCHMARKING_DENSE_N_ROWS[idx]);
+	dim3 spmm_block_sm(N_THREADS);
+	spmm_csc_1d_blocktiling<<<spmm_grid_sm, spmm_block_sm>>>(
 		spmm.dev.d[idx],
 		spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
 		m, k, n, spmm.dev.r[idx]);
+
+	// NOTE: 2d_blocktiling_reg
+	// dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], k / BK);
+	// dim3 block(N_THREADS);
+	// spmm_csc_2d_blocktiling_regs<<<grid, block>>>(
+	// 	spmm.dev.d[idx],
+	// 	spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
+	// 	m, k, n, spmm.dev.r[idx]);
 
 	// NOTE: 2d_blocktiling
 	// // PERF: Hack ~ find a better way to deal with having to add instead of set the result
