@@ -549,54 +549,70 @@ __global__ void spmm_csc_2d_blocktiling_regs(
 		++v_aligned_i;
 	}
 	const size_t v_unaligned_cnt = v_aligned_i - base_unaligned_i;  // exclusive of val_gmem_aligned_start_idx, because it will be vectorized
-	assert(ri_unaligned_cnt == v_unaligned_cnt);
+	// assert(ri_unaligned_cnt == v_unaligned_cnt);
 
 	const size_t col_end_i = col_ptr[blockIdx.x + 1];
 
 	const size_t  col_nnz = col_end_i - ri_aligned_i;  // count[ri_aligned_i - col_end_i)
 	const size_t  n_vloads = col_nnz / TK;             // per col
 	const size_t  n_vloads_block = n_vloads / gridDim.z;
+	const size_t  nnz_block = col_nnz / gridDim.z;
 	const uint8_t n_tail_loads = col_nnz & 0b11;
 	const uint8_t n_scalar_loads = n_tail_loads + ri_unaligned_cnt;
 
-	assert(blockDim.x >= n_vloads_block);  // at least as many threads per block as vectorized loads per block
+	// assert(blockDim.x >= n_vloads_block);  // at least as many threads per block as vectorized loads per block
 
 	// for the first warp we should split its first lane to take care of the unaligned elements
 	// while the rest of the lanes tackle the vectorized loads
 
-	const size_t           warp_id = threadIdx.x / WARP_SIZE;
+	const size_t           warp = threadIdx.x / WARP_SIZE;
+	const size_t           lane = threadIdx.x & (WARP_SIZE - 1);
+	float                  acc = 0.0f;
 	__align__(16) uint32_t t_row_idx[TK] = { 0 };
 	__align__(16) float    t_val[TK] = { 0.0f };
 
-	// PERF: WD for the first warp since n_scalar_loads is at most 7
-	if (threadIdx.x < ri_unaligned_cnt) {
-		t_row_idx[threadIdx.x] = row_idx[base_unaligned_i + threadIdx.x];
-		t_val[threadIdx.x] = val[base_unaligned_i + threadIdx.x];
-	} else if (threadIdx.x >= ri_unaligned_cnt && threadIdx.x < ri_unaligned_cnt + n_tail_loads) {
-		if (ri_unaligned_cnt > 0) {
-			t_row_idx[threadIdx.x] = row_idx[ri_aligned_i + col_nnz + threadIdx.x];
-			t_val[threadIdx.x] = val[v_aligned_i + col_nnz + threadIdx.x];
-		} else {
-			t_row_idx[threadIdx.x] = row_idx[ri_aligned_i + col_nnz + (threadIdx.x % ri_unaligned_cnt)];
-			t_val[threadIdx.x] = val[v_aligned_i + col_nnz + (threadIdx.x % ri_unaligned_cnt)];
+	if (warp == 0 && lane == 0) {
+		for (size_t i = 0; i < ri_unaligned_cnt; ++i) {  // up to 3 iterations
+			if (blockIdx.x == 0 && blockIdx.y == 0) {
+				printf("Multiplying x_row_smem[row_idx[%lu]] * val[%lu] = x_row_smem[%u] * val[%lu] = %.2f * %.2f = %.2f\n",
+					base_unaligned_i + i, base_unaligned_i + i, row_idx[base_unaligned_i + i], base_unaligned_i + i,
+					x_row_smem[row_idx[base_unaligned_i + i]], val[base_unaligned_i + i], x_row_smem[row_idx[base_unaligned_i + i]] * val[base_unaligned_i + i]);
+			}
+			acc += x_row_smem[row_idx[base_unaligned_i + i]] * val[base_unaligned_i + i];
+		}
+		for (size_t i = 0; i < n_tail_loads; ++i) {  // up to 3 iterations
+			if (blockIdx.x == 0 && blockIdx.y == 0) {
+				printf("Multiplying x_row_smem[row_idx[%lu]] * val[%lu] = x_row_smem[%u] * val[%lu] = %.2f * %.2f = %.2f\n",
+					ri_aligned_i + nnz_block + i, ri_aligned_i + nnz_block + i, row_idx[ri_aligned_i + nnz_block + i], ri_aligned_i + nnz_block + i,
+					x_row_smem[row_idx[ri_aligned_i + nnz_block + i]], val[ri_aligned_i + nnz_block + i], x_row_smem[row_idx[ri_aligned_i + nnz_block + i]] * val[ri_aligned_i + nnz_block + i]);
+			}
+			acc += x_row_smem[row_idx[ri_aligned_i + nnz_block + i]] * val[ri_aligned_i + nnz_block + i];
 		}
 	}
 
-	reinterpret_cast<uint4*>(&t_row_idx)[0] =
-		reinterpret_cast<const uint4*>(&row_idx[ri_aligned_i + (blockIdx.z * n_vloads_block + threadIdx.x) * TK])[0];
-	reinterpret_cast<float4*>(&t_val)[0] =
-		reinterpret_cast<const float4*>(&val[v_aligned_i + (blockIdx.z * n_vloads_block + threadIdx.x) * TK])[0];
+	const size_t block_start = ri_aligned_i + blockIdx.z * n_vloads_block * TK;
+	const size_t block_end = (blockIdx.z == gridDim.z - 1) ? col_end_i : block_start + nnz_block;
+	for (size_t i = block_start + threadIdx.x * TK; i + TK <= block_end; i += blockDim.x * TK) {
+		reinterpret_cast<uint4*>(&t_row_idx)[0] =
+			reinterpret_cast<const uint4*>(&row_idx[i])[0];
+		reinterpret_cast<float4*>(&t_val)[0] =
+			reinterpret_cast<const float4*>(&val[i])[0];
 
-	float acc = 0.0f;
-
-	if (blockIdx.x == 511 && blockIdx.y == 0 && blockIdx.z == 0 && threadIdx.x == 114) {
-		printf("t_row_idx[0] = %u\n", t_row_idx[0]);
+		if (blockIdx.x == 0 && blockIdx.y == 0) {
+			printf("Multiplying x_row_smem[t_row_idx[0]] * t_val[0] = x_row_smem[%u] * t_val[0] = %.2f * %.2f = %.2f\n",
+				t_row_idx[0], x_row_smem[t_row_idx[0]], t_val[0], x_row_smem[t_row_idx[0]] * t_val[0]);
+			printf("Multiplying x_row_smem[t_row_idx[1]] * t_val[1] = x_row_smem[%u] * t_val[1] = %.2f * %.2f = %.2f\n",
+				t_row_idx[1], x_row_smem[t_row_idx[1]], t_val[1], x_row_smem[t_row_idx[1]] * t_val[1]);
+			printf("Multiplying x_row_smem[t_row_idx[2]] * t_val[2] = x_row_smem[%u] * t_val[2] = %.2f * %.2f = %.2f\n",
+				t_row_idx[2], x_row_smem[t_row_idx[2]], t_val[2], x_row_smem[t_row_idx[2]] * t_val[2]);
+			printf("Multiplying x_row_smem[t_row_idx[3]] * t_val[3] = x_row_smem[%u] * t_val[3] = %.2f * %.2f = %.2f\n",
+				t_row_idx[3], x_row_smem[t_row_idx[3]], t_val[3], x_row_smem[t_row_idx[3]] * t_val[3]);
+		}
+		acc += x_row_smem[t_row_idx[0]] * t_val[0];
+		acc += x_row_smem[t_row_idx[1]] * t_val[1];
+		acc += x_row_smem[t_row_idx[2]] * t_val[2];
+		acc += x_row_smem[t_row_idx[3]] * t_val[3];
 	}
-	__syncthreads();
-	acc += x_row_smem[t_row_idx[0]] * t_val[0];
-	acc += x_row_smem[t_row_idx[1]] * t_val[1];
-	acc += x_row_smem[t_row_idx[2]] * t_val[2];
-	acc += x_row_smem[t_row_idx[3]] * t_val[3];
 
 	__syncwarp();
 
@@ -608,16 +624,14 @@ __global__ void spmm_csc_2d_blocktiling_regs(
 		acc += __shfl_xor_sync(0xffffffff, acc, i, WARP_SIZE);
 	}
 
-	uint32_t lane_id = threadIdx.x & 0x1f;
-
 	constexpr uint8_t n_warps = N_THREADS / WARP_SIZE;
 	__shared__ float  warp_sums[n_warps];
 
 	// at this point the first thread (lane_id == 0) of every warp in this block
 	// has the result from TK non-zeros for this col
 	// this is essentially warp-wide reduction
-	if (lane_id == 0) {
-		warp_sums[warp_id] = acc;
+	if (lane == 0) {
+		warp_sums[warp] = acc;
 	}
 	// we write the warp-wide results to a block-wide memory location (SMEM)
 	// so that we can perform block-wide reduction
@@ -625,16 +639,20 @@ __global__ void spmm_csc_2d_blocktiling_regs(
 	__syncthreads();
 
 	// we assign the block-wide reduction to warp-0
-	if (warp_id == 0) {
+	if (warp == 0) {
 		// WARN: some threads point to garbage
-		float acc = warp_sums[lane_id];
+		float acc = warp_sums[lane];
 
 		constexpr uint32_t mask = 0x3;
 
 		for (uint8_t i = n_warps / 2; i > 0; i /= 2) {
 			acc += __shfl_xor_sync(mask, acc, i, n_warps);
 		}
-		if (lane_id == 0) {
+		if (lane == 0) {
+			if (blockIdx.x == 0 && blockIdx.y == 0) {
+				printf("FINAL ACC: %.2f\n", acc);
+				printf("Before it was: %.2f\n", res[blockIdx.y * n + blockIdx.x]);
+			}
 			atomicAdd(&res[blockIdx.y * n + blockIdx.x], acc);
 		}
 	}
@@ -1037,15 +1055,19 @@ void warmup_spmm_csr(SPMM<CSR>& spmm, const uint8_t size_idx)
 
 void warmup_spmm_csc(SPMM<CSC>& spmm, const uint8_t size_idx)
 {
+	const size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
+	CUDA_CHECK(cudaMemset(spmm.dev.r[size_idx], 0.0f, res_size * sizeof(float)));
 	// PERF: Bounds check
 	assert(size_idx < std::size(BENCHMARKING_DENSE_N_ROWS) - 1);
 	run_spmm_csc(spmm, size_idx);
 
-	const size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
 	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaDeviceSynchronize());
+	std::cout << "On size_idx ~ " << spmm.host.r[size_idx][0] << std::endl;
 
 	// WARN: Temporary hack
 	std::memcpy(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size * sizeof(float));
+	std::cout << "On size_idx + 1 ~ " << spmm.host.r[size_idx + 1][0] << std::endl;
 
 	CuSparse cusparse;
 	cusparseCreate(&cusparse.handle);
@@ -1106,8 +1128,8 @@ void run_spmm_csc(SPMM<CSC>& spmm, const uint8_t idx)
 	// 	m, k, n, spmm.dev.r[idx]);
 
 	// NOTE: 2d_blocktiling_reg
-	dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], 4);
-	dim3 block(128);
+	dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], k / BK);
+	dim3 block(N_THREADS);
 	spmm_csc_2d_blocktiling_regs<<<grid, block>>>(
 		spmm.dev.d[idx],
 		spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,

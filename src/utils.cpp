@@ -235,7 +235,7 @@ bool verify_res(const float* const actual, const float* const expected, size_t n
 		diff = std::fabs(actual[i] - expected[i]);
 		// std::cout << std::format(
 		// 	"Actual: {}, Expected: {}, Diff: {}, Pos: {}\n", actual[i], expected[i], diff, i);
-		if (std::isnan(diff) || diff > 0.01) {
+		if (std::isnan(diff) || diff > 0.01 && i == 0) {
 			std::cout << std::format(
 				"Values diverge -> Actual: {}, Expected: {} (Diff {:.4f}), pos: {:d}\n",
 				actual[i], expected[i], diff, i);

@@ -38,6 +38,8 @@ remote: NVCC=/usr/local/cuda/bin/nvcc
 remote: $(BUILD_DIR)/cute
 
 opt: OPT= -O3
+opt: CFLAGS:=$(filter-out -g, $(CFLAGS)) -DNDEBUG
+opt: CUFLAGS:=$(filter-out -g -lineinfo,$(CUFLAGS)) -DNDEBUG
 opt: $(BUILD_DIR)/cute
 
 debug: CUFLAGS+=-Xcompiler "-D_GLIBCXX_DEBUG" --ptxas-options=-v
