@@ -33,7 +33,7 @@ void  cuda_dealloc_device(void* ptr);
 void prepare_spmm_csr(SPMM<CSR>& spmm);
 void prepare_spmm_csc(SPMM<CSC>& spmm);
 void warmup_spmm_csr(SPMM<CSR>& spmm, const uint8_t size_idx);
-void warmup_spmm_csc(SPMM<CSC>& spmm, const uint8_t size_idx);
+bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint8_t size_idx);
 void run_spmm_csr(SPMM<CSR>& spmm, const uint8_t idx);
 void run_spmm_csc(SPMM<CSC>& spmm, const uint8_t idx);
 

@@ -553,11 +553,12 @@ __global__ void spmm_csc_2d_blocktiling_regs(
 
 	const size_t col_end_i = col_ptr[blockIdx.x + 1];
 
-	const size_t  col_nnz = col_end_i - ri_aligned_i;  // count[ri_aligned_i - col_end_i)
-	const size_t  n_vloads = col_nnz / TK;             // per col
-	const size_t  n_vloads_block = n_vloads / gridDim.z;
+	const size_t  col_nnz = col_end_i - ri_aligned_i;     // count[ri_aligned_i - col_end_i)
+	const uint8_t n_tail_loads = col_nnz & (TK - 1);      // ( 261 % 4 = 1)
+	const size_t  n_vloads = col_nnz / TK;                // (261 // 4 = 65)
+	const size_t  n_vloads_block = n_vloads / gridDim.z;  // (65 // 2 = 32)
+	const size_t  rem_n_vloads = n_vloads % gridDim.z;    // (65 % 2 = 1)
 	const size_t  nnz_block = col_nnz / gridDim.z;
-	const uint8_t n_tail_loads = col_nnz & 0b11;
 	const uint8_t n_scalar_loads = n_tail_loads + ri_unaligned_cnt;
 
 	// assert(blockDim.x >= n_vloads_block);  // at least as many threads per block as vectorized loads per block
@@ -571,27 +572,30 @@ __global__ void spmm_csc_2d_blocktiling_regs(
 	__align__(16) uint32_t t_row_idx[TK] = { 0 };
 	__align__(16) float    t_val[TK] = { 0.0f };
 
-	if (warp == 0 && lane == 0) {
+	if (blockIdx.z == 0 && warp == 0 && lane == 0) {
 		for (size_t i = 0; i < ri_unaligned_cnt; ++i) {  // up to 3 iterations
 			if (blockIdx.x == 0 && blockIdx.y == 0) {
-				printf("Multiplying x_row_smem[row_idx[%lu]] * val[%lu] = x_row_smem[%u] * val[%lu] = %.2f * %.2f = %.2f\n",
-					base_unaligned_i + i, base_unaligned_i + i, row_idx[base_unaligned_i + i], base_unaligned_i + i,
+				printf("[%u] Multiplying x_row_smem[row_idx[%lu]] * val[%lu] = x_row_smem[%u] * val[%lu] = %.4f * %.4f = %.4f\n",
+					blockIdx.z, base_unaligned_i + i, base_unaligned_i + i, row_idx[base_unaligned_i + i], base_unaligned_i + i,
 					x_row_smem[row_idx[base_unaligned_i + i]], val[base_unaligned_i + i], x_row_smem[row_idx[base_unaligned_i + i]] * val[base_unaligned_i + i]);
 			}
 			acc += x_row_smem[row_idx[base_unaligned_i + i]] * val[base_unaligned_i + i];
 		}
 		for (size_t i = 0; i < n_tail_loads; ++i) {  // up to 3 iterations
 			if (blockIdx.x == 0 && blockIdx.y == 0) {
-				printf("Multiplying x_row_smem[row_idx[%lu]] * val[%lu] = x_row_smem[%u] * val[%lu] = %.2f * %.2f = %.2f\n",
-					ri_aligned_i + nnz_block + i, ri_aligned_i + nnz_block + i, row_idx[ri_aligned_i + nnz_block + i], ri_aligned_i + nnz_block + i,
+				printf("[%u] Multiplying x_row_smem[row_idx[%lu]] * val[%lu] = x_row_smem[%u] * val[%lu] = %.4f * %.4f = %.4f\n",
+					blockIdx.z, ri_aligned_i + nnz_block + i, ri_aligned_i + nnz_block + i, row_idx[ri_aligned_i + nnz_block + i], ri_aligned_i + nnz_block + i,
 					x_row_smem[row_idx[ri_aligned_i + nnz_block + i]], val[ri_aligned_i + nnz_block + i], x_row_smem[row_idx[ri_aligned_i + nnz_block + i]] * val[ri_aligned_i + nnz_block + i]);
 			}
 			acc += x_row_smem[row_idx[ri_aligned_i + nnz_block + i]] * val[ri_aligned_i + nnz_block + i];
 		}
 	}
 
-	const size_t block_start = ri_aligned_i + blockIdx.z * n_vloads_block * TK;
-	const size_t block_end = (blockIdx.z == gridDim.z - 1) ? col_end_i : block_start + nnz_block;
+	const size_t block_start = ri_aligned_i + blockIdx.z * n_vloads_block * TK + min(static_cast<size_t>(blockIdx.z), rem_n_vloads) * TK;
+	size_t       block_end = block_start + n_vloads_block * TK;
+	if (blockIdx.z < rem_n_vloads) {
+		block_end += TK;
+	}
 	for (size_t i = block_start + threadIdx.x * TK; i + TK <= block_end; i += blockDim.x * TK) {
 		reinterpret_cast<uint4*>(&t_row_idx)[0] =
 			reinterpret_cast<const uint4*>(&row_idx[i])[0];
@@ -599,14 +603,14 @@ __global__ void spmm_csc_2d_blocktiling_regs(
 			reinterpret_cast<const float4*>(&val[i])[0];
 
 		if (blockIdx.x == 0 && blockIdx.y == 0) {
-			printf("Multiplying x_row_smem[t_row_idx[0]] * t_val[0] = x_row_smem[%u] * t_val[0] = %.2f * %.2f = %.2f\n",
-				t_row_idx[0], x_row_smem[t_row_idx[0]], t_val[0], x_row_smem[t_row_idx[0]] * t_val[0]);
-			printf("Multiplying x_row_smem[t_row_idx[1]] * t_val[1] = x_row_smem[%u] * t_val[1] = %.2f * %.2f = %.2f\n",
-				t_row_idx[1], x_row_smem[t_row_idx[1]], t_val[1], x_row_smem[t_row_idx[1]] * t_val[1]);
-			printf("Multiplying x_row_smem[t_row_idx[2]] * t_val[2] = x_row_smem[%u] * t_val[2] = %.2f * %.2f = %.2f\n",
-				t_row_idx[2], x_row_smem[t_row_idx[2]], t_val[2], x_row_smem[t_row_idx[2]] * t_val[2]);
-			printf("Multiplying x_row_smem[t_row_idx[3]] * t_val[3] = x_row_smem[%u] * t_val[3] = %.2f * %.2f = %.2f\n",
-				t_row_idx[3], x_row_smem[t_row_idx[3]], t_val[3], x_row_smem[t_row_idx[3]] * t_val[3]);
+			printf("[%u] Multiplying x_row_smem[t_row_idx[0]] * t_val[0] = x_row_smem[%u] * t_val[0] = %.4f * %.4f = %.4f\n",
+				blockIdx.z, t_row_idx[0], x_row_smem[t_row_idx[0]], t_val[0], x_row_smem[t_row_idx[0]] * t_val[0]);
+			printf("[%u] Multiplying x_row_smem[t_row_idx[1]] * t_val[1] = x_row_smem[%u] * t_val[1] = %.4f * %.4f = %.4f\n",
+				blockIdx.z, t_row_idx[1], x_row_smem[t_row_idx[1]], t_val[1], x_row_smem[t_row_idx[1]] * t_val[1]);
+			printf("[%u] Multiplying x_row_smem[t_row_idx[2]] * t_val[2] = x_row_smem[%u] * t_val[2] = %.4f * %.4f = %.4f\n",
+				blockIdx.z, t_row_idx[2], x_row_smem[t_row_idx[2]], t_val[2], x_row_smem[t_row_idx[2]] * t_val[2]);
+			printf("[%u] Multiplying x_row_smem[t_row_idx[3]] * t_val[3] = x_row_smem[%u] * t_val[3] = %.4f * %.4f = %.4f\n",
+				blockIdx.z, t_row_idx[3], x_row_smem[t_row_idx[3]], t_val[3], x_row_smem[t_row_idx[3]] * t_val[3]);
 		}
 		acc += x_row_smem[t_row_idx[0]] * t_val[0];
 		acc += x_row_smem[t_row_idx[1]] * t_val[1];
@@ -650,8 +654,8 @@ __global__ void spmm_csc_2d_blocktiling_regs(
 		}
 		if (lane == 0) {
 			if (blockIdx.x == 0 && blockIdx.y == 0) {
-				printf("FINAL ACC: %.2f\n", acc);
-				printf("Before it was: %.2f\n", res[blockIdx.y * n + blockIdx.x]);
+				printf("FINAL ACC: %.4f\n", acc);
+				printf("Before it was: %.4f\n", res[blockIdx.y * n + blockIdx.x]);
 			}
 			atomicAdd(&res[blockIdx.y * n + blockIdx.x], acc);
 		}
@@ -1053,21 +1057,19 @@ void warmup_spmm_csr(SPMM<CSR>& spmm, const uint8_t size_idx)
 	verify_res(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size);
 }
 
-void warmup_spmm_csc(SPMM<CSC>& spmm, const uint8_t size_idx)
+bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint8_t size_idx)
 {
 	const size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
 	CUDA_CHECK(cudaMemset(spmm.dev.r[size_idx], 0.0f, res_size * sizeof(float)));
 	// PERF: Bounds check
-	assert(size_idx < std::size(BENCHMARKING_DENSE_N_ROWS) - 1);
+	assert(size_idx < std::size(BENCHMARKING_DENSE_N_ROWS) - 1);  // DON'T REMOVE, YOU ARE DOING size_idx + 1 later
 	run_spmm_csc(spmm, size_idx);
 
 	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
 	CUDA_CHECK(cudaDeviceSynchronize());
-	std::cout << "On size_idx ~ " << spmm.host.r[size_idx][0] << std::endl;
 
 	// WARN: Temporary hack
 	std::memcpy(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size * sizeof(float));
-	std::cout << "On size_idx + 1 ~ " << spmm.host.r[size_idx + 1][0] << std::endl;
 
 	CuSparse cusparse;
 	cusparseCreate(&cusparse.handle);
@@ -1088,7 +1090,7 @@ void warmup_spmm_csc(SPMM<CSC>& spmm, const uint8_t size_idx)
 	}
 	cusparseDestroy(cusparse.handle);
 
-	verify_res(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size);
+	return verify_res(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size);
 }
 
 void run_spmm_csr(SPMM<CSR>& spmm, const uint8_t idx)
