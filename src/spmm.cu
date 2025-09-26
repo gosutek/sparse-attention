@@ -588,7 +588,7 @@ __global__ void spmm_csc_2d_blocktiling_regs(
 			// 		blockIdx.z, ri_aligned_i + nnz_block + i, ri_aligned_i + nnz_block + i, row_idx[ri_aligned_i + nnz_block + i], ri_aligned_i + nnz_block + i,
 			// 		x_row_smem[row_idx[ri_aligned_i + nnz_block + i]], val[ri_aligned_i + nnz_block + i], x_row_smem[row_idx[ri_aligned_i + nnz_block + i]] * val[ri_aligned_i + nnz_block + i]);
 			// }
-			acc += x_row_smem[row_idx[ri_aligned_i + nnz_block + i]] * val[ri_aligned_i + nnz_block + i];
+			acc += x_row_smem[row_idx[ri_aligned_i + gridDim.z * nnz_block + i]] * val[ri_aligned_i + gridDim.z * nnz_block + i];
 		}
 	}
 
@@ -1142,20 +1142,20 @@ void run_spmm_csc(SPMM<CSC>& spmm, const uint8_t idx)
 	const size_t n = spmm.dev.s.cols;
 
 	// NOTE: 1d_blocktiling
-	dim3 spmm_grid_sm(n, BENCHMARKING_DENSE_N_ROWS[idx]);
-	dim3 spmm_block_sm(N_THREADS);
-	spmm_csc_1d_blocktiling<<<spmm_grid_sm, spmm_block_sm>>>(
-		spmm.dev.d[idx],
-		spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
-		m, k, n, spmm.dev.r[idx]);
-
-	// NOTE: 2d_blocktiling_reg
-	// dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], k / BK);
-	// dim3 block(N_THREADS);
-	// spmm_csc_2d_blocktiling_regs<<<grid, block>>>(
+	// dim3 spmm_grid_sm(n, BENCHMARKING_DENSE_N_ROWS[idx]);
+	// dim3 spmm_block_sm(N_THREADS);
+	// spmm_csc_1d_blocktiling<<<spmm_grid_sm, spmm_block_sm>>>(
 	// 	spmm.dev.d[idx],
 	// 	spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
 	// 	m, k, n, spmm.dev.r[idx]);
+
+	// NOTE: 2d_blocktiling_reg
+	dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], k / BK);
+	dim3 block(N_THREADS);
+	spmm_csc_2d_blocktiling_regs<<<grid, block>>>(
+		spmm.dev.d[idx],
+		spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
+		m, k, n, spmm.dev.r[idx]);
 
 	// NOTE: 2d_blocktiling
 	// // PERF: Hack ~ find a better way to deal with having to add instead of set the result
