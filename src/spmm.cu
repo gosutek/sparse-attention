@@ -591,47 +591,31 @@ __global__ void spmm_csc_2d_blocktiling_regs(
 			acc += x_row_smem[row_idx[ri_aligned_i + gridDim.z * nnz_block + i]] * val[ri_aligned_i + gridDim.z * nnz_block + i];
 		}
 	}
-
-	const size_t block_start = ri_aligned_i + rem_n_vloads * TK + blockIdx.z * n_vloads_block * TK;
-	const size_t block_end = block_start + n_vloads_block * TK;
-
-	if (blockIdx.z == 0 && warp == 0 && lane == 0) {
-		reinterpret_cast<uint4*>(&t_row_idx)[0] = reinterpret_cast<const uint4*>(&row_idx[ri_aligned_i])[0];
-		reinterpret_cast<float4*>(&t_val)[0] = reinterpret_cast<const float4*>(&val[ri_aligned_i])[0];
-
-		// if (blockIdx.x == 0 && blockIdx.y == 0) {
-		// 	printf("[%u - Vectorized Remainder] Multiplying x_row_smem[t_row_idx[0]] * t_val[0] = x_row_smem[%u] * t_val[0] = %.4f * %.4f = %.4f\n",
-		// 		blockIdx.z, t_row_idx[0], x_row_smem[t_row_idx[0]], t_val[0], x_row_smem[t_row_idx[0]] * t_val[0]);
-		// 	printf("[%u - Vectorized Remainder] Multiplying x_row_smem[t_row_idx[1]] * t_val[1] = x_row_smem[%u] * t_val[1] = %.4f * %.4f = %.4f\n",
-		// 		blockIdx.z, t_row_idx[1], x_row_smem[t_row_idx[1]], t_val[1], x_row_smem[t_row_idx[1]] * t_val[1]);
-		// 	printf("[%u - Vectorized Remainder] Multiplying x_row_smem[t_row_idx[2]] * t_val[2] = x_row_smem[%u] * t_val[2] = %.4f * %.4f = %.4f\n",
-		// 		blockIdx.z, t_row_idx[2], x_row_smem[t_row_idx[2]], t_val[2], x_row_smem[t_row_idx[2]] * t_val[2]);
-		// 	printf("[%u - Vectorized Remainder] Multiplying x_row_smem[t_row_idx[3]] * t_val[3] = x_row_smem[%u] * t_val[3] = %.4f * %.4f = %.4f\n",
-		// 		blockIdx.z, t_row_idx[3], x_row_smem[t_row_idx[3]], t_val[3], x_row_smem[t_row_idx[3]] * t_val[3]);
-		// }
-
-		acc += x_row_smem[t_row_idx[0]] * t_val[0];
-		acc += x_row_smem[t_row_idx[1]] * t_val[1];
-		acc += x_row_smem[t_row_idx[2]] * t_val[2];
-		acc += x_row_smem[t_row_idx[3]] * t_val[3];
+	size_t block_start = 0;
+	size_t block_end = 0;
+	if (blockIdx.z == 0) {
+		block_start = ri_aligned_i;
+		block_end = block_start + (n_vloads_block + rem_n_vloads) * TK;
+	} else {
+		block_start = ri_aligned_i + (blockIdx.z * n_vloads_block + rem_n_vloads) * TK;
+		block_end = block_start + n_vloads_block * TK;
 	}
 
 	for (size_t i = block_start + threadIdx.x * TK; i < block_end; i += blockDim.x * TK) {
-		reinterpret_cast<uint4*>(&t_row_idx)[0] =
-			reinterpret_cast<const uint4*>(&row_idx[i])[0];
-		reinterpret_cast<float4*>(&t_val)[0] =
-			reinterpret_cast<const float4*>(&val[i])[0];
-
+		reinterpret_cast<uint4*>(&t_row_idx)[0] = reinterpret_cast<const uint4*>(&row_idx[i])[0];
+		reinterpret_cast<float4*>(&t_val)[0] = reinterpret_cast<const float4*>(&val[i])[0];
+		//
 		// if (blockIdx.x == 0 && blockIdx.y == 0) {
-		// 	printf("[%u - Vectorized Normal] Multiplying x_row_smem[t_row_idx[0]] * t_val[0] = x_row_smem[%u] * t_val[0] = %.4f * %.4f = %.4f\n",
+		// 	printf("[%u - Vectorized] Multiplying x_row_smem[t_row_idx[0]] * t_val[0] = x_row_smem[%u] * t_val[0] = %.4f * %.4f = %.4f\n",
 		// 		blockIdx.z, t_row_idx[0], x_row_smem[t_row_idx[0]], t_val[0], x_row_smem[t_row_idx[0]] * t_val[0]);
-		// 	printf("[%u - Vectorized Normal] Multiplying x_row_smem[t_row_idx[1]] * t_val[1] = x_row_smem[%u] * t_val[1] = %.4f * %.4f = %.4f\n",
+		// 	printf("[%u - Vectorized] Multiplying x_row_smem[t_row_idx[1]] * t_val[1] = x_row_smem[%u] * t_val[1] = %.4f * %.4f = %.4f\n",
 		// 		blockIdx.z, t_row_idx[1], x_row_smem[t_row_idx[1]], t_val[1], x_row_smem[t_row_idx[1]] * t_val[1]);
-		// 	printf("[%u - Vectorized Normal] Multiplying x_row_smem[t_row_idx[2]] * t_val[2] = x_row_smem[%u] * t_val[2] = %.4f * %.4f = %.4f\n",
+		// 	printf("[%u - Vectorized] Multiplying x_row_smem[t_row_idx[2]] * t_val[2] = x_row_smem[%u] * t_val[2] = %.4f * %.4f = %.4f\n",
 		// 		blockIdx.z, t_row_idx[2], x_row_smem[t_row_idx[2]], t_val[2], x_row_smem[t_row_idx[2]] * t_val[2]);
-		// 	printf("[%u - Vectorized Normal] Multiplying x_row_smem[t_row_idx[3]] * t_val[3] = x_row_smem[%u] * t_val[3] = %.4f * %.4f = %.4f\n",
+		// 	printf("[%u - Vectorized] Multiplying x_row_smem[t_row_idx[3]] * t_val[3] = x_row_smem[%u] * t_val[3] = %.4f * %.4f = %.4f\n",
 		// 		blockIdx.z, t_row_idx[3], x_row_smem[t_row_idx[3]], t_val[3], x_row_smem[t_row_idx[3]] * t_val[3]);
 		// }
+
 		acc += x_row_smem[t_row_idx[0]] * t_val[0];
 		acc += x_row_smem[t_row_idx[1]] * t_val[1];
 		acc += x_row_smem[t_row_idx[2]] * t_val[2];
