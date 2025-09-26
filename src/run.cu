@@ -54,8 +54,8 @@ void list_kernels()
 	const std::string kernel_msg =
 		"List of kernels for benchmarking:\n\n"
 		"1. cuSparse\n"
-		"2. SpMM\n"
-		"3. SDDMM\n"
+		"2. SpMM ~ 1D-Blocktiling\n"
+		"3. SpMM ~ 2D-Blocktiling\n"
 		"4. softMax\n";
 
 	std::cout << kernel_msg << "\n";
@@ -73,7 +73,7 @@ void print_benchmarking_results(const float time, const uint8_t size_idx, const 
 		BENCHMARKING_DENSE_N_ROWS[size_idx], avg_time, (BENCHMARKING_ROUNDS * flops * 1e-9) / time);
 }
 
-void benchmark_spmm()
+void benchmark_spmm(void (*run_kernel)(SPMM<CSC>&, const uint8_t))
 {
 	// 1. Read weight
 	// 2. Generate X with sizes (32, 64, 128, 256, 512)
@@ -95,13 +95,13 @@ void benchmark_spmm()
 	cudaEventCreate(&stop);
 
 	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		bool correct = warmup_spmm_csc(spmm, 0);
-		// if (!correct) {
-		// 	return;
-		// }
+		bool correct = warmup_spmm_csc(spmm, 0, run_kernel);
+		if (!correct) {
+			return;
+		}
 		cudaEventRecord(start);
 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
-			run_spmm_csc(spmm, i);
+			run_kernel(spmm, i);
 		}
 		cudaEventRecord(stop);
 		cudaEventSynchronize(start);
@@ -211,12 +211,12 @@ int main(int argc, char* argv[])
 				benchmark_cusparse();
 				break;
 			case 2:
-				std::cout << "Benchmark SpMM\n";
-				benchmark_spmm();
+				std::cout << "Benchmark SpMM (1D-Blocktiling)\n";
+				benchmark_spmm(&run_spmm_1d_blocktiling);
 				break;
 			case 3:
-				std::cout << "Benchmark SDDMM\n";
-				// benchmark_sddmm();
+				std::cout << "Benchmark SpMM (2D-Blocktiling)\n";
+				benchmark_spmm(&run_spmm_2d_blocktiling);
 				break;
 			case 4:
 				std::cout << "Benchamrk softMax\n";
