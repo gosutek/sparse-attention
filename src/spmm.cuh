@@ -4,6 +4,8 @@
 #include "matrix.h"
 #include <cusparse.h>
 
+#define CEIL_DIV(M, N) (((M) + (N) - 1) / (N))
+
 // TODO: This *can* leak memory
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \
