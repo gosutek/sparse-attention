@@ -84,7 +84,7 @@ __global__ void spmm_naive_elemwise_csc_gmem(
 	float* __restrict__ res)
 {
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
-	uint32_t y = blockIdx.y * blockDim.y + threadIdx.x;
+	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
 
 	float acc = 0.0f;
 	for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {  // 1 LDG
@@ -168,7 +168,6 @@ __global__ void spmm_blocktiling_elemwise_csr(
 	__shared__ float x_row_sm[MAT_SIZE];
 	__shared__ float shared_acc[MAT_SIZE];
 
-	// Does indeed load the whole of row from A for every block (k / BN times)
 	for (size_t i = threadIdx.x; i < k; i += blockDim.x) {
 		x_row_sm[i] = get_elem_rm(a, k, blockIdx.x, i);
 		shared_acc[i] = 0.0f;
@@ -176,8 +175,8 @@ __global__ void spmm_blocktiling_elemwise_csr(
 	__syncthreads();
 
 	for (size_t r = 0; r < k; ++r) {
-		size_t bound = min(static_cast<unsigned long>(row_ptr[r + 1]), row_ptr[r] + (blockIdx.y + 1) * BN);
-		for (size_t i = row_ptr[r] + blockIdx.y * BN + threadIdx.x; i < bound; i += blockDim.x) {
+		size_t bound = min(row_ptr[r + 1], row_ptr[r] + (blockIdx.y + 1) * blockDim.x);
+		for (size_t i = row_ptr[r] + blockIdx.y * blockDim.x + threadIdx.x; i < bound; i += blockDim.x) {
 			atomicAdd(&shared_acc[col_idx[i]], val[i] * x_row_sm[r]);
 		}
 	}
@@ -191,6 +190,7 @@ __global__ void spmm_blocktiling_elemwise_csr(
 	}
 }
 
+template <const size_t N_THREADS>
 __global__ void spmm_coalesced_nnzwise(
 	const float* __restrict__ a,
 	const uint32_t* __restrict__ col_ptr,
@@ -214,15 +214,15 @@ __global__ void spmm_coalesced_nnzwise(
 	}
 	__syncthreads();
 
-	for (uint8_t i = WARP_SIZE / 2; i > 0; i /= 2) {
+	for (uint32_t i = WARP_SIZE / 2; i > 0; i /= 2) {
 		acc += __shfl_xor_sync(0xffffffff, acc, i, WARP_SIZE);
 	}
 
 	uint32_t lane_id = threadIdx.x & 0x1f;
 	uint32_t warp_id = threadIdx.x / WARP_SIZE;
 
-	constexpr uint8_t n_warps = N_THREADS / WARP_SIZE;
-	__shared__ float  warp_sums[n_warps];
+	constexpr uint32_t n_warps = N_THREADS / WARP_SIZE;
+	__shared__ float   warp_sums[n_warps];
 
 	if (lane_id == 0) {
 		warp_sums[warp_id] = acc;
@@ -236,7 +236,7 @@ __global__ void spmm_coalesced_nnzwise(
 
 		constexpr uint32_t mask = 0xFF;
 
-		for (uint8_t i = n_warps / 2; i > 0; i /= 2) {
+		for (uint32_t i = n_warps / 2; i > 0; i /= 2) {
 			acc += __shfl_xor_sync(mask, acc, i, WARP_SIZE);
 		}
 
@@ -247,6 +247,7 @@ __global__ void spmm_coalesced_nnzwise(
 }
 
 // WARN: INCOMPLETE
+template <const size_t N_THREADS>
 __global__ void spmm_vectorized_nnzwise_smem(
 	const float* __restrict__ a,
 	const uint32_t* __restrict__ col_ptr,
@@ -280,7 +281,7 @@ __global__ void spmm_vectorized_nnzwise_smem(
 
 		// NOTE: this loop doesn't get vectorized for some reason
 		// #pragma unroll
-		// 		for (uint8_t t = 0; t < TK; ++t) {
+		// 		for (uint32_t t = 0; t < TK; ++t) {
 		// 			// x_row_sm[i + t] = reinterpret_cast<const float*>(&tmp)[0];
 		// 			// x_row_sm[i + t] = ((float*)&tmp)[0];
 		// 		}
@@ -302,7 +303,7 @@ __global__ void spmm_vectorized_nnzwise_smem(
 	const size_t col_nnz = col_end_idx - base_unaligned_idx;  // count[base_unaligned_idx - col_end_idx)
 	const size_t block_nnz = col_nnz / gridDim.z;
 	// TODO: add overflow assert
-	const uint8_t block_nnz_rem = col_nnz % gridDim.z;
+	const uint32_t block_nnz_rem = col_nnz % gridDim.z;
 
 	/*
       * +-------------------------------------------------ROW_IDX----------------------------------------------------------+
@@ -475,15 +476,15 @@ __global__ void spmm_vectorized_nnzwise_smem(
 	// 	printf("acc = %.2f\n", acc);
 	// }
 
-	for (uint8_t i = WARP_SIZE / 2; i > 0; i /= 2) {
+	for (uint32_t i = WARP_SIZE / 2; i > 0; i /= 2) {
 		acc += __shfl_xor_sync(0xffffffff, acc, i, WARP_SIZE);
 	}
 
 	uint32_t lane_id = threadIdx.x & 0x1f;
 	uint32_t warp_id = threadIdx.x / WARP_SIZE;
 
-	constexpr uint8_t n_warps = N_THREADS / WARP_SIZE;
-	__shared__ float  warp_sums[n_warps];
+	constexpr uint32_t n_warps = N_THREADS / WARP_SIZE;
+	__shared__ float   warp_sums[n_warps];
 
 	// at this point the first thread (lane_id == 0) of every warp in this block
 	// has the result from TK non-zeros for this col
@@ -503,7 +504,7 @@ __global__ void spmm_vectorized_nnzwise_smem(
 
 		constexpr uint32_t mask = 0x3;
 
-		for (uint8_t i = n_warps / 2; i > 0; i /= 2) {
+		for (uint32_t i = n_warps / 2; i > 0; i /= 2) {
 			acc += __shfl_xor_sync(mask, acc, i, n_warps);
 		}
 		if (lane_id == 0) {
@@ -512,6 +513,7 @@ __global__ void spmm_vectorized_nnzwise_smem(
 	}
 }
 
+template <const size_t N_THREADS>
 __global__ void spmm_vectorized_nnzwise_regs(
 	const float* __restrict__ a,
 	const uint32_t* __restrict__ col_ptr,
@@ -542,7 +544,7 @@ __global__ void spmm_vectorized_nnzwise_regs(
 
 		// NOTE: this loop doesn't get vectorized for some reason
 		// #pragma unroll
-		// 		for (uint8_t t = 0; t < TK; ++t) {
+		// 		for (uint32_t t = 0; t < TK; ++t) {
 		// 			// x_row_sm[i + t] = reinterpret_cast<const float*>(&tmp)[0];
 		// 			// x_row_sm[i + t] = ((float*)&tmp)[0];
 		// 		}
@@ -581,14 +583,14 @@ __global__ void spmm_vectorized_nnzwise_regs(
 
 	const size_t col_end_i = col_ptr[blockIdx.x + 1];
 
-	const size_t  col_nnz = col_end_i - ri_aligned_i;     // count[ri_aligned_i - col_end_i) (261)
-	const uint8_t n_tail_loads = col_nnz & (TK - 1);      // ( 261 % 4 = 1)
-	const size_t  n_velems = col_nnz - n_tail_loads;      // 261 - 1 = 260
-	const size_t  n_vloads = n_velems / TK;               // (260 / 4 = 65)
-	const size_t  n_vloads_block = n_vloads / gridDim.z;  // (65 // 2 = 32)
-	const size_t  rem_n_vloads = n_vloads % gridDim.z;    // (65 % 2 = 1)
-	const size_t  nnz_block = n_velems / gridDim.z;       // 260 / 2 = 130
-	const uint8_t n_scalar_loads = n_tail_loads + ri_unaligned_cnt;
+	const size_t   col_nnz = col_end_i - ri_aligned_i;     // count[ri_aligned_i - col_end_i) (261)
+	const uint32_t n_tail_loads = col_nnz & (TK - 1);      // ( 261 % 4 = 1)
+	const size_t   n_velems = col_nnz - n_tail_loads;      // 261 - 1 = 260
+	const size_t   n_vloads = n_velems / TK;               // (260 / 4 = 65)
+	const size_t   n_vloads_block = n_vloads / gridDim.z;  // (65 // 2 = 32)
+	const size_t   rem_n_vloads = n_vloads % gridDim.z;    // (65 % 2 = 1)
+	const size_t   nnz_block = n_velems / gridDim.z;       // 260 / 2 = 130
+	const uint32_t n_scalar_loads = n_tail_loads + ri_unaligned_cnt;
 
 	// assert(blockDim.x >= n_vloads_block);  // at least as many threads per block as vectorized loads per block
 
@@ -637,12 +639,12 @@ __global__ void spmm_vectorized_nnzwise_regs(
 	// 	printf("acc = %.2f\n", acc);
 	// }
 
-	for (uint8_t i = WARP_SIZE / 2; i > 0; i /= 2) {
+	for (uint32_t i = WARP_SIZE / 2; i > 0; i /= 2) {
 		acc += __shfl_xor_sync(0xffffffff, acc, i, WARP_SIZE);
 	}
 
-	constexpr uint8_t n_warps = N_THREADS / WARP_SIZE;
-	__shared__ float  warp_sums[n_warps];
+	constexpr uint32_t n_warps = N_THREADS / WARP_SIZE;
+	__shared__ float   warp_sums[n_warps];
 
 	// at this point the first thread (lane_id == 0) of every warp in this block
 	// has the result from TK non-zeros for this col
@@ -662,7 +664,7 @@ __global__ void spmm_vectorized_nnzwise_regs(
 
 		constexpr uint32_t mask = 0x3;
 
-		for (uint8_t i = n_warps / 2; i > 0; i /= 2) {
+		for (uint32_t i = n_warps / 2; i > 0; i /= 2) {
 			acc += __shfl_xor_sync(mask, acc, i, n_warps);
 		}
 		if (lane == 0) {
@@ -731,7 +733,7 @@ void prepare_cusparse_csr(SPMM<CSR>& spmm, CuSparse& cusparse)
 		CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
 
 	size_t tmp = 0;
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.dense[i], BENCHMARKING_DENSE_N_ROWS[i], spmm.dev.s.rows, spmm.dev.s.rows, spmm.dev.d[i], CUDA_R_32F, CUSPARSE_ORDER_ROW));
 		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.res[i], spmm.dev.s.cols, BENCHMARKING_DENSE_N_ROWS[i], spmm.dev.s.cols, spmm.dev.r[i], CUDA_R_32F, CUSPARSE_ORDER_COL));
 
@@ -757,7 +759,7 @@ void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse)
 		CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
 
 	size_t tmp = 0;
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.dense[i], BENCHMARKING_DENSE_N_ROWS[i], spmm.dev.s.rows, spmm.dev.s.rows, spmm.dev.d[i], CUDA_R_32F, CUSPARSE_ORDER_ROW));
 		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.res[i], spmm.dev.s.cols, BENCHMARKING_DENSE_N_ROWS[i], spmm.dev.s.cols, spmm.dev.r[i], CUDA_R_32F, CUSPARSE_ORDER_COL));
 
@@ -783,61 +785,89 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 
 	std::ifstream file_stream = { spmm.sparse_path };
 	DLMCHeader    header = parse_dlmc_header(file_stream);
-	size_t        sparse_b_size = (sizeof(uint32_t) * (header.n_rows + 1) + sizeof(uint32_t) * header.nnz + sizeof(float) * header.nnz);
+
+	size_t row_ptr_b_size = sizeof(uint32_t) * (header.n_rows + 1);
+	size_t col_idx_b_size = sizeof(uint32_t) * header.nnz;
+	size_t val_b_size = sizeof(float) * header.nnz;
+	size_t sparse_b_size_aligned = row_ptr_b_size + calc_padding_bytes(row_ptr_b_size, ALIGNMENT_BYTES) +
+	                               col_idx_b_size + calc_padding_bytes(col_idx_b_size, ALIGNMENT_BYTES) +
+	                               val_b_size + calc_padding_bytes(val_b_size, ALIGNMENT_BYTES);
 
 	/**
     * Twice the total size of the dense matrices.
     * Once for the input
     * Twice for the result
     **/
-	spmm.host.data = cuda_malloc_host(sparse_b_size + 2 * BENCHMARKING_TOTAL_DENSE_B_SIZE);
+	spmm.b_size = sparse_b_size_aligned + 2 * BENCHMARKING_TOTAL_DENSE_B_SIZE;
+	spmm.host.data = cuda_malloc_host(spmm.b_size);
 	spmm.host.d[0] = reinterpret_cast<float*>(spmm.host.data);
 
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		generate_token_embeddings(spmm.host.d[i], BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE);
 		if (i + 1 < std::size(BENCHMARKING_DENSE_N_ROWS)) {
 			spmm.host.d[i + 1] = spmm.host.d[i] + BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
 		}
 	}
 
+	// assert((reinterpret_cast<uintptr_t>(spmm.host.d[0]) & (ALIGNMENT_BYTES - 1)) == 0);
+	// assert((reinterpret_cast<uintptr_t>(spmm.host.d[1]) & (ALIGNMENT_BYTES - 1)) == 0);
+	// assert((reinterpret_cast<uintptr_t>(spmm.host.d[2]) & (ALIGNMENT_BYTES - 1)) == 0);
+	// assert((reinterpret_cast<uintptr_t>(spmm.host.d[3]) & (ALIGNMENT_BYTES - 1)) == 0);
+	// assert((reinterpret_cast<uintptr_t>(spmm.host.d[4]) & (ALIGNMENT_BYTES - 1)) == 0);
+
 	void* start_of_sparse = spmm.host.d[std::size(BENCHMARKING_DENSE_N_ROWS) - 1] +                          // from the last ptr of spmm.host.d
 	                        BENCHMARKING_DENSE_N_ROWS[std::size(BENCHMARKING_DENSE_N_ROWS) - 1] * MAT_SIZE;  // skip 512 * 512 floats
+
+	// start_of_sparse is 128-byte aligned guaranteed
 	spmm.host.s = parse_csr_dlmc(start_of_sparse, spmm.sparse_path);
 
-	float* ptr = spmm.host.s.val + spmm.host.s.val_size;
+	// assert((reinterpret_cast<uintptr_t>(spmm.host.s.row_ptr) & (ALIGNMENT_BYTES - 1)) == 0);
+	// assert((reinterpret_cast<uintptr_t>(spmm.host.s.col_idx) & (ALIGNMENT_BYTES - 1)) == 0);
+	// assert((reinterpret_cast<uintptr_t>(spmm.host.s.val) & (ALIGNMENT_BYTES - 1)) == 0);
 
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		spmm.host.r[i] = ptr;
-		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
+	uintptr_t ptr = reinterpret_cast<uintptr_t>(start_of_sparse) + spmm.host.s.b_size;
+
+	// TODO: use uintptr_t instead of pointer arithmetic on float* (??)
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		spmm.host.r[i] = reinterpret_cast<float*>(ptr);
+		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
 	}
+	// assert((reinterpret_cast<uintptr_t>(spmm.host.r[0]) & (ALIGNMENT_BYTES - 1)) == 0);
+	// assert((reinterpret_cast<uintptr_t>(spmm.host.r[1]) & (ALIGNMENT_BYTES - 1)) == 0);
+	// assert((reinterpret_cast<uintptr_t>(spmm.host.r[2]) & (ALIGNMENT_BYTES - 1)) == 0);
+	// assert((reinterpret_cast<uintptr_t>(spmm.host.r[3]) & (ALIGNMENT_BYTES - 1)) == 0);
+	// assert((reinterpret_cast<uintptr_t>(spmm.host.r[4]) & (ALIGNMENT_BYTES - 1)) == 0);
+
+	// WARN: asserts cost
+	assert(sparse_b_size_aligned == spmm.host.s.b_size);
 
 	/*
       * +------+------+-------+-------+-------+---------+---------+-----+------+------+-------+-------+-------+
-      * | x_32 | x_64 | x_128 | x_256 | x_512 | row_ptr | col_idx | val | r_32 | r_64 | r_128 | r_256 | r_512 |
+      * | x_32 | x_64 | x_128 | x_256 | x_512 | col_ptr | row_idx | val | r_32 | r_64 | r_128 | r_256 | r_512 |
       * +------+------+-------+-------+-------+---------+---------+-----+------+------+-----+---+-------------+
       * +------------------------------------------HOST/DEVICE------------------------------------------------+
    */
 
-	spmm.dev.data = cuda_malloc_device(spmm.host.s.b_size + 2 * BENCHMARKING_TOTAL_DENSE_B_SIZE);
+	spmm.dev.data = cuda_malloc_device(spmm.b_size);
 	CUDA_CHECK(cudaMemcpy(spmm.dev.data, spmm.host.data, spmm.host.s.b_size + BENCHMARKING_TOTAL_DENSE_B_SIZE, cudaMemcpyHostToDevice));
 
 	// Partition dev
-	ptr = reinterpret_cast<float*>(spmm.dev.data);
+	ptr = reinterpret_cast<uintptr_t>(spmm.dev.data);
 
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		spmm.dev.d[i] = ptr;
-		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		spmm.dev.d[i] = reinterpret_cast<float*>(ptr);
+		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
 	}
 
 	// TODO: This trashes the previous empty object and makes a new one. Make a good copy assignment operator function instead.
 	spmm.dev.s = CSR(spmm.host.s.rows, spmm.host.s.cols, spmm.host.s.nnz);
 	spmm.dev.s.partition(ptr);
 
-	ptr = spmm.dev.s.val + spmm.dev.s.val_size;
+	ptr += spmm.host.s.b_size;
 
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		spmm.dev.r[i] = ptr;
-		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		spmm.dev.r[i] = reinterpret_cast<float*>(ptr);
+		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
 	}
 }
 
@@ -866,7 +896,7 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
 	spmm.host.data = cuda_malloc_host(spmm.b_size);
 	spmm.host.d[0] = reinterpret_cast<float*>(spmm.host.data);
 
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		generate_token_embeddings(spmm.host.d[i], BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE);
 		if (i + 1 < std::size(BENCHMARKING_DENSE_N_ROWS)) {
 			spmm.host.d[i + 1] = spmm.host.d[i] + BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
@@ -893,7 +923,7 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
 	uintptr_t ptr = reinterpret_cast<uintptr_t>(start_of_sparse) + spmm.host.s.b_size;
 
 	// TODO: use uintptr_t instead of pointer arithmetic on float* (??)
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		spmm.host.r[i] = reinterpret_cast<float*>(ptr);
 		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
 	}
@@ -919,7 +949,7 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
 	// Partition dev
 	ptr = reinterpret_cast<uintptr_t>(spmm.dev.data);
 
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		spmm.dev.d[i] = reinterpret_cast<float*>(ptr);
 		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
 	}
@@ -930,17 +960,17 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
 
 	ptr += spmm.host.s.b_size;
 
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		spmm.dev.r[i] = reinterpret_cast<float*>(ptr);
 		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
 	}
 }
 
-void warmup_spmm_csr(SPMM<CSR>& spmm, const uint8_t size_idx)
+bool warmup_spmm_csr(SPMM<CSR>& spmm, const uint32_t size_idx, void (*run_kernel)(SPMM<CSR>&, const uint32_t))
 {
 	// PERF: Bounds check
 	assert(size_idx < std::size(BENCHMARKING_DENSE_N_ROWS) - 1);
-	run_spmm_csr(spmm, size_idx);
+	run_kernel(spmm, size_idx);
 
 	const size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
 	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
@@ -961,7 +991,7 @@ void warmup_spmm_csr(SPMM<CSR>& spmm, const uint8_t size_idx)
 
 	cusparseDestroySpMat(cusparse.sparse);
 
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		cusparseDestroyDnMat(cusparse.dense[i]);
 		cusparseDestroyDnMat(cusparse.res[i]);
 	}
@@ -970,7 +1000,7 @@ void warmup_spmm_csr(SPMM<CSR>& spmm, const uint8_t size_idx)
 	verify_res(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size);
 }
 
-bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint8_t size_idx, void (*run_kernel)(SPMM<CSC>&, const uint8_t))
+bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint32_t size_idx, void (*run_kernel)(SPMM<CSC>&, const uint32_t))
 {
 	const size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
 	CUDA_CHECK(cudaMemset(spmm.dev.r[size_idx], 0.0f, res_size * sizeof(float)));
@@ -997,7 +1027,7 @@ bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint8_t size_idx, void (*run_kernel)
 
 	cusparseDestroySpMat(cusparse.sparse);
 
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		cusparseDestroyDnMat(cusparse.dense[i]);
 		cusparseDestroyDnMat(cusparse.res[i]);
 	}
@@ -1006,78 +1036,118 @@ bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint8_t size_idx, void (*run_kernel)
 	return verify_res(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size);
 }
 
-void run_spmm_csr(SPMM<CSR>& spmm, const uint8_t idx)
+void run_spmm_naive_elemwise_csc_gmem(SPMM<CSC>& spmm, const uint32_t idx)
 {
 	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
-	// One thread per element of the output.
-	// One thread block stretched across a row of the output
-	// (32x512)*(512x512)=(32x512)
-	// dim3 spmm_block_sm(MAT_SIZE / TN);
-	// dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
-	// dim3 spmm_block_sm(256);
-	// dim3 spmm_grid_sm(BENCHMARKING_DENSE_N_ROWS[idx]);
-	dim3 spmm_1d_blocktiling_grid_size(BENCHMARKING_DENSE_N_ROWS[idx], n / BN);
-	dim3 spmm_1d_blocktiling_block_size(BN / TN);
+	constexpr size_t BN = 16;
+	constexpr size_t BK = BN;
 
-	spmm_1d_blocktiling<<<spmm_1d_blocktiling_grid_size, spmm_1d_blocktiling_block_size>>>(
-		spmm.dev.d[idx],
-		spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val,
-		m, k, n, spmm.dev.r[idx]);
+	dim3 grid(CEIL_DIV(MAT_SIZE, BN), CEIL_DIV(BENCHMARKING_DENSE_N_ROWS[idx], BK));
+	dim3 block(BN, BK);
+
+	spmm_naive_elemwise_csc_gmem<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
 
-void run_spmm_1d_blocktiling(SPMM<CSC>& spmm, const uint8_t idx)
+void run_spmm_naive_elemwise_csc_smem(SPMM<CSC>& spmm, const uint32_t idx)
 {
 	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
-	dim3 spmm_grid_sm(n, BENCHMARKING_DENSE_N_ROWS[idx]);
-	dim3 spmm_block_sm(N_THREADS);
-	spmm_csc_1d_blocktiling<<<spmm_grid_sm, spmm_block_sm>>>(
-		spmm.dev.d[idx],
-		spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
-		m, k, n, spmm.dev.r[idx]);
+	dim3 grid(MAT_SIZE);
+	dim3 block(MAT_SIZE);
+
+	spmm_naive_elemwise_csc_smem<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
 
-void run_spmm_2d_blocktiling(SPMM<CSC>& spmm, const uint8_t idx)
+void run_spmm_coalesced_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx)
 {
 	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
-	dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], 1);
-	dim3 block(N_THREADS);
-	spmm_csc_2d_blocktiling_regs<<<grid, block>>>(
-		spmm.dev.d[idx],
-		spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
-		m, k, n, spmm.dev.r[idx]);
+	dim3 grid(MAT_SIZE);
+	dim3 block(MAT_SIZE);
+
+	spmm_coalesced_elemwise_csr<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
 
-void run_spmm_csc(SPMM<CSC>& spmm, const uint8_t idx)
+void run_spmm_blocktiling_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx)
 {
 	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
-	// NOTE: 2d_blocktiling
-	// // PERF: Hack ~ find a better way to deal with having to add instead of set the result
-	// const size_t res_size = BENCHMARKING_DENSE_N_ROWS[idx] * MAT_SIZE * sizeof(float);
-	// // BUG: Hardcoded value
-	// // ensures there is enough space for alignment
-	// // doing 4 alignments at 16-byte each
-	// const size_t padding = 4 * 16;
-	// const size_t dyn_mem_b_size = spmm.host.s.max_nnz_per_col * sizeof(float) + spmm.host.s.max_nnz_per_col * sizeof(uint32_t) + padding;  // + TK for ensuring alignment of val_smem
-	// CUDA_CHECK(cudaMemset(spmm.dev.r[idx], 0, res_size));
-	// CUDA_CHECK(cudaDeviceSynchronize());
-	// dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], k / 256);
-	// dim3 block(64);
-	// spmm_csc_2d_blocktiling<<<grid, block, dyn_mem_b_size>>>(
-	// 	spmm.dev.d[idx],
-	// 	spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
-	// 	m, k, n, spmm.host.s.max_nnz_per_col, spmm.dev.r[idx]);
+	constexpr size_t BN = 32;
+	constexpr size_t TN = 4;
+
+	dim3 grid(m, n / BN);
+	dim3 block(CEIL_DIV(BN, TN));
+
+	spmm_blocktiling_elemwise_csr<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
+}
+
+void run_spmm_coalesced_nnzwise(SPMM<CSC>& spmm, const uint32_t idx)
+{
+	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+	const size_t k = spmm.dev.s.rows;
+	const size_t n = spmm.dev.s.cols;
+
+	constexpr size_t n_threads = 64;
+
+	dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx]);
+	dim3 block(n_threads);
+
+	spmm_coalesced_nnzwise<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
+}
+
+// WARN: INCOMPLETE
+// void run_spmm_vectorized_nnzwise_smem(SPMM<CSC>& spmm, const uint32_t idx)
+// {
+// 	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+// 	const size_t k = spmm.dev.s.rows;
+// 	const size_t n = spmm.dev.s.cols;
+//
+//   constexpr size_t n_threads = 64;
+//
+// 	// // PERF: Hack ~ find a better way to deal with having to add instead of set the result
+// 	// const size_t res_size = BENCHMARKING_DENSE_N_ROWS[idx] * MAT_SIZE * sizeof(float);
+// 	// // BUG: Hardcoded value
+// 	// // ensures there is enough space for alignment
+// 	// // doing 4 alignments at 16-byte each
+// 	// const size_t padding = 4 * 16;
+// 	// const size_t dyn_mem_b_size = spmm.host.s.max_nnz_per_col * sizeof(float) + spmm.host.s.max_nnz_per_col * sizeof(uint32_t) + padding;  // + TK for ensuring alignment of val_smem
+// 	// CUDA_CHECK(cudaMemset(spmm.dev.r[idx], 0, res_size));
+// 	// CUDA_CHECK(cudaDeviceSynchronize());
+// 	// dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], k / 256);
+// 	// dim3 block(64);
+// 	// spmm_csc_2d_blocktiling<<<grid, block, dyn_mem_b_size>>>(
+// 	// 	spmm.dev.d[idx],
+// 	// 	spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val,
+// 	// 	m, k, n, spmm.host.s.max_nnz_per_col, spmm.dev.r[idx]);
+//
+//   dim3 grid();
+//   dim3 block();
+//
+//   spmm_vectorized_nnzwise_smem<n_threads>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, , float *__restrict res)
+// }
+
+void run_spmm_vectorized_nnzwise_regs(SPMM<CSC>& spmm, const uint32_t idx)
+{
+	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+	const size_t k = spmm.dev.s.rows;
+	const size_t n = spmm.dev.s.cols;
+
+	constexpr size_t n_threads = 64;
+	constexpr size_t BK = 512;
+
+	dim3 grid(n, m, CEIL_DIV(MAT_SIZE, BK));
+	dim3 block(n_threads);
+
+	spmm_vectorized_nnzwise_regs<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
 
 // void prepare_mhsa(MHSA<CSC, CSR>& mhsa)

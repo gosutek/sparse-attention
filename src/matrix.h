@@ -34,7 +34,14 @@ struct CSR
 		col_idx_size = nnz;
 		val_size = nnz;
 
+		const size_t row_ptr_b_size = row_ptr_size * sizeof(uint32_t);
+		const size_t col_idx_b_size = col_idx_size * sizeof(uint32_t);
+		const size_t val_b_size = val_size * sizeof(float);
+
 		b_size = row_ptr_size * sizeof(uint32_t) + col_idx_size * sizeof(uint32_t) + val_size * sizeof(float);
+		b_size = row_ptr_b_size + calc_padding_bytes(row_ptr_b_size, ALIGNMENT_BYTES) +
+		         col_idx_b_size + calc_padding_bytes(col_idx_b_size, ALIGNMENT_BYTES) +
+		         val_b_size + calc_padding_bytes(val_b_size, ALIGNMENT_BYTES);
 	}
 
 	CSR(const CSR& other) :
@@ -45,11 +52,17 @@ struct CSR
 	CSR& operator=(const CSR& other) = default;
 	CSR(CSR&& other) = default;
 
-	void partition(void* const ptr)
+	void partition(uintptr_t ptr)
 	{
 		row_ptr = reinterpret_cast<uint32_t*>(ptr);
-		col_idx = row_ptr + row_ptr_size;
-		val = reinterpret_cast<float*>(col_idx + col_idx_size);
+
+		size_t b_size = row_ptr_size * sizeof(uint32_t);
+		ptr += b_size + calc_padding_bytes(b_size, ALIGNMENT_BYTES);
+		col_idx = reinterpret_cast<uint32_t*>(ptr);
+
+		b_size = col_idx_size * sizeof(uint32_t);
+		ptr += b_size + calc_padding_bytes(b_size, ALIGNMENT_BYTES);
+		val = reinterpret_cast<float*>(ptr);
 	}
 };
 
@@ -78,9 +91,9 @@ struct CSC
 		row_idx_size = nnz;
 		val_size = nnz;
 
-		size_t col_ptr_b_size = col_ptr_size * sizeof(uint32_t);
-		size_t row_idx_b_size = row_idx_size * sizeof(uint32_t);
-		size_t val_b_size = val_size * sizeof(float);
+		const size_t col_ptr_b_size = col_ptr_size * sizeof(uint32_t);
+		const size_t row_idx_b_size = row_idx_size * sizeof(uint32_t);
+		const size_t val_b_size = val_size * sizeof(float);
 
 		b_size = col_ptr_b_size + calc_padding_bytes(col_ptr_b_size, ALIGNMENT_BYTES) +
 		         row_idx_b_size + calc_padding_bytes(row_idx_b_size, ALIGNMENT_BYTES) +

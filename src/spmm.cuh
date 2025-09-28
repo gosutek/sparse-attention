@@ -34,12 +34,16 @@ void  cuda_dealloc_device(void* ptr);
 
 void prepare_spmm_csr(SPMM<CSR>& spmm);
 void prepare_spmm_csc(SPMM<CSC>& spmm);
-void warmup_spmm_csr(SPMM<CSR>& spmm, const uint8_t size_idx);
-bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint8_t size_idx, void (*run_kernel)(SPMM<CSC>&, const uint8_t));
-void run_spmm_csr(SPMM<CSR>& spmm, const uint8_t idx);
-void run_spmm_csc(SPMM<CSC>& spmm, const uint8_t idx);
-void run_spmm_1d_blocktiling(SPMM<CSC>& spmm, const uint8_t idx);
-void run_spmm_2d_blocktiling(SPMM<CSC>& spmm, const uint8_t idx);
+
+bool warmup_spmm_csr(SPMM<CSR>& spmm, const uint32_t size_idx, void (*run_kernel)(SPMM<CSR>&, const uint32_t));
+bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint32_t size_idx, void (*run_kernel)(SPMM<CSC>&, const uint32_t));
+
+void run_spmm_naive_elemwise_csc_gmem(SPMM<CSC>& spmm, const uint32_t idx);
+void run_spmm_naive_elemwise_csc_smem(SPMM<CSC>& spmm, const uint32_t idx);
+void run_spmm_coalesced_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx);
+void run_spmm_blocktiling_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx);
+void run_spmm_coalesced_nnzwise(SPMM<CSC>& spmm, const uint32_t idx);
+void run_spmm_vectorized_nnzwise_regs(SPMM<CSC>& spmm, const uint32_t idx);
 
 void prepare_cusparse_csr(SPMM<CSR>& spmm, CuSparse& cusparse);
 void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse);

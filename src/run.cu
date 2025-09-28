@@ -54,9 +54,14 @@ void list_kernels()
 	const std::string kernel_msg =
 		"List of kernels for benchmarking:\n\n"
 		"1. cuSparse\n"
-		"2. SpMM ~ 1D-Blocktiling\n"
-		"3. SpMM ~ 2D-Blocktiling\n"
-		"4. softMax\n";
+		"2. 'spmm_naive_elemwise_csc_gmem'\n"
+		"3. 'spmm_naive_elemwise_csc_smem'\n"
+		"4. 'spmm_coalesced_elemwise_csr'\n"
+		"5. 'spmm_blocktiling_elemwise_csr'\n"
+		"6. 'spmm_coalesced_nnzwise'\n"
+		"7. 'spmm_vectorized_nnzwise_smem'\n"
+		"8. 'spmm_vectorized_nnzwise_regs'\n"
+		"9. 'softmax'\n";
 
 	std::cout << kernel_msg << "\n";
 }
@@ -73,7 +78,52 @@ void print_benchmarking_results(const float time, const uint8_t size_idx, const 
 		BENCHMARKING_DENSE_N_ROWS[size_idx], avg_time, (BENCHMARKING_ROUNDS * flops * 1e-9) / time);
 }
 
-void benchmark_spmm(void (*run_kernel)(SPMM<CSC>&, const uint8_t))
+void benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t))
+{
+	// 1. Read weight
+	// 2. Generate X with sizes (32, 64, 128, 256, 512)
+	// 3. For each size
+	// 3.1 Run once
+	// 3.2 Verify result
+	// 3.3 Run 100-1000 times each
+	// 3.4 Calculate FLOPs
+
+	SPMM<CSR>   spmm;
+	std::string data_dir_path = construct_path("data/dlmc/transformer/l0_regularization/0.5/", BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
+	spmm.sparse_path = data_dir_path + "q.smtx";
+
+	prepare_spmm_csr(spmm);
+
+	float       time;
+	cudaEvent_t start, stop;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+
+	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		bool correct = warmup_spmm_csr(spmm, 0, run_kernel);
+		if (!correct) {
+			return;
+		}
+		cudaEventRecord(start);
+		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
+			run_kernel(spmm, i);
+		}
+		cudaEventRecord(stop);
+		cudaEventSynchronize(start);
+		cudaEventSynchronize(stop);
+		cudaEventElapsedTime(&time, start, stop);
+
+		print_benchmarking_results(time * 1e-3, i, spmm.host.s.nnz);
+	}
+
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
+
+	cuda_dealloc_host(spmm.host.data);
+	cuda_dealloc_device(spmm.dev.data);
+}
+
+void benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t))
 {
 	// 1. Read weight
 	// 2. Generate X with sizes (32, 64, 128, 256, 512)
@@ -207,20 +257,25 @@ int main(int argc, char* argv[])
 
 			switch (kernel) {
 			case 1:
-				std::cout << "Benchmark cuSparse\n";
 				benchmark_cusparse();
 				break;
 			case 2:
-				std::cout << "Benchmark SpMM (1D-Blocktiling)\n";
-				benchmark_spmm(&run_spmm_1d_blocktiling);
+				benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_gmem);
 				break;
 			case 3:
-				std::cout << "Benchmark SpMM (2D-Blocktiling)\n";
-				benchmark_spmm(&run_spmm_2d_blocktiling);
+				benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_smem);
 				break;
 			case 4:
-				std::cout << "Benchamrk softMax\n";
-				// benchmark_softmax();
+				benchmark_spmm_csr(&run_spmm_coalesced_elemwise_csr);
+				break;
+			case 5:
+				benchmark_spmm_csr(&run_spmm_blocktiling_elemwise_csr);
+				break;
+			case 6:
+				benchmark_spmm_csc(&run_spmm_coalesced_nnzwise);
+				break;
+			case 7:
+				benchmark_spmm_csc(&run_spmm_vectorized_nnzwise_regs);
 				break;
 			default:
 				print_help();
@@ -238,10 +293,6 @@ int main(int argc, char* argv[])
 		} else if (argv[i][1] == 'p') {
 			print_device_properties();
 		}
-	}
-	try {
-	} catch (const std::exception& e) {
-		std::cerr << "Exception: " << e.what() << "\n";
 	}
 
 	return 0;
