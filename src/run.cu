@@ -1,6 +1,7 @@
 #include <cusparse.h>
 #include <format>
 #include <iostream>
+#include <vector>
 
 #include "handle.h"
 #include "matrix.h"
@@ -66,17 +67,46 @@ void list_kernels()
 	std::cout << kernel_msg << "\n";
 }
 
-void print_benchmarking_results(const float time, const uint8_t size_idx, const size_t nnz)
+void print_benchmarks(const std::string op_name, const std::string contender_1, const std::string contender_2)
 {
-	float  avg_time = time / BENCHMARKING_ROUNDS;
-	double flops = 2 * BENCHMARKING_DENSE_N_ROWS[size_idx] * nnz;
+	// mxkxn
+	std::vector<std::string> shape_vec;
+	shape_vec.reserve(std::size(BENCHMARKING_DENSE_N_ROWS));
+	size_t       max_length = 0;
+	const size_t padding = 4;
+	for (const auto size : BENCHMARKING_DENSE_N_ROWS) {
+		std::string tmp = std::format("({}, {}, {})\n", size, MAT_SIZE, MAT_SIZE);
+		max_length = std::max(max_length, tmp.size());
+		shape_vec.push_back(std::format("({}, {}, {})\n", size, MAT_SIZE, MAT_SIZE));
+	}
+	std::string title = std::format("{}: {} ~ {}\n", op_name, contender_1, contender_2);
+	std::string header = std::format("{:<{}}{:<{}}{:<{}}{:<{}}\n",
+		"Shape MxKxN", max_length + padding,
+		contender_1 + " (ns)", contender_1.size() + 5 + padding,
+		"Custom (ns)", 11 + padding,
+		"Relative performance", 20 + padding);
+	std::string separator(header.size(), '-');
 
-	std::cout << std::format(
-		"Number of rows: {}\n"
-		"Avg. time: {:.6f} s\n"
-		"Flops: {:.6f} GFLOPs/s\n",
-		BENCHMARKING_DENSE_N_ROWS[size_idx], avg_time, (BENCHMARKING_ROUNDS * flops * 1e-9) / time);
+	std::cout << title << "\n"
+			  << header
+			  << separator << "\n";
+
+	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		std::cout << shape_vec[i];
+	}
 }
+
+// void print_benchmarks(const float time, const uint32_t size_idx, const size_t nnz)
+// {
+// 	float  avg_time = time / BENCHMARKING_ROUNDS;
+// 	double flops = 2 * BENCHMARKING_DENSE_N_ROWS[size_idx] * nnz;
+//
+// 	std::cout << std::format(
+// 		"Number of rows: {}\n"
+// 		"Avg. time: {:.6f} s\n"
+// 		"Flops: {:.6f} GFLOPs/s\n",
+// 		BENCHMARKING_DENSE_N_ROWS[size_idx], avg_time, (BENCHMARKING_ROUNDS * flops * 1e-9) / time);
+// }
 
 void benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t))
 {
@@ -99,7 +129,7 @@ void benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t))
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		bool correct = warmup_spmm_csr(spmm, 0, run_kernel);
 		if (!correct) {
 			return;
@@ -113,7 +143,7 @@ void benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t))
 		cudaEventSynchronize(stop);
 		cudaEventElapsedTime(&time, start, stop);
 
-		print_benchmarking_results(time * 1e-3, i, spmm.host.s.nnz);
+		// print_benchmarks(time * 1e-3, i, spmm.host.s.nnz);
 	}
 
 	cudaEventDestroy(start);
@@ -144,7 +174,7 @@ void benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t))
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		bool correct = warmup_spmm_csc(spmm, 0, run_kernel);
 		if (!correct) {
 			return;
@@ -158,7 +188,7 @@ void benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t))
 		cudaEventSynchronize(stop);
 		cudaEventElapsedTime(&time, start, stop);
 
-		print_benchmarking_results(time * 1e-3, i, spmm.host.s.nnz);
+		// print_benchmarks(time * 1e-3, i, spmm.host.s.nnz);
 	}
 
 	cudaEventDestroy(start);
@@ -188,7 +218,7 @@ void benchmark_cusparse()
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		// Warmup
 		CUSPARSE_CHECK(cusparseSpMM_preprocess(cusparse.handle,
 			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
@@ -210,7 +240,7 @@ void benchmark_cusparse()
 		cudaEventSynchronize(stop);
 		cudaEventElapsedTime(&time, start, stop);
 
-		print_benchmarking_results(time * 1e-3, i, spmm.host.s.nnz);
+		// print_benchmarks(time * 1e-3, i, spmm.host.s.nnz);
 	}
 	CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -220,7 +250,7 @@ void benchmark_cusparse()
 
 	cusparseDestroySpMat(cusparse.sparse);
 
-	for (uint8_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		cusparseDestroyDnMat(cusparse.dense[i]);
 		cusparseDestroyDnMat(cusparse.res[i]);
 	}
@@ -284,6 +314,7 @@ int main(int argc, char* argv[])
 		} else if (argv[i][1] == 'l') {
 			list_kernels();
 		} else if (argv[i][1] == 'm') {
+			print_benchmarks("Spmm", "cuSparseSpmm", "Vectorized non-zero wise registers");
 			// Run the entire pipeline
 			// MHSA<CSC, CSR> mhsa;
 			//
