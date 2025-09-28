@@ -6,25 +6,12 @@
 #include <cusparse.h>
 #include <filesystem>
 #include <fstream>
-#include <iterator>
 #include <stdexcept>
 
 #include "handle.h"
 #include "matrix.h"
 #include "spmm.cuh"
 #include "utils.h"
-
-enum class KernelType
-{
-	GlobalMemory,
-	SharedMemory,
-};
-
-enum class OutputFormat
-{
-	RM,
-	CM
-};
 
 void* cuda_malloc_device(size_t b_size)
 {
@@ -86,8 +73,7 @@ __device__ inline static void set_elem_cm(float* const a, size_t n_rows, size_t 
 	a[col * n_rows + row] = val;
 }
 
-template <KernelType K, OutputFormat O>
-__global__ void spmm_csc(
+__global__ void spmm_naive_elemwise_csc_gmem(
 	const float* __restrict__ a,
 	const uint32_t* __restrict__ col_ptr,
 	const uint32_t* __restrict__ row_idx,
@@ -97,38 +83,44 @@ __global__ void spmm_csc(
 	const size_t n,
 	float* __restrict__ res)
 {
-	uint32_t x, y;
-	if constexpr (K == KernelType::SharedMemory) {
-		x = threadIdx.x;
-		y = blockIdx.x;
-	} else {
-		x = blockIdx.x * blockDim.x + threadIdx.x;
-		y = blockIdx.y * blockDim.y + threadIdx.y;
-	}
+	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+	uint32_t y = blockIdx.y * blockDim.y + threadIdx.x;
 
 	float acc = 0.0f;
-	if constexpr (K == KernelType::SharedMemory) {
-		__shared__ float x_row_sm[MAT_SIZE];
-
-		x_row_sm[x] = get_elem_rm(a, k, y, x);
-
-		__syncthreads();
-		for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
-			acc += x_row_sm[row_idx[i]] * val[i];
-		}
-	} else {
-		for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
-			acc += get_elem_rm(a, k, y, row_idx[i]) * val[i];
-		}
+	for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {  // 1 LDG
+		acc += get_elem_rm(a, k, y, row_idx[i]) * val[i];   // 2 LDG
 	}
-	if constexpr (O == OutputFormat::RM) {
-		set_elem_rm(res, n, y, x, acc);
-	} else {
-		set_elem_cm(res, m, y, x, acc);
-	}
+	set_elem_rm(res, n, y, x, acc);
 }
 
-__global__ void spmm_coalesced_csr(
+__global__ void spmm_naive_elemwise_csc_smem(
+	const float* __restrict__ a,
+	const uint32_t* __restrict__ col_ptr,
+	const uint32_t* __restrict__ row_idx,
+	const float* __restrict__ val,
+	const size_t m,
+	const size_t k,
+	const size_t n,
+	float* __restrict__ res)
+{
+	uint32_t x = threadIdx.x;
+	uint32_t y = blockIdx.x;
+
+	float acc = 0.0f;
+
+	__shared__ float x_row_smem[MAT_SIZE];
+
+	x_row_smem[x] = get_elem_rm(a, k, y, x);
+	__syncthreads();
+
+	for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
+		acc += x_row_smem[row_idx[i]] * val[i];
+	}
+
+	set_elem_rm(res, n, y, x, acc);
+}
+
+__global__ void spmm_coalesced_elemwise_csr(
 	const float* __restrict__ a,
 	const uint32_t* __restrict__ row_ptr,
 	const uint32_t* __restrict__ col_idx,
@@ -152,7 +144,6 @@ __global__ void spmm_coalesced_csr(
 
 	for (uint32_t row = 0; row < k; ++row) {
 		for (uint32_t i = row_ptr[row] + x; i < row_ptr[row + 1]; i += blockDim.x) {
-			// TODO: Figure out a way to remove atomicAdd
 			atomicAdd_block(&shared_acc[col_idx[i]], x_row_sm[row] * val[i]);
 		}
 	}
@@ -164,7 +155,43 @@ __global__ void spmm_coalesced_csr(
 	}
 }
 
-__global__ void spmm_csc_1d_blocktiling(
+__global__ void spmm_blocktiling_elemwise_csr(
+	const float* __restrict__ a,
+	const uint32_t* __restrict__ row_ptr,
+	const uint32_t* __restrict__ col_idx,
+	const float* __restrict__ val,
+	const size_t m,
+	const size_t k,
+	const size_t n,
+	float* __restrict__ res)
+{
+	__shared__ float x_row_sm[MAT_SIZE];
+	__shared__ float shared_acc[MAT_SIZE];
+
+	// Does indeed load the whole of row from A for every block (k / BN times)
+	for (size_t i = threadIdx.x; i < k; i += blockDim.x) {
+		x_row_sm[i] = get_elem_rm(a, k, blockIdx.x, i);
+		shared_acc[i] = 0.0f;
+	}
+	__syncthreads();
+
+	for (size_t r = 0; r < k; ++r) {
+		size_t bound = min(static_cast<unsigned long>(row_ptr[r + 1]), row_ptr[r] + (blockIdx.y + 1) * BN);
+		for (size_t i = row_ptr[r] + blockIdx.y * BN + threadIdx.x; i < bound; i += blockDim.x) {
+			atomicAdd(&shared_acc[col_idx[i]], val[i] * x_row_sm[r]);
+		}
+	}
+
+	__syncthreads();
+
+	for (size_t i = threadIdx.x; i < MAT_SIZE; i += blockDim.x) {
+		if (shared_acc[i] != 0) {
+			set_elem_rm(res, n, blockIdx.x, i, shared_acc[i]);
+		}
+	}
+}
+
+__global__ void spmm_coalesced_nnzwise(
 	const float* __restrict__ a,
 	const uint32_t* __restrict__ col_ptr,
 	const uint32_t* __restrict__ row_idx,
@@ -219,7 +246,8 @@ __global__ void spmm_csc_1d_blocktiling(
 	}
 }
 
-__global__ void spmm_csc_2d_blocktiling(
+// WARN: INCOMPLETE
+__global__ void spmm_vectorized_nnzwise_smem(
 	const float* __restrict__ a,
 	const uint32_t* __restrict__ col_ptr,
 	const uint32_t* __restrict__ row_idx,
@@ -484,7 +512,7 @@ __global__ void spmm_csc_2d_blocktiling(
 	}
 }
 
-__global__ void spmm_csc_2d_blocktiling_regs(
+__global__ void spmm_vectorized_nnzwise_regs(
 	const float* __restrict__ a,
 	const uint32_t* __restrict__ col_ptr,
 	const uint32_t* __restrict__ row_idx,
@@ -592,8 +620,10 @@ __global__ void spmm_csc_2d_blocktiling_regs(
 	}
 
 	for (size_t i = block_start + threadIdx.x * TK; i < block_end; i += blockDim.x * TK) {
-		reinterpret_cast<uint4*>(&t_row_idx)[0] = reinterpret_cast<const uint4*>(&row_idx[i])[0];
-		reinterpret_cast<float4*>(&t_val)[0] = reinterpret_cast<const float4*>(&val[i])[0];
+		const uint4* __restrict__ row_idx_v = reinterpret_cast<const uint4*>(__builtin_assume_aligned(&row_idx[i], 16));
+		const float4* __restrict__ val_v = reinterpret_cast<const float4*>(__builtin_assume_aligned(&val[i], 16));
+		reinterpret_cast<uint4*>(&t_row_idx)[0] = row_idx_v[0];
+		reinterpret_cast<float4*>(&t_val)[0] = val_v[0];
 
 		acc += x_row_smem[t_row_idx[0]] * t_val[0];
 		acc += x_row_smem[t_row_idx[1]] * t_val[1];
@@ -643,106 +673,6 @@ __global__ void spmm_csc_2d_blocktiling_regs(
 			atomicAdd(&res[blockIdx.y * n + blockIdx.x], acc);
 		}
 	}
-}
-
-__global__ void spmm_1d_blocktiling(
-	const float* __restrict__ a,
-	const uint32_t* __restrict__ row_ptr,
-	const uint32_t* __restrict__ col_idx,
-	const float* __restrict__ val,
-	const size_t m,
-	const size_t k,
-	const size_t n,
-	float* __restrict__ res)
-{
-	__shared__ float x_row_sm[MAT_SIZE];
-	__shared__ float shared_acc[MAT_SIZE];
-
-	// Does indeed load the whole of row from A for every block (k / BN times)
-	for (size_t i = threadIdx.x; i < k; i += blockDim.x) {
-		x_row_sm[i] = get_elem_rm(a, k, blockIdx.x, i);
-		shared_acc[i] = 0.0f;
-	}
-	__syncthreads();
-
-	for (size_t r = 0; r < k; ++r) {
-		size_t bound = min(static_cast<unsigned long>(row_ptr[r + 1]), row_ptr[r] + (blockIdx.y + 1) * BN);
-		for (size_t i = row_ptr[r] + blockIdx.y * BN + threadIdx.x; i < bound; i += blockDim.x) {
-			atomicAdd(&shared_acc[col_idx[i]], val[i] * x_row_sm[r]);
-			// if (blockIdx.y == 0 && blockIdx.x == 0 && threadIdx.x == 0) {
-			// 	printf("Multiplying val[%lu](%.2f) * x_row_sm[%lu](%.2f) and storing at shared_acc[%lu](%.2f)\n",
-			// 		i, val[i], r, x_row_sm[r], col_idx[i], shared_acc[col_idx[i]]);
-			// }
-		}
-	}
-
-	__syncthreads();
-
-	for (size_t i = threadIdx.x; i < MAT_SIZE; i += blockDim.x) {
-		if (shared_acc[i] != 0) {
-			set_elem_rm(res, n, blockIdx.x, i, shared_acc[i]);
-		}
-	}
-}
-
-template <OutputFormat O>
-__global__ void spmm_csc_memio(
-	const float* __restrict__ a,
-	const uint32_t* __restrict__ col_ptr,
-	const uint32_t* __restrict__ row_idx,
-	const float* __restrict__ val,
-	const size_t m,
-	const size_t k,
-	const size_t n,
-	float* __restrict__ res)
-{
-	uint32_t rect = threadIdx.x;
-	uint32_t y = blockIdx.x;
-
-	float            acc[TN] = { 0.0f };
-	__shared__ float x_row_sm[MAT_SIZE];
-
-	for (size_t x = rect * TN; x < rect * TN + TN; ++x) {
-		x_row_sm[x] = get_elem_rm(a, k, y, x);
-	}
-	__syncthreads();
-
-	for (size_t x = rect * TN; x < rect * TN + TN; ++x) {
-		size_t idx = x % TN;
-		for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
-			acc[idx] += x_row_sm[row_idx[i]] * val[i];
-		}
-		if constexpr (O == OutputFormat::RM) {
-			set_elem_rm(res, n, y, x, acc[idx]);
-		} else {
-			set_elem_cm(res, m, y, x, acc[idx]);
-		}
-	}
-}
-
-// TODO: Incorporate into the template
-__global__ void spmm_rm_csr_gm(
-	const float* __restrict__ a,
-	const uint32_t* __restrict__ row_ptr,
-	const uint32_t* __restrict__ col_idx,
-	const float* __restrict__ val,
-	const uint32_t m,
-	const uint32_t k,
-	const uint32_t n,
-	float* __restrict__ res)
-{
-	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
-	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
-
-	if (x >= n || y >= m) {
-		return;
-	}
-
-	float acc = 0.0f;
-	for (size_t i = row_ptr[y]; i < row_ptr[y + 1]; ++i) {
-		acc += get_elem_rm(a, k, y, col_idx[i]) * val[i];
-	}
-	set_elem_rm(res, n, y, x, acc);
 }
 
 __global__ void gemm(
@@ -1118,7 +1048,7 @@ void run_spmm_2d_blocktiling(SPMM<CSC>& spmm, const uint8_t idx)
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
-	dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], k / BK);
+	dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx], 1);
 	dim3 block(N_THREADS);
 	spmm_csc_2d_blocktiling_regs<<<grid, block>>>(
 		spmm.dev.d[idx],
