@@ -242,7 +242,6 @@ bool verify_res(const float* const actual, const float* const expected, size_t n
 			return false;
 		}
 	}
-	std::cout << "Result verified...\n";
 	return true;
 }
 

@@ -7,6 +7,15 @@
 #include "matrix.h"
 #include "spmm.cuh"
 
+constexpr const char* prunning_methods[] = { "l0_regularization/", "variational_dropout/", "magnitude_pruning/", "random_pruning/" };
+constexpr const char* sparsity_arr[] = { "0.5/", "0.6/", "0.7/", "0.8/", "0.9/", "0.95/", "0.98/" };
+
+struct Benchmark
+{
+	float  time[std::size(BENCHMARKING_DENSE_N_ROWS)];
+	double flops[std::size(BENCHMARKING_DENSE_N_ROWS)];
+};
+
 void print_device_properties()
 {
 	cudaDeviceProp dev_prop = {};
@@ -153,7 +162,7 @@ void benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t))
 	cuda_dealloc_device(spmm.dev.data);
 }
 
-void benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t))
+Benchmark benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t), const std::string prunning_method, const std::string sparsity)
 {
 	// 1. Read weight
 	// 2. Generate X with sizes (32, 64, 128, 256, 512)
@@ -164,8 +173,13 @@ void benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t))
 	// 3.4 Calculate FLOPs
 
 	SPMM<CSC>   spmm;
-	std::string data_dir_path = construct_path("data/dlmc/transformer/l0_regularization/0.5/", BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
-	spmm.sparse_path = data_dir_path + "q.smtx";
+	Benchmark   res;
+	std::string data_dir_path = construct_path("data/dlmc/transformer/" + prunning_method + sparsity, BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
+	if (prunning_method == "random_pruning/" || prunning_method == "magnitude_pruning/") {
+		spmm.sparse_path = data_dir_path + "q_fully_connected.smtx";
+	} else {
+		spmm.sparse_path = data_dir_path + "q.smtx";
+	}
 
 	prepare_spmm_csc(spmm);
 
@@ -176,9 +190,6 @@ void benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t))
 
 	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		bool correct = warmup_spmm_csc(spmm, 0, run_kernel);
-		if (!correct) {
-			return;
-		}
 		cudaEventRecord(start);
 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
 			run_kernel(spmm, i);
@@ -188,7 +199,8 @@ void benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t))
 		cudaEventSynchronize(stop);
 		cudaEventElapsedTime(&time, start, stop);
 
-		// print_benchmarks(time * 1e-3, i, spmm.host.s.nnz);
+		res.time[i] = (time * 1e-3) / BENCHMARKING_ROUNDS;
+		res.flops[i] = ((2 * BENCHMARKING_DENSE_N_ROWS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
 	}
 
 	cudaEventDestroy(start);
@@ -196,18 +208,25 @@ void benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t))
 
 	cuda_dealloc_host(spmm.host.data);
 	cuda_dealloc_device(spmm.dev.data);
+
+	return res;
 }
 
-void benchmark_cusparse()
+Benchmark benchmark_cusparse(const std::string prunning_method, const std::string sparsity)
 {
 	// WARN: This function throws but doesn't gracefuly exit!1!
 	SPMM<CSC> spmm;
+	Benchmark res;
 
 	CuSparse cusparse;
 	cusparseCreate(&cusparse.handle);
 
-	std::string data_dir_path = construct_path("data/dlmc/transformer/l0_regularization/0.5/", BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
-	spmm.sparse_path = data_dir_path + "q.smtx";
+	std::string data_dir_path = construct_path("data/dlmc/transformer/" + prunning_method + sparsity, BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
+	if (prunning_method == "random_pruning/" || prunning_method == "magnitude_pruning/") {
+		spmm.sparse_path = data_dir_path + "q_fully_connected.smtx";
+	} else {
+		spmm.sparse_path = data_dir_path + "q.smtx";
+	}
 
 	// WARN: Calling both of these is necessary at the moment but does double work.
 	prepare_spmm_csc(spmm);
@@ -240,7 +259,8 @@ void benchmark_cusparse()
 		cudaEventSynchronize(stop);
 		cudaEventElapsedTime(&time, start, stop);
 
-		// print_benchmarks(time * 1e-3, i, spmm.host.s.nnz);
+		res.time[i] = (time * 1e-3) / BENCHMARKING_ROUNDS;
+		res.flops[i] = ((2 * BENCHMARKING_DENSE_N_ROWS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
 	}
 	CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -258,6 +278,8 @@ void benchmark_cusparse()
 
 	cuda_dealloc_host(spmm.host.data);
 	cuda_dealloc_device(spmm.dev.data);
+
+	return res;
 }
 
 int main(int argc, char* argv[])
@@ -285,27 +307,48 @@ int main(int argc, char* argv[])
 			int kernel = std::atoi(argv[i + 1]);
 			++i;
 
+			Benchmark sota;
+			Benchmark custom;
+
 			switch (kernel) {
 			case 1:
-				benchmark_cusparse();
+				// benchmark_cusparse();
 				break;
 			case 2:
-				benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_gmem);
+				for (const auto& prunning_method : prunning_methods) {
+					for (const auto& sparsity : sparsity_arr) {
+						sota = benchmark_cusparse(prunning_method, sparsity);
+						custom = benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_gmem, prunning_method, sparsity);
+
+						print_benchmarks("Spmm", "SOTA", "Naive Elementwise CSC GMEM", prunning_method, sparsity, sota, custom);
+					}
+				}
+
 				break;
 			case 3:
-				benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_smem);
+				// benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_smem);
 				break;
 			case 4:
-				benchmark_spmm_csr(&run_spmm_coalesced_elemwise_csr);
+				// benchmark_spmm_csr(&run_spmm_coalesced_elemwise_csr);
 				break;
 			case 5:
-				benchmark_spmm_csr(&run_spmm_blocktiling_elemwise_csr);
+				// benchmark_spmm_csr(&run_spmm_blocktiling_elemwise_csr);
 				break;
 			case 6:
-				benchmark_spmm_csc(&run_spmm_coalesced_nnzwise);
+				// sota = benchmark_cusparse();
+				// custom = benchmark_spmm_csc(&run_spmm_coalesced_nnzwise);
+				//
+				// print_benchmarks("Spmm", "SOTA", "Coalesced nonzero-wise", "L0 Regularization", "50%", sota, custom);
 				break;
 			case 7:
-				benchmark_spmm_csc(&run_spmm_vectorized_nnzwise_regs);
+				for (const auto& prunning_method : prunning_methods) {
+					for (const auto& sparsity : sparsity_arr) {
+						sota = benchmark_cusparse(prunning_method, sparsity);
+						custom = benchmark_spmm_csc(&run_spmm_vectorized_nnzwise_regs, prunning_method, sparsity);
+
+						print_benchmarks("Spmm", "SOTA", "Vectorized nonzero-wise registers", prunning_method, sparsity, sota, custom);
+					}
+				}
 				break;
 			default:
 				print_help();
@@ -314,7 +357,6 @@ int main(int argc, char* argv[])
 		} else if (argv[i][1] == 'l') {
 			list_kernels();
 		} else if (argv[i][1] == 'm') {
-			print_benchmarks("Spmm", "cuSparseSpmm", "Vectorized non-zero wise registers");
 			// Run the entire pipeline
 			// MHSA<CSC, CSR> mhsa;
 			//

@@ -12,7 +12,7 @@ constexpr size_t ALIGNMENT_BYTES = 128;
 constexpr size_t   MAX_ALLOC = MAX_N_LAYERS * (5 * MAT_SIZE * MAT_SIZE);
 constexpr uint32_t BENCHMARKING_DENSE_N_ROWS[] = { 32, 64, 128, 256, 512 };
 constexpr uint32_t BENCHMARKING_TOTAL_DENSE_B_SIZE = []() {uint32_t acc = 0; for ( const uint16_t size : BENCHMARKING_DENSE_N_ROWS) { acc += sizeof(float) * size * MAT_SIZE;} return acc; }();
-constexpr size_t   BENCHMARKING_ROUNDS = 1;
+constexpr size_t   BENCHMARKING_ROUNDS = 1000;
 
 // TODO: Move these to each kernel's scope.
 constexpr size_t WARP_SIZE = 32;
@@ -62,8 +62,8 @@ struct Tensor
 struct DLMC
 {
 	std::string base_path = "data/dlmc/transformer/";
-	std::string pruning_method = "l0_regularization/";
-	std::string sparsity = "0.5/";
+	std::string pruning_method;
+	std::string sparsity;
 
 	BodyType           bt = BodyType::Decoder;
 	AttentionMechanism am = AttentionMechanism::SelfAttention;
@@ -77,7 +77,7 @@ struct DLMC
 	// std::array<Tensor, MAX_N_LAYERS> enc_cross_attention_tensors{};
 	// std::array<Tensor, MAX_N_LAYERS> dec_cross_attention_tensors{};
 
-	DLMC() {}
+	DLMC(const std::string _pruning_method, const std::string _sparsity) : pruning_method(_pruning_method), sparsity(_sparsity) {}
 
 	DLMC(const std::string& _base_data_path,
 		const std::string&  _pruning_method,

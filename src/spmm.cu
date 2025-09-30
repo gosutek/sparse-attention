@@ -635,10 +635,6 @@ __global__ void spmm_vectorized_nnzwise_regs(
 
 	__syncwarp();
 
-	// if (blockIdx.x == 0 && blockIdx.y == 0) {
-	// 	printf("acc = %.2f\n", acc);
-	// }
-
 	for (uint32_t i = WARP_SIZE / 2; i > 0; i /= 2) {
 		acc += __shfl_xor_sync(0xffffffff, acc, i, WARP_SIZE);
 	}
@@ -668,10 +664,6 @@ __global__ void spmm_vectorized_nnzwise_regs(
 			acc += __shfl_xor_sync(mask, acc, i, n_warps);
 		}
 		if (lane == 0) {
-			// if (blockIdx.x == 0 && blockIdx.y == 0) {
-			// 	printf("FINAL ACC: %.4f\n", acc);
-			// 	printf("Before it was: %.4f\n", res[blockIdx.y * n + blockIdx.x]);
-			// }
 			atomicAdd(&res[blockIdx.y * n + blockIdx.x], acc);
 		}
 	}
