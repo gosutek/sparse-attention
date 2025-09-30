@@ -76,33 +76,45 @@ void list_kernels()
 	std::cout << kernel_msg << "\n";
 }
 
-void print_benchmarks(const std::string op_name, const std::string contender_1, const std::string contender_2)
+void print_benchmarks(const std::string op_name, const std::string contender_1, const std::string contender_2,
+	const std::string prunning_method, const std::string sparsity,
+	const Benchmark cusparse, const Benchmark custom)
 {
 	// mxkxn
-	std::vector<std::string> shape_vec;
-	shape_vec.reserve(std::size(BENCHMARKING_DENSE_N_ROWS));
-	size_t       max_length = 0;
-	const size_t padding = 4;
-	for (const auto size : BENCHMARKING_DENSE_N_ROWS) {
-		std::string tmp = std::format("({}, {}, {})\n", size, MAT_SIZE, MAT_SIZE);
-		max_length = std::max(max_length, tmp.size());
-		shape_vec.push_back(std::format("({}, {}, {})\n", size, MAT_SIZE, MAT_SIZE));
+	std::vector<std::string> rows;
+	rows.reserve(std::size(BENCHMARKING_DENSE_N_ROWS));
+	const size_t padding = 20;
+	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+		std::string shape = std::format("({:<3}, {}, {})", BENCHMARKING_DENSE_N_ROWS[i], MAT_SIZE, MAT_SIZE);
+		std::string cu_time_str = std::format("{:.4f}", cusparse.time[i] * 1e3);
+		std::string custom_time_str = std::format("{:.4f}", custom.time[i] * 1e3);
+		std::string relative_str = std::format("{:.0f}%", (cusparse.time[i] / custom.time[i] * 100));
+		std::string cu_flops_str = std::format("{:.4f}", cusparse.flops[i]);
+		std::string custom_flops_str = std::format("{:.4f}", custom.flops[i]);
+		std::string row = std::format("{:<{}}{:<{}}{:<{}}{:<{}}{:<{}}{:<{}}\n", shape, padding, cu_time_str, padding, custom_time_str, padding, relative_str, padding, cu_flops_str, padding, custom_flops_str, padding);
+
+		rows.push_back(row);
 	}
 	std::string title = std::format("{}: {} ~ {}\n", op_name, contender_1, contender_2);
-	std::string header = std::format("{:<{}}{:<{}}{:<{}}{:<{}}\n",
-		"Shape MxKxN", max_length + padding,
-		contender_1 + " (ns)", contender_1.size() + 5 + padding,
-		"Custom (ns)", 11 + padding,
-		"Relative performance", 20 + padding);
+	std::string input = std::format("{} | {}\n", prunning_method, sparsity);
+	std::string header = std::format("{:<{}}{:<{}}{:<{}}{:<{}}{:<{}}{:<{}}\n",
+		"Shape MxKxN", padding,
+		contender_1 + " (ms)", padding,
+		"Custom (ms)", padding,
+		"Perf ratio", padding,
+		contender_1 + " GFLOPs/s", padding,
+		"Custom GFLOPs/s", padding);
 	std::string separator(header.size(), '-');
 
-	std::cout << title << "\n"
+	std::cout << title << input << "\n"
 			  << header
 			  << separator << "\n";
 
 	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		std::cout << shape_vec[i];
+		std::cout << rows[i];
 	}
+
+	std::cout << separator << "\n";
 }
 
 // void print_benchmarks(const float time, const uint32_t size_idx, const size_t nnz)
