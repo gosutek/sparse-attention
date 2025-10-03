@@ -10,3 +10,5 @@ sanitizer*
 *ncu-rep
 *.sqlite
 *.html
+compile_commands.json
+.cache/
