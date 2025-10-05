@@ -145,10 +145,6 @@ __global__ void spmm_coalesced_elemwise_csr(
 
 	for (size_t row = 0; row < k; ++row) {
 		for (size_t i = row_ptr[row] + x; i < row_ptr[row + 1]; i += blockDim.x) {
-			if (col_idx[i] >= k) {
-				printf("OOB col_idx[%lu] = %u (>= %lu) in block %u thread %u\n",
-					i, col_idx[i], k, blockIdx.x, threadIdx.x);
-			}
 			atomicAdd_block(&shared_acc[col_idx[i]], x_row_smem[row] * val[i]);
 		}
 	}
@@ -1069,7 +1065,7 @@ void run_spmm_coalesced_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx)
 	const size_t n = spmm.dev.s.cols;
 
 	dim3 grid(MAT_SIZE);
-	dim3 block(MAT_SIZE);
+	dim3 block(128);
 
 	spmm_coalesced_elemwise_csr<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
