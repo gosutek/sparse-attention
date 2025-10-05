@@ -14,7 +14,7 @@ SOURCES:=$(wildcard $(SRC_DIR)/*.cu) $(wildcard $(SRC_DIR)/*.cpp)
 OBJECTS:=$(SOURCES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
 
 CFLAGS=-g $(ERROR_FLAGS) $(OPT)
-CFLAGS+= -mf16c -mavx2 -mfma -std=c++20
+CFLAGS+=-std=c++20
 CFLAGS+=-I/opt/cuda/targets/x86_64-linux/include/
 
 CUFLAGS=-g $(OPT) -lineinfo

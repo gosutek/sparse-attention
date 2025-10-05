@@ -38,7 +38,6 @@ struct CSR
 		const size_t col_idx_b_size = col_idx_size * sizeof(uint32_t);
 		const size_t val_b_size = val_size * sizeof(float);
 
-		b_size = row_ptr_size * sizeof(uint32_t) + col_idx_size * sizeof(uint32_t) + val_size * sizeof(float);
 		b_size = row_ptr_b_size + calc_padding_bytes(row_ptr_b_size, ALIGNMENT_BYTES) +
 		         col_idx_b_size + calc_padding_bytes(col_idx_b_size, ALIGNMENT_BYTES) +
 		         val_b_size + calc_padding_bytes(val_b_size, ALIGNMENT_BYTES);

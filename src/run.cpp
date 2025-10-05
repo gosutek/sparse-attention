@@ -129,7 +129,7 @@ void print_benchmarks(const std::string op_name, const std::string contender_1, 
 // 		BENCHMARKING_DENSE_N_ROWS[size_idx], avg_time, (BENCHMARKING_ROUNDS * flops * 1e-9) / time);
 // }
 
-void benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t))
+Benchmark benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t), const std::string prunning_method = "l0_regularization/", const std::string sparsity = "0.5/")
 {
 	// 1. Read weight
 	// 2. Generate X with sizes (32, 64, 128, 256, 512)
@@ -140,8 +140,13 @@ void benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t))
 	// 3.4 Calculate FLOPs
 
 	SPMM<CSR>   spmm;
-	std::string data_dir_path = construct_path("data/dlmc/transformer/l0_regularization/0.5/", BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
-	spmm.sparse_path = data_dir_path + "q.smtx";
+	Benchmark   res;
+	std::string data_dir_path = construct_path("data/dlmc/transformer/" + prunning_method + sparsity, BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
+	if (prunning_method == "random_pruning/" || prunning_method == "magnitude_pruning/") {
+		spmm.sparse_path = data_dir_path + "q_fully_connected.smtx";
+	} else {
+		spmm.sparse_path = data_dir_path + "q.smtx";
+	}
 
 	prepare_spmm_csr(spmm);
 
@@ -150,11 +155,9 @@ void benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t))
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 
-	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		bool correct = warmup_spmm_csr(spmm, 0, run_kernel);
-		if (!correct) {
-			return;
-		}
+		std::cout << "After warmup" << std::endl;
 		cudaEventRecord(start);
 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
 			run_kernel(spmm, i);
@@ -164,7 +167,8 @@ void benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t))
 		cudaEventSynchronize(stop);
 		cudaEventElapsedTime(&time, start, stop);
 
-		// print_benchmarks(time * 1e-3, i, spmm.host.s.nnz);
+		res.time[i] = (time * 1e-3) / BENCHMARKING_ROUNDS;
+		res.flops[i] = ((2 * BENCHMARKING_DENSE_N_ROWS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
 	}
 
 	cudaEventDestroy(start);
@@ -172,9 +176,11 @@ void benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t))
 
 	cuda_dealloc_host(spmm.host.data);
 	cuda_dealloc_device(spmm.dev.data);
+
+	return res;
 }
 
-Benchmark benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t), const std::string prunning_method, const std::string sparsity)
+Benchmark benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t), const std::string prunning_method = "l0_regularization/", const std::string sparsity = "0.5/")
 {
 	// 1. Read weight
 	// 2. Generate X with sizes (32, 64, 128, 256, 512)
@@ -200,7 +206,7 @@ Benchmark benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t), con
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 
-	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		bool correct = warmup_spmm_csc(spmm, 0, run_kernel);
 		cudaEventRecord(start);
 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
@@ -224,7 +230,7 @@ Benchmark benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t), con
 	return res;
 }
 
-Benchmark benchmark_cusparse(const std::string prunning_method, const std::string sparsity)
+Benchmark benchmark_cusparse(const std::string prunning_method = "l0_regularization/", const std::string sparsity = "0.5/")
 {
 	// WARN: This function throws but doesn't gracefuly exit!1!
 	SPMM<CSC> spmm;
@@ -249,7 +255,7 @@ Benchmark benchmark_cusparse(const std::string prunning_method, const std::strin
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 
-	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		// Warmup
 		CUSPARSE_CHECK(cusparseSpMM_preprocess(cusparse.handle,
 			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
@@ -282,7 +288,7 @@ Benchmark benchmark_cusparse(const std::string prunning_method, const std::strin
 
 	cusparseDestroySpMat(cusparse.sparse);
 
-	for (uint32_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		cusparseDestroyDnMat(cusparse.dense[i]);
 		cusparseDestroyDnMat(cusparse.res[i]);
 	}
@@ -338,10 +344,16 @@ int main(int argc, char* argv[])
 
 				break;
 			case 3:
-				// benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_smem);
+				sota = benchmark_cusparse();
+				custom = benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_smem);
+
+				print_benchmarks("Spmm", "SOTA", "Naive Elementwise CSC SMEM", "l0_regularization/", "0.5/", sota, custom);
 				break;
 			case 4:
-				// benchmark_spmm_csr(&run_spmm_coalesced_elemwise_csr);
+				sota = benchmark_cusparse();
+				custom = benchmark_spmm_csr(&run_spmm_coalesced_elemwise_csr);
+
+				print_benchmarks("Spmm", "SOTA", "Coalesced elementwise CSR", "l0_regularization/", "0.5/", sota, custom);
 				break;
 			case 5:
 				// benchmark_spmm_csr(&run_spmm_blocktiling_elemwise_csr);

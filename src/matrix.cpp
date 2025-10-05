@@ -1,5 +1,6 @@
 #include "matrix.h"
 #include "handle.h"
+#include "utils.h"
 
 #include <cassert>
 #include <filesystem>
@@ -121,7 +122,7 @@ static void csr_to_csc(CSC& mat, const std::vector<uint32_t>& row_ptr_vec, const
 		cur_pos[col] = mat.col_ptr[col];
 	}
 
-	for (uint32_t row = 0; row < mat.rows; ++row) {
+	for (size_t row = 0; row < mat.rows; ++row) {
 		for (size_t i = row_ptr_vec[row]; i < row_ptr_vec[row + 1]; ++i) {
 			uint32_t col = col_idx_vec[i];
 			uint32_t dest_pos = cur_pos[col]++;
@@ -211,11 +212,20 @@ CSR parse_csr_dlmc(void* dst, const std::filesystem::path& filepath)
 	DLMCHeader header = parse_dlmc_header(file_stream);
 	CSR        res = { header.n_rows, header.n_cols, header.nnz };
 
-	res.row_ptr = reinterpret_cast<uint32_t*>(dst);
+	uintptr_t ptr = reinterpret_cast<uintptr_t>(dst);
+	res.row_ptr = reinterpret_cast<uint32_t*>(ptr);
 
-	res.col_idx = res.row_ptr + res.row_ptr_size;
+	size_t b_size = res.row_ptr_size * sizeof(uint32_t);
+	ptr += b_size + calc_padding_bytes(b_size, ALIGNMENT_BYTES);
+	res.col_idx = reinterpret_cast<uint32_t*>(ptr);
 
-	res.val = reinterpret_cast<float*>(res.col_idx + res.col_idx_size);
+	b_size = res.col_idx_size * sizeof(uint32_t);
+	ptr += b_size + calc_padding_bytes(b_size, ALIGNMENT_BYTES);
+	res.val = reinterpret_cast<float*>(ptr);
+
+	// res.row_ptr = reinterpret_cast<uint32_t*>(dst);
+	// res.col_idx = res.row_ptr + res.row_ptr_size;
+	// res.val = reinterpret_cast<float*>(res.col_idx + res.col_idx_size);
 
 	std::string line, token;
 	std::getline(file_stream, line);
