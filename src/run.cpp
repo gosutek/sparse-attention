@@ -157,7 +157,6 @@ Benchmark benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t), con
 
 	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		bool correct = warmup_spmm_csr(spmm, 0, run_kernel);
-		std::cout << "After warmup" << std::endl;
 		cudaEventRecord(start);
 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
 			run_kernel(spmm, i);

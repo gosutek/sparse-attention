@@ -996,7 +996,7 @@ bool warmup_spmm_csr(SPMM<CSR>& spmm, const uint32_t size_idx, void (*run_kernel
 	}
 	cusparseDestroy(cusparse.handle);
 
-	verify_res(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size);
+	return verify_res(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size);
 }
 
 bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint32_t size_idx, void (*run_kernel)(SPMM<CSC>&, const uint32_t))
