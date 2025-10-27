@@ -331,7 +331,11 @@ int main(int argc, char* argv[])
 
 			switch (kernel) {
 			case 1:
-				// benchmark_cusparse();
+				for (const auto& prunning_method : prunning_methods) {
+					for (const auto& sparsity : sparsity_arr) {
+						sota = benchmark_cusparse(prunning_method, sparsity);
+					}
+				}
 				break;
 			case 2:
 				for (const auto& prunning_method : prunning_methods) {
