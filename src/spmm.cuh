@@ -43,6 +43,7 @@ void run_spmm_naive_elemwise_csc_smem(SPMM<CSC>& spmm, const uint32_t idx);
 void run_spmm_coalesced_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx);
 void run_spmm_blocktiling_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx);
 void run_spmm_coalesced_nnzwise(SPMM<CSC>& spmm, const uint32_t idx);
+void run_spmm_coalesced_nnzwise_no_smem(SPMM<CSC>& spmm, const uint32_t idx);
 void run_spmm_vectorized_nnzwise_regs(SPMM<CSC>& spmm, const uint32_t idx);
 
 void prepare_cusparse_csr(SPMM<CSR>& spmm, CuSparse& cusparse);

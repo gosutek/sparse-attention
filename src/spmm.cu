@@ -247,6 +247,24 @@ __global__ void spmm_coalesced_nnzwise(
 		}
 	}
 }
+
+template <const size_t N_THREADS>
+__global__ void spmm_coalesced_nnzwise_no_smem(
+	const float* __restrict__ a,
+	const uint32_t* __restrict__ col_ptr,
+	const uint32_t* __restrict__ row_idx,
+	const float* __restrict__ val,
+	const size_t m,
+	const size_t k,
+	const size_t n,
+	float* __restrict__ res)
+{
+	float acc = 0.0f;
+	for (size_t i = col_ptr[blockIdx.x] + threadIdx.x; i < col_ptr[blockIdx.x + 1]; i += blockDim.x) {
+		acc += get_elem_rm(a, k, blockIdx.y, row_idx[i]) * val[i];
+	}
+	__syncwarp();
+
 	for (size_t i = WARP_SIZE / 2; i > 0; i /= 2) {
 		acc += __shfl_xor_sync(0xffffffff, acc, i, WARP_SIZE);
 	}
@@ -296,8 +314,6 @@ __global__ void spmm_vectorized_nnzwise_smem(
 
 	__shared__ float x_row_smem[MAT_SIZE];
 
-	// for (size_t i = blockIdx.z * BK + threadIdx.x * TK; i < (blockIdx.z + 1) * BK; i += blockDim.x * TK)
-
 	// NOTE: Coalesced acccess, plain
 	// for (size_t i = threadIdx.x; i < MAT_SIZE; i += blockDim.x) {
 	// 	x_row_sm[i] = get_elem_rm(a, k, blockIdx.y, i);
@@ -319,16 +335,6 @@ __global__ void spmm_vectorized_nnzwise_smem(
 		// 			// x_row_sm[i + t] = ((float*)&tmp)[0];
 		// 		}
 	}
-
-	// __syncthreads();
-	//
-	// if (blockIdx.x == 0 && blockIdx.y == 0 && threadIdx.x == 0) {
-	// 	for (size_t i = 0; i < MAT_SIZE; ++i) {
-	// 		printf("[%u] x_row_smem[%lu] = %.2f\n", blockIdx.z, i, x_row_smem[i]);
-	// 	}
-	// }
-	//
-	// __syncthreads();
 
 	const size_t base_unaligned_idx = col_ptr[blockIdx.x];  // 2 LDG (but hardware performs a single load)
 	const size_t col_end_idx = col_ptr[blockIdx.x + 1];     // per block
@@ -1125,6 +1131,20 @@ void run_spmm_coalesced_nnzwise(SPMM<CSC>& spmm, const uint32_t idx)
 	dim3 block(n_threads);
 
 	spmm_coalesced_nnzwise<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
+}
+
+void run_spmm_coalesced_nnzwise_no_smem(SPMM<CSC>& spmm, const uint32_t idx)
+{
+	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+	const size_t k = spmm.dev.s.rows;
+	const size_t n = spmm.dev.s.cols;
+
+	constexpr size_t n_threads = 64;
+
+	dim3 grid(n, m);
+	dim3 block(n_threads);
+
+	spmm_coalesced_nnzwise_no_smem<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
 
 // WARN: INCOMPLETE
