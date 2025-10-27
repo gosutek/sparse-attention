@@ -1049,8 +1049,8 @@ void run_spmm_naive_elemwise_csc_smem(SPMM<CSC>& spmm, const uint32_t idx)
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
-	dim3 grid(MAT_SIZE);
-	dim3 block(MAT_SIZE);
+	dim3 grid(m);
+	dim3 block(n);
 
 	spmm_naive_elemwise_csc_smem<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
