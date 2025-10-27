@@ -730,7 +730,7 @@ void prepare_cusparse_csr(SPMM<CSR>& spmm, CuSparse& cusparse)
 		CUSPARSE_CHECK(cusparseSpMM_bufferSize(cusparse.handle,
 			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
 			&cusparse.alpha, cusparse.sparse, cusparse.dense[i], &cusparse.beta, cusparse.res[i],
-			CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, &tmp));
+			CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, &tmp));
 
 		cusparse.work_buffer_size += tmp;
 	}
@@ -756,7 +756,7 @@ void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse)
 		CUSPARSE_CHECK(cusparseSpMM_bufferSize(cusparse.handle,
 			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
 			&cusparse.alpha, cusparse.sparse, cusparse.dense[i], &cusparse.beta, cusparse.res[i],
-			CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, &tmp));
+			CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, &tmp));
 
 		cusparse.work_buffer_size += tmp;
 	}
@@ -976,7 +976,7 @@ bool warmup_spmm_csr(SPMM<CSR>& spmm, const uint32_t size_idx, void (*run_kernel
 
 	CUSPARSE_CHECK(cusparseSpMM(cusparse.handle,
 		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
-		&cusparse.alpha, cusparse.sparse, cusparse.dense[size_idx], &cusparse.beta, cusparse.res[size_idx], CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT, cusparse.work_buffer));
+		&cusparse.alpha, cusparse.sparse, cusparse.dense[size_idx], &cusparse.beta, cusparse.res[size_idx], CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse.work_buffer));
 	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
 
 	cuda_dealloc_device(cusparse.work_buffer);
@@ -1012,7 +1012,7 @@ bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint32_t size_idx, void (*run_kernel
 
 	CUSPARSE_CHECK(cusparseSpMM(cusparse.handle,
 		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
-		&cusparse.alpha, cusparse.sparse, cusparse.dense[size_idx], &cusparse.beta, cusparse.res[size_idx], CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT, cusparse.work_buffer));
+		&cusparse.alpha, cusparse.sparse, cusparse.dense[size_idx], &cusparse.beta, cusparse.res[size_idx], CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse.work_buffer));
 	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
 
 	cuda_dealloc_device(cusparse.work_buffer);
