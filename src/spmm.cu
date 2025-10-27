@@ -569,23 +569,23 @@ __global__ void spmm_vectorized_nnzwise_regs(
 	// }
 
 	// NOTE: Coalesced access + Vectorized loads
-	for (size_t i = threadIdx.x * TK; i < MAT_SIZE; i += blockDim.x * TK) {
-		const float4 f4 = reinterpret_cast<const float4*>(&a[blockIdx.y * k + i])[0];
+	// for (size_t i = threadIdx.x * TK; i < MAT_SIZE; i += blockDim.x * TK) {
+	// 	const float4 f4 = reinterpret_cast<const float4*>(&a[blockIdx.y * k + i])[0];
+	//
+	// 	x_row_smem[i] = f4.x;
+	// 	x_row_smem[i + 1] = f4.y;
+	// 	x_row_smem[i + 2] = f4.z;
+	// 	x_row_smem[i + 3] = f4.w;
+	//
+	// 	// NOTE: this loop doesn't get vectorized for some reason
+	// 	// #pragma unroll
+	// 	// 		for (size_t t = 0; t < TK; ++t) {
+	// 	// 			// x_row_sm[i + t] = reinterpret_cast<const float*>(&tmp)[0];
+	// 	// 			// x_row_sm[i + t] = ((float*)&tmp)[0];
+	// 	// 		}
+	// }
 
-		x_row_smem[i] = f4.x;
-		x_row_smem[i + 1] = f4.y;
-		x_row_smem[i + 2] = f4.z;
-		x_row_smem[i + 3] = f4.w;
-
-		// NOTE: this loop doesn't get vectorized for some reason
-		// #pragma unroll
-		// 		for (size_t t = 0; t < TK; ++t) {
-		// 			// x_row_sm[i + t] = reinterpret_cast<const float*>(&tmp)[0];
-		// 			// x_row_sm[i + t] = ((float*)&tmp)[0];
-		// 		}
-	}
-
-	__syncthreads();
+	// __syncthreads();
 
 	/*
       * +-------------------------------------------------ROW_IDX------------------------------------------------+
@@ -638,12 +638,14 @@ __global__ void spmm_vectorized_nnzwise_regs(
 	__align__(16) uint32_t t_row_idx[TK] = { 0 };
 	__align__(16) float    t_val[TK] = { 0.0f };
 
-	if (blockIdx.z == 0 && warp == 0 && lane == 0) {
+	if (blockIdx.z == 0 && warp == 0 && lane == 0) {     // WD
 		for (size_t i = 0; i < ri_unaligned_cnt; ++i) {  // up to 3 iterations
-			acc += x_row_smem[row_idx[base_unaligned_i + i]] * val[base_unaligned_i + i];
+			acc += get_elem_rm(a, k, blockIdx.y, row_idx[base_unaligned_i + i]) * val[base_unaligned_i + i];
+			// acc += x_row_smem[row_idx[base_unaligned_i + i]] * val[base_unaligned_i + i];
 		}
 		for (size_t i = 0; i < n_tail_loads; ++i) {  // up to 3 iterations
-			acc += x_row_smem[row_idx[ri_aligned_i + gridDim.z * nnz_block + i]] * val[ri_aligned_i + gridDim.z * nnz_block + i];
+			acc += get_elem_rm(a, k, blockIdx.y, row_idx[ri_aligned_i + gridDim.z * nnz_block + i]) * val[ri_aligned_i + gridDim.z * nnz_block + i];
+			// acc += x_row_smem[row_idx[ri_aligned_i + gridDim.z * nnz_block + i]] * val[ri_aligned_i + gridDim.z * nnz_block + i];
 		}
 	}
 	size_t block_start = 0;
@@ -662,10 +664,10 @@ __global__ void spmm_vectorized_nnzwise_regs(
 		reinterpret_cast<uint4*>(&t_row_idx)[0] = row_idx_v[0];
 		reinterpret_cast<float4*>(&t_val)[0] = val_v[0];
 
-		acc += x_row_smem[t_row_idx[0]] * t_val[0];
-		acc += x_row_smem[t_row_idx[1]] * t_val[1];
-		acc += x_row_smem[t_row_idx[2]] * t_val[2];
-		acc += x_row_smem[t_row_idx[3]] * t_val[3];
+		acc += get_elem_rm(a, k, blockIdx.y, t_row_idx[0]) * t_val[0];
+		acc += get_elem_rm(a, k, blockIdx.y, t_row_idx[1]) * t_val[1];
+		acc += get_elem_rm(a, k, blockIdx.y, t_row_idx[2]) * t_val[2];
+		acc += get_elem_rm(a, k, blockIdx.y, t_row_idx[3]) * t_val[3];
 	}
 
 	__syncwarp();
@@ -1071,10 +1073,11 @@ void run_spmm_naive_elemwise_csc_gmem(SPMM<CSC>& spmm, const uint32_t idx)
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
-	constexpr size_t BN = 16;
+	constexpr size_t BN = 8;
 	constexpr size_t BK = BN;
 
-	dim3 grid(CEIL_DIV(MAT_SIZE, BN), CEIL_DIV(BENCHMARKING_DENSE_N_ROWS[idx], BK));
+	assert(BN <= 32);  // otherwise threads per block exceed max
+	dim3 grid(CEIL_DIV(MAT_SIZE, BN), CEIL_DIV(m, BK));
 	dim3 block(BN, BK);
 
 	spmm_naive_elemwise_csc_gmem<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
@@ -1110,7 +1113,7 @@ void run_spmm_blocktiling_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx)
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
-	constexpr size_t BN = 32;
+	constexpr size_t BN = 256;
 	constexpr size_t TN = 4;
 
 	dim3 grid(m, n / BN);
@@ -1127,7 +1130,7 @@ void run_spmm_coalesced_nnzwise(SPMM<CSC>& spmm, const uint32_t idx)
 
 	constexpr size_t n_threads = 64;
 
-	dim3 grid(n, BENCHMARKING_DENSE_N_ROWS[idx]);
+	dim3 grid(n, m);
 	dim3 block(n_threads);
 
 	spmm_coalesced_nnzwise<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
@@ -1184,7 +1187,7 @@ void run_spmm_vectorized_nnzwise_regs(SPMM<CSC>& spmm, const uint32_t idx)
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
-	constexpr size_t n_threads = 64;
+	constexpr size_t n_threads = 32;
 	constexpr size_t BK = 512;
 
 	dim3 grid(n, m, CEIL_DIV(MAT_SIZE, BK));
