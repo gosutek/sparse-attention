@@ -156,6 +156,7 @@ __global__ void spmm_coalesced_elemwise_csr(
 	}
 }
 
+// WARN: Incomplete
 __global__ void spmm_blocktiling_elemwise_csr(
 	const float* __restrict__ a,
 	const uint32_t* __restrict__ row_ptr,
@@ -166,11 +167,11 @@ __global__ void spmm_blocktiling_elemwise_csr(
 	const size_t n,
 	float* __restrict__ res)
 {
-	__shared__ float x_row_sm[MAT_SIZE];
+	__shared__ float x_row_smem[MAT_SIZE];
 	__shared__ float shared_acc[MAT_SIZE];
 
 	for (size_t i = threadIdx.x; i < k; i += blockDim.x) {
-		x_row_sm[i] = get_elem_rm(a, k, blockIdx.x, i);
+		x_row_smem[i] = get_elem_rm(a, k, blockIdx.x, i);
 		shared_acc[i] = 0.0f;
 	}
 	__syncthreads();
@@ -178,7 +179,7 @@ __global__ void spmm_blocktiling_elemwise_csr(
 	for (size_t r = 0; r < k; ++r) {
 		size_t bound = min(row_ptr[r + 1], row_ptr[r] + (blockIdx.y + 1) * blockDim.x);
 		for (size_t i = row_ptr[r] + blockIdx.y * blockDim.x + threadIdx.x; i < bound; i += blockDim.x) {
-			atomicAdd(&shared_acc[col_idx[i]], val[i] * x_row_sm[r]);
+			atomicAdd(&shared_acc[col_idx[i]], val[i] * x_row_smem[r]);
 		}
 	}
 
@@ -473,10 +474,6 @@ __global__ void spmm_vectorized_nnzwise_smem(
 
 	__syncwarp();
 
-	// if (blockIdx.x == 0 && blockIdx.y == 0) {
-	// 	printf("acc = %.2f\n", acc);
-	// }
-
 	for (size_t i = WARP_SIZE / 2; i > 0; i /= 2) {
 		acc += __shfl_xor_sync(0xffffffff, acc, i, WARP_SIZE);
 	}
@@ -527,7 +524,7 @@ __global__ void spmm_vectorized_nnzwise_regs(
 {
 	constexpr size_t TK = 4;  // non-zeros assigned for each *thread*
 
-	__shared__ float x_row_smem[MAT_SIZE];
+	// __shared__ float x_row_smem[MAT_SIZE];
 
 	// NOTE: Coalesced acccess, plain
 	// for (size_t i = threadIdx.x; i < MAT_SIZE; i += blockDim.x) {
