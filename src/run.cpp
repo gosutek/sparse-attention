@@ -179,13 +179,13 @@ Benchmark benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t), con
 	return res;
 }
 
-Benchmark benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t), const std::string prunning_method = "l0_regularization/", const std::string sparsity = "0.5/")
+Benchmark benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t), const std::string prunning_method, const std::string sparsity)
 {
-	// 1. Read weight
+	// 1. Read weights
 	// 2. Generate X with sizes (32, 64, 128, 256, 512)
 	// 3. For each size
 	// 3.1 Run once
-	// 3.2 Verify result
+	// 3.2 Verify result against cuspase
 	// 3.3 Run 100-1000 times each
 	// 3.4 Calculate FLOPs
 
@@ -202,26 +202,27 @@ Benchmark benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t), con
 
 	float       time;
 	cudaEvent_t start, stop;
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
 
 	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		bool correct = warmup_spmm_csc(spmm, 0, run_kernel);
-		cudaEventRecord(start);
+		cudaDeviceSynchronize();
+		cudaEventCreate(&start);
+		cudaEventCreate(&stop);
+		cudaEventRecord(start, 0);
 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
 			run_kernel(spmm, i);
 		}
-		cudaEventRecord(stop);
-		cudaEventSynchronize(start);
+		cudaDeviceSynchronize();
+		cudaEventRecord(stop, 0);
 		cudaEventSynchronize(stop);
 		cudaEventElapsedTime(&time, start, stop);
 
 		res.time[i] = (time * 1e-3) / BENCHMARKING_ROUNDS;
 		res.flops[i] = ((2 * BENCHMARKING_DENSE_N_ROWS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
+		cudaEventDestroy(start);
+		cudaEventDestroy(stop);
 	}
-
-	cudaEventDestroy(start);
-	cudaEventDestroy(stop);
+	cudaDeviceSynchronize();
 
 	cuda_dealloc_host(spmm.host.data);
 	cuda_dealloc_device(spmm.dev.data);
@@ -229,7 +230,7 @@ Benchmark benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t), con
 	return res;
 }
 
-Benchmark benchmark_cusparse(const std::string prunning_method = "l0_regularization/", const std::string sparsity = "0.5/")
+Benchmark benchmark_cusparse(const std::string prunning_method, const std::string sparsity)
 {
 	// WARN: This function throws but doesn't gracefuly exit!1!
 	SPMM<CSC> spmm;
@@ -251,38 +252,39 @@ Benchmark benchmark_cusparse(const std::string prunning_method = "l0_regularizat
 
 	float       time;
 	cudaEvent_t start, stop;
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
 
 	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
 		// Warmup
 		CUSPARSE_CHECK(cusparseSpMM_preprocess(cusparse.handle,
 			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
 			&cusparse.alpha, cusparse.sparse, cusparse.dense[0], &cusparse.beta, cusparse.res[0],
-			CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, cusparse.work_buffer));
+			CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse.work_buffer));
 
 		CUSPARSE_CHECK(cusparseSpMM(cusparse.handle,
 			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
-			&cusparse.alpha, cusparse.sparse, cusparse.dense[0], &cusparse.beta, cusparse.res[0], CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT, cusparse.work_buffer));
+			&cusparse.alpha, cusparse.sparse, cusparse.dense[0], &cusparse.beta, cusparse.res[0], CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse.work_buffer));
 
-		cudaEventRecord(start);
+		cudaDeviceSynchronize();
+		cudaEventCreate(&start);
+		cudaEventCreate(&stop);
+		cudaEventRecord(start, 0);
 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
 			CUSPARSE_CHECK(cusparseSpMM(cusparse.handle,
 				CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
-				&cusparse.alpha, cusparse.sparse, cusparse.dense[i], &cusparse.beta, cusparse.res[i], CUDA_R_32F, CUSPARSE_SPMM_ALG_DEFAULT, cusparse.work_buffer));
+				&cusparse.alpha, cusparse.sparse, cusparse.dense[i], &cusparse.beta, cusparse.res[i], CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse.work_buffer));
 		}
-		cudaEventRecord(stop);
-		cudaEventSynchronize(start);
+		cudaDeviceSynchronize();
+		cudaEventRecord(stop, 0);
 		cudaEventSynchronize(stop);
 		cudaEventElapsedTime(&time, start, stop);
+		cudaEventDestroy(start);
+		cudaEventDestroy(stop);
 
 		res.time[i] = (time * 1e-3) / BENCHMARKING_ROUNDS;
 		res.flops[i] = ((2 * BENCHMARKING_DENSE_N_ROWS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
 	}
 	CUDA_CHECK(cudaDeviceSynchronize());
 
-	cudaEventDestroy(start);
-	cudaEventDestroy(stop);
 	cuda_dealloc_device(cusparse.work_buffer);
 
 	cusparseDestroySpMat(cusparse.sparse);
