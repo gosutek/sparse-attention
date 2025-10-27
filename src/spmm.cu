@@ -214,8 +214,39 @@ __global__ void spmm_coalesced_nnzwise(
 	for (size_t i = col_ptr[blockIdx.x] + threadIdx.x; i < col_ptr[blockIdx.x + 1]; i += blockDim.x) {
 		acc += x_row_sm[row_idx[i]] * val[i];
 	}
+	__syncwarp();
+
+	for (size_t i = WARP_SIZE / 2; i > 0; i /= 2) {
+		acc += __shfl_xor_sync(0xffffffff, acc, i, WARP_SIZE);
+	}
+
+	uint32_t lane_id = threadIdx.x & 0x1f;
+	uint32_t warp_id = threadIdx.x / WARP_SIZE;
+
+	constexpr uint32_t n_warps = N_THREADS / WARP_SIZE;
+	__shared__ float   warp_sums[n_warps];
+
+	if (lane_id == 0) {
+		warp_sums[warp_id] = acc;
+	}
+
 	__syncthreads();
 
+	if (warp_id == 0) {
+		// WARN: some threads point to garbage
+		float acc = warp_sums[lane_id];
+
+		constexpr uint32_t mask = 0xFF;
+
+		for (size_t i = n_warps / 2; i > 0; i /= 2) {
+			acc += __shfl_xor_sync(mask, acc, i, WARP_SIZE);
+		}
+
+		if (lane_id == 0) {
+			set_elem_rm(res, n, blockIdx.y, blockIdx.x, acc);
+		}
+	}
+}
 	for (size_t i = WARP_SIZE / 2; i > 0; i /= 2) {
 		acc += __shfl_xor_sync(0xffffffff, acc, i, WARP_SIZE);
 	}
