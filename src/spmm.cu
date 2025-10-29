@@ -706,6 +706,58 @@ __global__ void spmm_vectorized_nnzwise_regs(
 	}
 }
 
+template <const size_t N_THREADS>
+__global__ void spmm_coalesced_nnzwise_last(
+	const float* __restrict__ a,
+	const uint32_t* __restrict__ col_ptr,
+	const uint32_t* __restrict__ row_idx,
+	const float* __restrict__ val,
+	const size_t m,
+	const size_t k,
+	const size_t n,
+	const size_t bn,
+	float* __restrict__ res)
+{
+	for (size_t c = 0; c < bn; ++c) {
+		float acc = 0.0f;
+		for (size_t i = col_ptr[blockIdx.x * bn + c] + threadIdx.x; i < col_ptr[blockIdx.x * bn + c + 1]; i += blockDim.x) {
+			acc += get_elem_rm(a, k, blockIdx.y, row_idx[i]) * val[i];
+		}
+		__syncwarp();
+
+		for (size_t i = WARP_SIZE / 2; i > 0; i /= 2) {
+			acc += __shfl_xor_sync(0xffffffff, acc, i, WARP_SIZE);
+		}
+
+		uint32_t lane_id = threadIdx.x & 0x1f;
+		uint32_t warp_id = threadIdx.x / WARP_SIZE;
+
+		constexpr uint32_t n_warps = N_THREADS / WARP_SIZE;
+		__shared__ float   warp_sums[n_warps];
+
+		if (lane_id == 0) {
+			warp_sums[warp_id] = acc;
+		}
+
+		__syncthreads();
+
+		if (warp_id == 0) {
+			// WARN: some threads point to garbage
+			float acc = warp_sums[lane_id];
+
+			constexpr uint32_t mask = 0xFF;
+
+			for (size_t i = n_warps / 2; i > 0; i /= 2) {
+				acc += __shfl_xor_sync(mask, acc, i, WARP_SIZE);
+			}
+
+			if (lane_id == 0) {
+				set_elem_rm(res, n, blockIdx.y, blockIdx.x * bn + c, acc);
+			}
+		}
+	}
+}
+
 __global__ void gemm(
 	const float* __restrict__ a,  // row-major
 	const float* __restrict__ b,  // col-major
@@ -1148,6 +1200,21 @@ void run_spmm_coalesced_nnzwise_no_smem(SPMM<CSC>& spmm, const uint32_t idx)
 	dim3 block(n_threads);
 
 	spmm_coalesced_nnzwise_no_smem<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
+}
+
+void run_spmm_coalesced_nnzwise_last(SPMM<CSC>& spmm, const uint32_t idx)
+{
+	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+	const size_t k = spmm.dev.s.rows;
+	const size_t n = spmm.dev.s.cols;
+
+	constexpr size_t n_threads = 32;
+	constexpr size_t bn = 16;
+
+	dim3 grid(CEIL_DIV(n, bn), m);
+	dim3 block(n_threads);
+
+	spmm_coalesced_nnzwise_last<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, bn, spmm.dev.r[idx]);
 }
 
 // WARN: INCOMPLETE
