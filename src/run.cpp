@@ -9,6 +9,7 @@
 
 constexpr const char* prunning_methods[] = { "l0_regularization/", "variational_dropout/", "magnitude_pruning/", "random_pruning/" };
 constexpr const char* sparsity_arr[] = { "0.5/", "0.6/", "0.7/", "0.8/", "0.9/", "0.95/", "0.98/" };
+constexpr const char* custom_sparse[] = { "1024/" };
 
 struct Benchmark
 {
@@ -191,11 +192,11 @@ Benchmark benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t), con
 
 	SPMM<CSC>   spmm;
 	Benchmark   res;
-	std::string data_dir_path = construct_path("data/dlmc/transformer/" + prunning_method + sparsity, BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
+	std::string data_dir_path = construct_path("data/dlmc/transformer/" + prunning_method + sparsity, BodyType::Decoder, AttentionMechanism::SelfAttention, 5);
 	if (prunning_method == "random_pruning/" || prunning_method == "magnitude_pruning/") {
-		spmm.sparse_path = data_dir_path + "q_fully_connected.smtx";
+		spmm.sparse_path = data_dir_path + "v_fully_connected.smtx";
 	} else {
-		spmm.sparse_path = data_dir_path + "q.smtx";
+		spmm.sparse_path = data_dir_path + "v.smtx";
 	}
 
 	prepare_spmm_csc(spmm);
@@ -239,11 +240,11 @@ Benchmark benchmark_cusparse(const std::string prunning_method, const std::strin
 	CuSparse cusparse;
 	cusparseCreate(&cusparse.handle);
 
-	std::string data_dir_path = construct_path("data/dlmc/transformer/" + prunning_method + sparsity, BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
+	std::string data_dir_path = construct_path("data/dlmc/transformer/" + prunning_method + sparsity, BodyType::Decoder, AttentionMechanism::SelfAttention, 5);
 	if (prunning_method == "random_pruning/" || prunning_method == "magnitude_pruning/") {
-		spmm.sparse_path = data_dir_path + "q_fully_connected.smtx";
+		spmm.sparse_path = data_dir_path + "v_fully_connected.smtx";
 	} else {
-		spmm.sparse_path = data_dir_path + "q.smtx";
+		spmm.sparse_path = data_dir_path + "v.smtx";
 	}
 
 	// WARN: Calling both of these is necessary at the moment but does double work.
@@ -338,10 +339,10 @@ int main(int argc, char* argv[])
 				}
 				break;
 			case 2:
-				// sota = benchmark_cusparse("l0_regularization/", "0.5/");
-				// custom = benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_gmem, "l0_regularization/", "0.5/");
+				// sota = benchmark_cusparse("l0_regularization/", "0.98/");
+				// custom = benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_gmem, "l0_regularization/", "0.98/");
 				//
-				// print_benchmarks("Spmm", "SOTA", "Naive elementwise CSC GMEM", "l0_regularization/", "0.5/", sota, custom);
+				// print_benchmarks("Spmm", "SOTA", "Naive elementwise CSC GMEM", "l0_regularization/", "0.98/", sota, custom);
 				for (const auto& prunning_method : prunning_methods) {
 					for (const auto& sparsity : sparsity_arr) {
 						sota = benchmark_cusparse(prunning_method, sparsity);
@@ -352,66 +353,66 @@ int main(int argc, char* argv[])
 				}
 				break;
 			case 3:
-				sota = benchmark_cusparse("l0_regularization/", "0.5/");
-				custom = benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_smem, "l0_regularization/", "0.5/");
-
-				print_benchmarks("Spmm", "SOTA", "Naive elementwise CSC SMEM", "l0_regularization/", "0.50/", sota, custom);
-				// for (const auto& prunning_method : prunning_methods) {
-				// 	for (const auto& sparsity : sparsity_arr) {
-				// 		sota = benchmark_cusparse(prunning_method, sparsity);
-				// 		custom = benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_smem, prunning_method, sparsity);
+				// sota = benchmark_cusparse("l0_regularization/", "0.98/");
+				// custom = benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_smem, "l0_regularization/", "0.98/");
 				//
-				// 		print_benchmarks("Spmm", "SOTA", "Naive elementwise CSC SMEM", prunning_method, sparsity, sota, custom);
-				// 	}
-				// }
+				// print_benchmarks("Spmm", "SOTA", "Naive elementwise CSC SMEM", "l0_regularization/", "0.98/", sota, custom);
+				for (const auto& prunning_method : prunning_methods) {
+					for (const auto& sparsity : sparsity_arr) {
+						sota = benchmark_cusparse(prunning_method, sparsity);
+						custom = benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_smem, prunning_method, sparsity);
+
+						print_benchmarks("Spmm", "SOTA", "Naive elementwise CSC SMEM", prunning_method, sparsity, sota, custom);
+					}
+				}
 				break;
 			case 4:
-				sota = benchmark_cusparse("l0_regularization/", "0.5/");
-				custom = benchmark_spmm_csc(&run_spmm_coalesced_nnzwise, "l0_regularization/", "0.5/");
-
-				print_benchmarks("Spmm", "SOTA", "Coalesced nonzero-wise", "l0_regularization/", "0.5/", sota, custom);
-				// for (const auto& prunning_method : prunning_methods) {
-				// 	for (const auto& sparsity : sparsity_arr) {
-				// 		sota = benchmark_cusparse(prunning_method, sparsity);
-				// 		custom = benchmark_spmm_csc(&run_spmm_coalesced_nnzwise, prunning_method, sparsity);
+				// sota = benchmark_cusparse("l0_regularization/", "0.98/");
+				// custom = benchmark_spmm_csc(&run_spmm_coalesced_nnzwise, "l0_regularization/", "0.98/");
 				//
-				// 		print_benchmarks("Spmm", "SOTA", "Coalesced nonzero-wise", prunning_method, sparsity, sota, custom);
-				// 	}
-				// }
+				// print_benchmarks("Spmm", "SOTA", "Coalesced nonzero-wise", "l0_regularization/", "0.98/", sota, custom);
+				for (const auto& prunning_method : prunning_methods) {
+					for (const auto& sparsity : sparsity_arr) {
+						sota = benchmark_cusparse(prunning_method, sparsity);
+						custom = benchmark_spmm_csc(&run_spmm_coalesced_nnzwise, prunning_method, sparsity);
+
+						print_benchmarks("Spmm", "SOTA", "Coalesced nonzero-wise", prunning_method, sparsity, sota, custom);
+					}
+				}
 				break;
 			case 5:
-				sota = benchmark_cusparse("l0_regularization/", "0.5/");
-				custom = benchmark_spmm_csc(&run_spmm_coalesced_nnzwise_no_smem, "l0_regularization/", "0.5/");
-
-				print_benchmarks("Spmm", "SOTA", "Coalesced nonzero-wise no shared", "l0_regularization/", "0.5/", sota, custom);
-				// for (const auto& prunning_method : prunning_methods) {
-				// 	for (const auto& sparsity : sparsity_arr) {
-				// 		sota = benchmark_cusparse(prunning_method, sparsity);
-				// 		custom = benchmark_spmm_csc(&run_spmm_coalesced_nnzwise_no_smem, prunning_method, sparsity);
+				// sota = benchmark_cusparse("l0_regularization/", "0.5/");
+				// custom = benchmark_spmm_csc(&run_spmm_coalesced_nnzwise_no_smem, "l0_regularization/", "0.5/");
 				//
-				// 		print_benchmarks("Spmm", "SOTA", "Coalesced nonzero-wise no shared", prunning_method, sparsity, sota, custom);
-				// 	}
-				// }
+				// print_benchmarks("Spmm", "SOTA", "Coalesced nonzero-wise no shared", "l0_regularization/", "0.5/", sota, custom);
+				for (const auto& prunning_method : prunning_methods) {
+					for (const auto& sparsity : sparsity_arr) {
+						sota = benchmark_cusparse(prunning_method, sparsity);
+						custom = benchmark_spmm_csc(&run_spmm_coalesced_nnzwise_no_smem, prunning_method, sparsity);
+
+						print_benchmarks("Spmm", "SOTA", "Coalesced nonzero-wise no shared", prunning_method, sparsity, sota, custom);
+					}
+				}
 				break;
 			case 6:
-				sota = benchmark_cusparse("l0_regularization/", "0.5/");
-				custom = benchmark_spmm_csc(&run_spmm_vectorized_nnzwise_regs, "l0_regularization/", "0.5/");
-
-				print_benchmarks("Spmm", "SOTA", "Vectorized nonzero-wise registers", "l0_regularization/", "0.5/", sota, custom);
-				// for (const auto& prunning_method : prunning_methods) {
-				// 	for (const auto& sparsity : sparsity_arr) {
-				// 		sota = benchmark_cusparse(prunning_method, sparsity);
-				// 		custom = benchmark_spmm_csc(&run_spmm_vectorized_nnzwise_regs, prunning_method, sparsity);
+				// sota = benchmark_cusparse("l0_regularization/", "0.5/");
+				// custom = benchmark_spmm_csc(&run_spmm_vectorized_nnzwise_regs, "l0_regularization/", "0.5/");
 				//
-				// 		print_benchmarks("Spmm", "SOTA", "Vectorized nonzero-wise registers", prunning_method, sparsity, sota, custom);
-				// 	}
-				// }
+				// print_benchmarks("Spmm", "SOTA", "Vectorized nonzero-wise registers", "l0_regularization/", "0.5/", sota, custom);
+				for (const auto& prunning_method : prunning_methods) {
+					for (const auto& sparsity : sparsity_arr) {
+						sota = benchmark_cusparse(prunning_method, sparsity);
+						custom = benchmark_spmm_csc(&run_spmm_vectorized_nnzwise_regs, prunning_method, sparsity);
+
+						print_benchmarks("Spmm", "SOTA", "Vectorized nonzero-wise registers", prunning_method, sparsity, sota, custom);
+					}
+				}
 				break;
 			case 7:
-				// sota = benchmark_cusparse("l0_regularization/", "0.98/");
-				// custom = benchmark_spmm_csc(&run_spmm_coalesced_nnzwise_last, "l0_regularization/", "0.98/");
+				// sota = benchmark_cusparse("l0_regularization/", "0.5/");
+				// custom = benchmark_spmm_csc(&run_spmm_coalesced_nnzwise_last, "l0_regularization/", "0.5/");
 				//
-				// print_benchmarks("Spmm", "SOTA", "Last one", "l0_regularization/", "0.98/", sota, custom);
+				// print_benchmarks("Spmm", "SOTA", "Last one", "l0_regularization/", "0.5/", sota, custom);
 				for (const auto& prunning_method : prunning_methods) {
 					for (const auto& sparsity : sparsity_arr) {
 						sota = benchmark_cusparse(prunning_method, sparsity);
