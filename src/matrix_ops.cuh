@@ -92,33 +92,5 @@ struct Block
 	}
 };
 
-// 96 bytes
-struct HRPB
-{
-	std::vector<uint32_t> block_row_ptr{};  // 24 bytes
-	std::vector<uint32_t> active_cols{};    // 24 bytes
-	std::vector<uint32_t> size_ptr{};       // 24 bytes
-	std::vector<Block>    packed_blocks{};  // 24 bytes
-
-	bool operator==(const HRPB& other) const
-	{
-		return (block_row_ptr == other.block_row_ptr) &&
-		       (active_cols == other.active_cols) &&
-		       (size_ptr == other.size_ptr) &&
-		       (packed_blocks == other.packed_blocks);
-	}
-
-	friend std::ostream& operator<<(std::ostream& out_stream, const HRPB& hrpb)
-	{
-		out_stream << "HRPB:\n\t"
-				   << "block_row_ptr: " << hrpb.block_row_ptr << "\n\t"
-				   << "active_cols: " << hrpb.active_cols << "\n\t"
-				   << "size_ptr: " << hrpb.size_ptr << "\n\t"
-				   << "packed_blocks: " << hrpb.packed_blocks << "\n";
-
-		return out_stream;
-	}
-};
-
 __host__ SpmmInput deserialize(const std::filesystem::path& filepath);
 __host__ void      get_non_zero_col_predicate(PitchedMatrix* pcm_sparse, size_t rows, size_t cols);
