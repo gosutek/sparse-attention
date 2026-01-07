@@ -121,21 +121,6 @@ struct CSC
 	}
 };
 
-// void mhsa_load_host_csr(
-// 	MHSA<CSR, CSR>     mhsa,
-// 	const Config&      config,
-// 	Weights<CSR>&      weights,
-// 	const std::string& base_data_path,
-// 	const std::string& pruning_method,
-// 	const std::string& sparsity,
-// 	AttentionMechanism am);
-//
-// void mhsa_load_host_csc(
-// 	MHSA<CSC, CSR>& mhsa,
-// 	const Config&   config,
-// 	DLMC&           dlmc,
-// 	Weights<CSC>&   weights);
-
 std::vector<float> csr_to_row_major(const CSR& mat);
 std::vector<float> csc_to_col_major(const CSC& mat);
 float              measure_sparsity(void* s, size_t size);
