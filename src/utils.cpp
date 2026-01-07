@@ -42,28 +42,6 @@ static std::vector<float> read_row_major_from_rm(const std::filesystem::path& fi
 	return res;
 }
 
-// TODO: This reads w_q instead of 3x3.smtx
-// [[maybe_unused]] static void test_csr_to_row_major(const std::filesystem::path& filepath)
-// {
-// 	if (std::filesystem::is_regular_file(filepath) && filepath.extension() == ".smtx") {
-// 		const auto expected_file = filepath.parent_path() / filepath.filename().replace_extension(".rm");
-// 		if (!std::filesystem::exists(expected_file)) {
-// 			throw std::runtime_error("Expected file not found for testing: " + expected_file.string());
-// 		}
-// 		std::cout << std::format("Testing for file: {}\n", filepath.string());
-// 		MHSA<CSR, CSR>     mhsa;
-// 		CSR&               w_q = mhsa.weights.w_q[0];
-// 		size_t             matrix_size = w_q.rows * w_q.cols;
-// 		std::vector<float> actual_matrix = csr_to_row_major(w_q);
-// 		std::vector<float> expected_matrix = read_row_major_from_rm(expected_file, matrix_size);
-//
-// 		// ASSERT_EQ(expected_matrix, actual_matrix, "The matrices differ in values.\n");
-// 		// TODO: Call verify_res() instead
-//
-// 		std::cout << "Test successful\n";
-// 	}
-// }
-
 /*
  * a(m, k)
  * b(k, n)
@@ -155,24 +133,6 @@ static std::vector<float> host_spmm_rm_rm(std::vector<float> a, std::vector<floa
 	}
 }
 
-// void print_mhsa(const MHSA<CSC, CSR>& mhsa)
-// {
-// 	std::cout << "Printing CSC::col_ptr\n";
-// 	for (size_t i = 0; i < mhsa.weights.w_q[0].col_ptr_size; ++i) {
-// 		std::cout << std::format("{}\n", mhsa.weights.w_q[0].col_ptr[i]);
-// 	}
-//
-// 	std::cout << "Printing CSC::row_idx\n";
-// 	for (size_t i = 0; i < mhsa.weights.w_q[0].row_idx_size; ++i) {
-// 		std::cout << std::format("{}\n", mhsa.weights.w_q[0].row_idx[i]);
-// 	}
-//
-// 	std::cout << "Printing CSC::val\n";
-// 	for (size_t i = 0; i < mhsa.weights.w_q[0].val_size; ++i) {
-// 		std::cout << std::format("{}\n", mhsa.weights.w_q[0].val[i]);
-// 	}
-// }
-
 bool verify_res(const float* const actual, const float* const expected, size_t n)
 {
 	double diff = 0.0;
@@ -189,27 +149,3 @@ bool verify_res(const float* const actual, const float* const expected, size_t n
 	}
 	return true;
 }
-
-// void test_dev_spmm()
-// {
-// 	MHSA<CSC, CSR> mhsa;
-//
-// 	const char* base_data_path = "data/dlmc/transformer/";
-// 	const char* s_pruning_method = "l0_regularization/";
-// 	const char* sparsity = "0.5/";
-//
-// 	mhsa_load_host_csc(mhsa, mhsa.config, mhsa.dlmc, mhsa.weights);
-//
-// 	float*             a_ptr = mhsa.x;
-// 	std::vector<float> a(a_ptr, a_ptr + mhsa.config.input_sequence_size * MAT_SIZE);
-//
-// 	std::vector<float> b = csc_to_col_major(mhsa.weights.w_q[0]);
-//
-// 	std::vector<float> expected = host_spmm_rm_cm(a, b, mhsa.config.input_sequence_size, MAT_SIZE, MAT_SIZE);
-// 	std::vector<float> actual;
-// 	actual.resize(MAT_SIZE * mhsa.config.input_sequence_size);
-// 	// run(mhsa, actual.data());
-//
-// 	verify_res(actual.data(), expected.data(), MAT_SIZE * mhsa.config.input_sequence_size);
-// 	cuda_dealloc_host(mhsa.host);
-// }
