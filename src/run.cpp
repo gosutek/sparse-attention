@@ -62,17 +62,7 @@ void print_help()
 
 void list_kernels()
 {
-	const std::string kernel_msg =
-		"List of kernels for benchmarking:\n\n"
-		"1. cuSparse\n"
-		"2. 'spmm_naive_elemwise_csc_gmem'\n"
-		"3. 'spmm_naive_elemwise_csc_smem'\n"
-		"4. 'spmm_coalesced_elemwise_csr'\n"
-		"5. 'spmm_blocktiling_elemwise_csr'\n"
-		"6. 'spmm_coalesced_nnzwise'\n"
-		"7. 'spmm_vectorized_nnzwise_smem'\n"
-		"8. 'spmm_vectorized_nnzwise_regs'\n"
-		"9. 'softmax'\n";
+	const std::string kernel_msg = "Placeholder";
 
 	std::cout << kernel_msg << "\n";
 }
@@ -437,6 +427,8 @@ int main(int argc, char* argv[])
 			// cuda_dealloc_device(mhsa.dev.data);
 		} else if (argv[i][1] == 'p') {
 			print_device_properties();
+		} else if (argv[i][1] == 't') {
+			// perform_tests();
 		}
 	}
 
