@@ -201,7 +201,7 @@ static CSR read_mask(const DLMC& dlmc, const size_t sequence_size, const size_t 
 	return { header.n_rows, header.n_cols, header.nnz };
 }
 
-CSR parse_csr_dlmc(void* dst, const std::filesystem::path& filepath)
+CSR parse_dlmc(void* dst, const std::filesystem::path& filepath)
 {
 	std::ifstream file_stream(filepath, std::ios_base::in);
 

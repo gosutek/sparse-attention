@@ -633,7 +633,7 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 	                        BENCHMARKING_DENSE_N_ROWS[std::size(BENCHMARKING_DENSE_N_ROWS) - 1] * MAT_SIZE;  // skip 512 * 512 floats
 
 	// start_of_sparse is 128-byte aligned guaranteed
-	spmm.host.s = parse_csr_dlmc(start_of_sparse, spmm.sparse_path);
+	spmm.host.s = parse_dlmc(start_of_sparse, spmm.sparse_path);
 
 	assert((reinterpret_cast<uintptr_t>(spmm.host.s.row_ptr) & (ALIGNMENT_BYTES - 1)) == 0);
 	assert((reinterpret_cast<uintptr_t>(spmm.host.s.col_idx) & (ALIGNMENT_BYTES - 1)) == 0);

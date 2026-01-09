@@ -128,7 +128,7 @@ size_t             calc_sparse_b_size(const size_t n, const size_t nnz);
 Tensor             read_tensor(const DLMC& dlmc, const BodyType bt, const AttentionMechanism am, const size_t layer, const SparseMatrixType sparse_matrix_type);
 DLMCHeader         parse_dlmc_header(std::ifstream& file_stream);
 void               generate_token_embeddings(void* dst, size_t size);
-CSR                parse_csr_dlmc(void* dst, const std::filesystem::path& filepath);
+CSR                parse_dlmc(void* dst, const std::filesystem::path& filepath);
 CSC                parse_csc_dlmc(void* dst, const std::filesystem::path& filepath);
 std::string        construct_path(const std::filesystem::path base_path, const BodyType bt, const AttentionMechanism am, const size_t layer);
 size_t             calc_max_nnz_per_col(const CSC& csc);
