@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 
+#include "Test.h"
 #include "handle.h"
 #include "matrix.h"
 #include "spmm.cuh"
@@ -428,7 +429,7 @@ int main(int argc, char* argv[])
 		} else if (argv[i][1] == 'p') {
 			print_device_properties();
 		} else if (argv[i][1] == 't') {
-			// perform_tests();
+			enumerate_input_space();
 		}
 	}
 

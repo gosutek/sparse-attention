@@ -892,20 +892,20 @@ void run_spmm_coalesced_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx)
 	spmm_coalesced_elemwise_csr<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
 
-void run_spmm_blocktiling_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx)
-{
-	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
-	const size_t k = spmm.dev.s.rows;
-	const size_t n = spmm.dev.s.cols;
-
-	constexpr size_t BN = 256;
-	constexpr size_t TN = 4;
-
-	dim3 grid(m, n / BN);
-	dim3 block(CEIL_DIV(BN, TN));
-
-	spmm_blocktiling_elemwise_csr<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
-}
+// void run_spmm_blocktiling_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx)
+// {
+// 	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+// 	const size_t k = spmm.dev.s.rows;
+// 	const size_t n = spmm.dev.s.cols;
+//
+// 	constexpr size_t BN = 256;
+// 	constexpr size_t TN = 4;
+//
+// 	dim3 grid(m, n / BN);
+// 	dim3 block(CEIL_DIV(BN, TN));
+//
+// 	spmm_blocktiling_elemwise_csr<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
+// }
 
 void run_spmm_coalesced_nnzwise(SPMM<CSC>& spmm, const uint32_t idx)
 {

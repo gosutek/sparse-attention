@@ -1,11 +1,13 @@
 #include "Test.h"
-#include "matrix.h"
 
 #include <filesystem>
+#include <format>
+#include <iostream>
 #include <vector>
 
-static void enumerate_input_space()
+void enumerate_input_space()
 {
+	std::cout << std::format("Base Test Directory: {}\n", TEST_DIR);
 	std::filesystem::path              test_base_path{ TEST_DIR };
 	std::vector<std::filesystem::path> test_space = {};
 
