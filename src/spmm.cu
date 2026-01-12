@@ -548,11 +548,11 @@ void prepare_cusparse_csr(SPMM<CSR>& spmm, CuSparse& cusparse)
 
 	size_t tmp = 0;
 	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.dense[i], BENCHMARKING_DENSE_N_ROWS[i], spmm.dev.s.rows, spmm.dev.s.rows, spmm.dev.d[i], CUDA_R_32F, CUSPARSE_ORDER_ROW));
-		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.res[i], spmm.dev.s.cols, BENCHMARKING_DENSE_N_ROWS[i], spmm.dev.s.cols, spmm.dev.r[i], CUDA_R_32F, CUSPARSE_ORDER_COL));
+		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.dense[i], spmm.dev.s.cols, BENCHMARKING_DENSE_N_COLS[i], spmm.dev.s.cols, spmm.dev.d[i], CUDA_R_32F, CUSPARSE_ORDER_COL));
+		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.res[i], spmm.dev.s.rows, BENCHMARKING_DENSE_N_COLS[i], BENCHMARKING_DENSE_N_COLS[i], spmm.dev.r[i], CUDA_R_32F, CUSPARSE_ORDER_ROW));
 
 		CUSPARSE_CHECK(cusparseSpMM_bufferSize(cusparse.handle,
-			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+			CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
 			&cusparse.alpha, cusparse.sparse, cusparse.dense[i], &cusparse.beta, cusparse.res[i],
 			CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, &tmp));
 
@@ -616,10 +616,10 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 	spmm.host.data = cuda_malloc_host(spmm.b_size);
 	spmm.host.d[0] = reinterpret_cast<float*>(spmm.host.data);
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		generate_token_embeddings(spmm.host.d[i], BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE);
-		if (i + 1 < std::size(BENCHMARKING_DENSE_N_ROWS)) {
-			spmm.host.d[i + 1] = spmm.host.d[i] + BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
+	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_COLS); ++i) {
+		generate_token_embeddings(spmm.host.d[i], BENCHMARKING_DENSE_N_COLS[i] * MAT_SIZE);
+		if (i + 1 < std::size(BENCHMARKING_DENSE_N_COLS)) {
+			spmm.host.d[i + 1] = spmm.host.d[i] + BENCHMARKING_DENSE_N_COLS[i] * MAT_SIZE;
 		}
 	}
 
@@ -629,8 +629,8 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 	assert((reinterpret_cast<uintptr_t>(spmm.host.d[3]) & (ALIGNMENT_BYTES - 1)) == 0);
 	assert((reinterpret_cast<uintptr_t>(spmm.host.d[4]) & (ALIGNMENT_BYTES - 1)) == 0);
 
-	void* start_of_sparse = spmm.host.d[std::size(BENCHMARKING_DENSE_N_ROWS) - 1] +                          // from the last ptr of spmm.host.d
-	                        BENCHMARKING_DENSE_N_ROWS[std::size(BENCHMARKING_DENSE_N_ROWS) - 1] * MAT_SIZE;  // skip 512 * 512 floats
+	void* start_of_sparse = spmm.host.d[std::size(BENCHMARKING_DENSE_N_COLS) - 1] +                          // from the last ptr of spmm.host.d
+	                        BENCHMARKING_DENSE_N_COLS[std::size(BENCHMARKING_DENSE_N_COLS) - 1] * MAT_SIZE;  // skip 512 * 512 floats
 
 	// start_of_sparse is 128-byte aligned guaranteed
 	spmm.host.s = parse_dlmc(start_of_sparse, spmm.sparse_path);
@@ -642,9 +642,9 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 	uintptr_t ptr = reinterpret_cast<uintptr_t>(start_of_sparse) + spmm.host.s.b_size;
 
 	// TODO: use uintptr_t instead of pointer arithmetic on float* (??)
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_COLS); ++i) {
 		spmm.host.r[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
+		ptr += BENCHMARKING_DENSE_N_COLS[i] * MAT_SIZE * sizeof(float);
 	}
 	// assert((reinterpret_cast<uintptr_t>(spmm.host.r[0]) & (ALIGNMENT_BYTES - 1)) == 0);
 	// assert((reinterpret_cast<uintptr_t>(spmm.host.r[1]) & (ALIGNMENT_BYTES - 1)) == 0);
@@ -668,9 +668,9 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 	// Partition dev
 	ptr = reinterpret_cast<uintptr_t>(spmm.dev.data);
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_COLS); ++i) {
 		spmm.dev.d[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
+		ptr += BENCHMARKING_DENSE_N_COLS[i] * MAT_SIZE * sizeof(float);
 	}
 
 	// TODO: This trashes the previous empty object and makes a new one. Make a good copy assignment operator function instead.
@@ -679,9 +679,9 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 
 	ptr += spmm.host.s.b_size;
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_COLS); ++i) {
 		spmm.dev.r[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
+		ptr += BENCHMARKING_DENSE_N_COLS[i] * MAT_SIZE * sizeof(float);
 	}
 }
 

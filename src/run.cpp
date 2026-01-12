@@ -224,7 +224,7 @@ Benchmark benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t), con
 Benchmark benchmark_cusparse(const std::string prunning_method, const std::string sparsity)
 {
 	// WARN: This function throws but doesn't gracefuly exit!1!
-	SPMM<CSC> spmm;
+	SPMM<CSR> spmm;
 	Benchmark res;
 
 	CuSparse cusparse;
@@ -238,21 +238,21 @@ Benchmark benchmark_cusparse(const std::string prunning_method, const std::strin
 	}
 
 	// WARN: Calling both of these is necessary at the moment but does double work.
-	prepare_spmm_csc(spmm);
-	prepare_cusparse_csc(spmm, cusparse);
+	prepare_spmm_csr(spmm);
+	prepare_cusparse_csr(spmm, cusparse);
 
 	float       time;
 	cudaEvent_t start, stop;
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_COLS); ++i) {
 		// Warmup
 		CUSPARSE_CHECK(cusparseSpMM_preprocess(cusparse.handle,
-			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+			CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
 			&cusparse.alpha, cusparse.sparse, cusparse.dense[0], &cusparse.beta, cusparse.res[0],
 			CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse.work_buffer));
 
 		CUSPARSE_CHECK(cusparseSpMM(cusparse.handle,
-			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+			CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
 			&cusparse.alpha, cusparse.sparse, cusparse.dense[0], &cusparse.beta, cusparse.res[0], CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse.work_buffer));
 
 		cudaDeviceSynchronize();
@@ -261,7 +261,7 @@ Benchmark benchmark_cusparse(const std::string prunning_method, const std::strin
 		cudaEventRecord(start, 0);
 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
 			CUSPARSE_CHECK(cusparseSpMM(cusparse.handle,
-				CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+				CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
 				&cusparse.alpha, cusparse.sparse, cusparse.dense[i], &cusparse.beta, cusparse.res[i], CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse.work_buffer));
 		}
 		cudaDeviceSynchronize();
@@ -272,7 +272,7 @@ Benchmark benchmark_cusparse(const std::string prunning_method, const std::strin
 		cudaEventDestroy(stop);
 
 		res.time[i] = (time * 1e-3) / BENCHMARKING_ROUNDS;
-		res.flops[i] = ((2 * BENCHMARKING_DENSE_N_ROWS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
+		res.flops[i] = ((2 * BENCHMARKING_DENSE_N_COLS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
 	}
 	CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -280,7 +280,7 @@ Benchmark benchmark_cusparse(const std::string prunning_method, const std::strin
 
 	cusparseDestroySpMat(cusparse.sparse);
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_COLS); ++i) {
 		cusparseDestroyDnMat(cusparse.dense[i]);
 		cusparseDestroyDnMat(cusparse.res[i]);
 	}
