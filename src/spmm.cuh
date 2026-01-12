@@ -40,6 +40,7 @@ bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint32_t size_idx, void (*run_kernel
 
 void run_spmm_naive_elemwise_csc_gmem(SPMM<CSC>& spmm, const uint32_t idx);
 void run_spmm_naive_elemwise_csc_smem(SPMM<CSC>& spmm, const uint32_t idx);
+void run_spmm_naive_elemwise_gmem(SPMM<CSR>& spmm, const uint32_t idx);
 void run_spmm_coalesced_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx);
 void run_spmm_blocktiling_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx);
 void run_spmm_coalesced_nnzwise(SPMM<CSC>& spmm, const uint32_t idx);

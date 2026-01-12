@@ -852,6 +852,22 @@ bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint32_t size_idx, void (*run_kernel
 	return verify_res(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size);
 }
 
+void run_spmm_naive_elemwise_gmem(SPMM<CSR>& spmm, const uint32_t idx)
+{
+	const size_t m = spmm.dev.s.rows;
+	const size_t k = spmm.dev.s.cols;
+	const size_t n = BENCHMARKING_DENSE_N_ROWS[idx];
+
+	constexpr size_t BM = 8;
+	constexpr size_t BK = BM;
+
+	assert(BM <= 32);  // otherwise threads per block exceed max
+	dim3 grid(CEIL_DIV(MAT_SIZE, BK), CEIL_DIV(m, BM));
+	dim3 block(BK, BM);
+
+	spmm_naive_elemwise_gmem<<<grid, block>>>(spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val, spmm.dev.d[idx], m, k, n, spmm.dev.r[idx]);
+}
+
 void run_spmm_naive_elemwise_csc_gmem(SPMM<CSC>& spmm, const uint32_t idx)
 {
 	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];

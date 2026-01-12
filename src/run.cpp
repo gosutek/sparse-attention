@@ -3,7 +3,6 @@
 #include <iostream>
 #include <vector>
 
-#include "Test.h"
 #include "handle.h"
 #include "matrix.h"
 #include "spmm.cuh"
@@ -330,18 +329,18 @@ int main(int argc, char* argv[])
 				}
 				break;
 			case 2:
-				// sota = benchmark_cusparse("l0_regularization/", "0.98/");
-				// custom = benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_gmem, "l0_regularization/", "0.98/");
-				//
-				// print_benchmarks("Spmm", "SOTA", "Naive elementwise CSC GMEM", "l0_regularization/", "0.98/", sota, custom);
-				for (const auto& prunning_method : prunning_methods) {
-					for (const auto& sparsity : sparsity_arr) {
-						sota = benchmark_cusparse(prunning_method, sparsity);
-						custom = benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_gmem, prunning_method, sparsity);
+				sota = benchmark_cusparse("l0_regularization/", "0.5/");
+				custom = benchmark_spmm_csr(&run_spmm_naive_elemwise_gmem, "l0_regularization/", "0.5/");
 
-						print_benchmarks("Spmm", "SOTA", "Naive elementwise CSC GMEM", prunning_method, sparsity, sota, custom);
-					}
-				}
+				// print_benchmarks("Spmm", "SOTA", "Naive elementwise CSC GMEM", "l0_regularization/", "0.98/", sota, custom);
+				// for (const auto& prunning_method : prunning_methods) {
+				// 	for (const auto& sparsity : sparsity_arr) {
+				// 		sota = benchmark_cusparse(prunning_method, sparsity);
+				// 		custom = benchmark_spmm_csc(&run_spmm_naive_elemwise_csc_gmem, prunning_method, sparsity);
+				//
+				// 		print_benchmarks("Spmm", "SOTA", "Naive elementwise CSC GMEM", prunning_method, sparsity, sota, custom);
+				// 	}
+				// }
 				break;
 			case 3:
 				// sota = benchmark_cusparse("l0_regularization/", "0.98/");
@@ -429,7 +428,6 @@ int main(int argc, char* argv[])
 		} else if (argv[i][1] == 'p') {
 			print_device_properties();
 		} else if (argv[i][1] == 't') {
-			enumerate_input_space();
 		}
 	}
 
