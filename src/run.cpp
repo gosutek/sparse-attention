@@ -230,7 +230,7 @@ Benchmark benchmark_cusparse(const std::string prunning_method, const std::strin
 	CuSparse cusparse;
 	cusparseCreate(&cusparse.handle);
 
-	std::string data_dir_path = construct_path("data/dlmc/transformer/" + prunning_method + sparsity, BodyType::Decoder, AttentionMechanism::SelfAttention, 5);
+	std::string data_dir_path = construct_path("data/dlmc/transformer/" + prunning_method + sparsity, BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
 	if (prunning_method == "random_pruning/" || prunning_method == "magnitude_pruning/") {
 		spmm.sparse_path = data_dir_path + "v_fully_connected.smtx";
 	} else {
@@ -322,11 +322,11 @@ int main(int argc, char* argv[])
 
 			switch (kernel) {
 			case 1:
-				for (const auto& prunning_method : prunning_methods) {
-					for (const auto& sparsity : sparsity_arr) {
-						sota = benchmark_cusparse(prunning_method, sparsity);
-					}
-				}
+				// for (const auto& prunning_method : prunning_methods) {
+				// 	for (const auto& sparsity : sparsity_arr) {
+				// 		sota = benchmark_cusparse(prunning_method, sparsity);
+				// 	}
+				// }
 				break;
 			case 2:
 				sota = benchmark_cusparse("l0_regularization/", "0.5/");
@@ -428,6 +428,19 @@ int main(int argc, char* argv[])
 		} else if (argv[i][1] == 'p') {
 			print_device_properties();
 		} else if (argv[i][1] == 't') {
+			if (i + 1 >= argc) {
+				print_help();
+				return EXIT_FAILURE;
+			}
+
+			int kernel = std::atoi(argv[i + 1]);
+			++i;
+
+			switch (kernel) {
+			case 1:
+				std::vector<float> sparse_rm = read_row_major_from_rm({ "test/3by3" }, 9);  // pointer copy
+				break;
+			}
 		}
 	}
 
