@@ -26,8 +26,11 @@
 void run(MHSA<CSC, CSR>& mhsa, float* res);
 void cuda_dealloc_host(void* ptr);
 
-static std::vector<float> read_row_major_from_rm(const std::filesystem::path& filepath, size_t size)
+std::vector<float> read_row_major_from_rm(const std::filesystem::path& filepath, size_t size)
 {
+	if (!std::filesystem::exists(filepath) && !std::filesystem::is_regular_file(filepath)) {
+		throw std::runtime_error(filepath.string() + " does not exist\n");
+	}
 	std::vector<float> res;
 	res.reserve(size);
 
