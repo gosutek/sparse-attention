@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <iostream>
 #include <vector>
 
@@ -37,3 +38,5 @@ std::ostream& operator<<(std::ostream& out_stream, const std::array<T, N>& arr)
 	out_stream << "]";
 	return out_stream;
 }
+
+std::vector<float> read_row_major_from_rm(const std::filesystem::path& filepath, size_t size);

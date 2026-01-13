@@ -1,11 +1,11 @@
+#include <cstdlib>
 #include <cusparse.h>
 #include <format>
-#include <iostream>
-#include <vector>
 
 #include "handle.h"
 #include "matrix.h"
 #include "spmm.cuh"
+#include "utils.h"
 
 constexpr const char* prunning_methods[] = { "l0_regularization/", "variational_dropout/", "magnitude_pruning/", "random_pruning/" };
 constexpr const char* sparsity_arr[] = { "0.5/", "0.6/", "0.7/", "0.8/", "0.9/", "0.95/", "0.98/" };
