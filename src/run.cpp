@@ -237,8 +237,6 @@ Benchmark benchmark_cusparse(const std::string prunning_method, const std::strin
 		spmm.sparse_path = data_dir_path + "v.smtx";
 	}
 
-	// WARN: Calling both of these is necessary at the moment but does double work.
-	prepare_spmm_csr(spmm);
 	prepare_cusparse_csr(spmm, cusparse);
 
 	float       time;

@@ -541,6 +541,7 @@ __global__ void softmax(
 
 void prepare_cusparse_csr(SPMM<CSR>& spmm, CuSparse& cusparse)
 {
+	prepare_spmm_csr(spmm);
 	CUSPARSE_CHECK(cusparseCreateCsr(&cusparse.sparse,
 		spmm.dev.s.rows, spmm.dev.s.cols, spmm.host.s.nnz,
 		spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val,
@@ -615,6 +616,16 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 {
 	if (!std::filesystem::exists(spmm.sparse_path) || !std::filesystem::is_regular_file(spmm.sparse_path)) {
 		throw std::runtime_error("Invalid file given: " + spmm.sparse_path.string());
+	}
+
+	// Should be nullptrs
+	if (spmm.host.data || spmm.dev.data) {
+		// TODO: Should be a recoverable exception
+		// Catch and:
+		// 1. If condition is exclusive throw a std::runtime_error
+		// 2. If both are allocated then just warn and continue
+		std::cout << "SPMM handle has been allocated/misallocated prior to the calling of this function (prepare_spmm_csr)";
+		return;
 	}
 
 	// We do a fast header parsing of the file first, to allocate exactly to the size needed
