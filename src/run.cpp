@@ -13,8 +13,8 @@ constexpr const char* custom_sparse[] = { "1024/" };
 
 struct Benchmark
 {
-	float  time[std::size(BENCHMARKING_DENSE_N_ROWS)];
-	double flops[std::size(BENCHMARKING_DENSE_N_ROWS)];
+	float  time[std::size(BENCH_DIMS)];
+	double flops[std::size(BENCH_DIMS)];
 };
 
 void print_device_properties()
@@ -73,10 +73,10 @@ void print_benchmarks(const std::string op_name, const std::string contender_1, 
 {
 	// mxkxn
 	std::vector<std::string> rows;
-	rows.reserve(std::size(BENCHMARKING_DENSE_N_ROWS));
+	rows.reserve(std::size(BENCH_DIMS));
 	const size_t padding = 20;
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		std::string shape = std::format("({:<3}, {}, {})", BENCHMARKING_DENSE_N_ROWS[i], MAT_SIZE, MAT_SIZE);
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
+		std::string shape = std::format("({:<3}, {}, {})", BENCH_DIMS[i], MAT_SIZE, MAT_SIZE);
 		std::string cu_time_str = std::format("{:.4f}", cusparse.time[i] * 1e3);
 		std::string custom_time_str = std::format("{:.4f}", custom.time[i] * 1e3);
 		std::string relative_str = std::format("{:.0f}%", (cusparse.time[i] / custom.time[i] * 100));
@@ -101,7 +101,7 @@ void print_benchmarks(const std::string op_name, const std::string contender_1, 
 			  << header
 			  << separator << "\n";
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		std::cout << rows[i];
 	}
 
@@ -146,7 +146,7 @@ Benchmark benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t), con
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		bool correct = warmup_spmm_csr(spmm, 0, run_kernel);
 		cudaEventRecord(start);
 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
@@ -158,7 +158,7 @@ Benchmark benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t), con
 		cudaEventElapsedTime(&time, start, stop);
 
 		res.time[i] = (time * 1e-3) / BENCHMARKING_ROUNDS;
-		res.flops[i] = ((2 * BENCHMARKING_DENSE_N_ROWS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
+		res.flops[i] = ((2 * BENCH_DIMS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
 	}
 
 	cudaEventDestroy(start);
@@ -194,7 +194,7 @@ Benchmark benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t), con
 	float       time;
 	cudaEvent_t start, stop;
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		bool correct = warmup_spmm_csc(spmm, 0, run_kernel);
 		cudaDeviceSynchronize();
 		cudaEventCreate(&start);
@@ -209,7 +209,7 @@ Benchmark benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const uint32_t), con
 		cudaEventElapsedTime(&time, start, stop);
 
 		res.time[i] = (time * 1e-3) / BENCHMARKING_ROUNDS;
-		res.flops[i] = ((2 * BENCHMARKING_DENSE_N_ROWS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
+		res.flops[i] = ((2 * BENCH_DIMS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
 		cudaEventDestroy(start);
 		cudaEventDestroy(stop);
 	}
@@ -244,7 +244,7 @@ Benchmark benchmark_cusparse(const std::string prunning_method, const std::strin
 	float       time;
 	cudaEvent_t start, stop;
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_COLS); ++i) {
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		// Warmup
 		CUSPARSE_CHECK(cusparseSpMM_preprocess(cusparse.handle,
 			CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -272,7 +272,7 @@ Benchmark benchmark_cusparse(const std::string prunning_method, const std::strin
 		cudaEventDestroy(stop);
 
 		res.time[i] = (time * 1e-3) / BENCHMARKING_ROUNDS;
-		res.flops[i] = ((2 * BENCHMARKING_DENSE_N_COLS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
+		res.flops[i] = ((2 * BENCH_DIMS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
 	}
 	CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -280,7 +280,7 @@ Benchmark benchmark_cusparse(const std::string prunning_method, const std::strin
 
 	cusparseDestroySpMat(cusparse.sparse);
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_COLS); ++i) {
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		cusparseDestroyDnMat(cusparse.dense[i]);
 		cusparseDestroyDnMat(cusparse.res[i]);
 	}

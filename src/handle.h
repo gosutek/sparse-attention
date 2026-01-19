@@ -12,9 +12,8 @@ constexpr size_t ALIGNMENT_BYTES = 128;
 constexpr size_t MAX_ALLOC = MAX_N_LAYERS * (5 * MAT_SIZE * MAT_SIZE);
 // constexpr uint32_t BENCHMARKING_DENSE_N_ROWS[] = { 32, 64, 128, 256, 4096 };
 // constexpr uint32_t BENCHMARKING_DENSE_N_ROWS[] = { 32, 1024, 2056, 4096, 8192 };
-constexpr uint32_t BENCHMARKING_DENSE_N_ROWS[] = { 512, 1024 };
-constexpr uint32_t BENCHMARKING_DENSE_N_COLS[] = { 512, 1024 };
-constexpr uint32_t BENCHMARKING_TOTAL_DENSE_B_SIZE = []() {uint32_t acc = 0; for ( const uint16_t size : BENCHMARKING_DENSE_N_COLS) { acc += sizeof(float) * size * MAT_SIZE;} return acc; }();
+constexpr uint32_t BENCH_DIMS[] = { 512, 1024 };
+constexpr size_t   BENCH_DIMS_BSIZE = []() {size_t acc = 0; for ( const size_t size : BENCH_DIMS) { acc += sizeof(float) * size * MAT_SIZE;} return acc; }();
 constexpr size_t   BENCHMARKING_ROUNDS = 1;
 
 // TODO: Move these to each kernel's scope.
@@ -108,9 +107,9 @@ struct SpmmMemHandle
 {
 	void* data = nullptr;
 
-	float*       d[std::size(BENCHMARKING_DENSE_N_ROWS)] = {};
+	float*       d[std::size(BENCH_DIMS)] = {};
 	WeightFormat s;
-	float*       r[std::size(BENCHMARKING_DENSE_N_ROWS)] = {};
+	float*       r[std::size(BENCH_DIMS)] = {};
 };
 
 template <typename WeightFormat>

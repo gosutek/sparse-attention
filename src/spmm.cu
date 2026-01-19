@@ -547,9 +547,9 @@ void prepare_cusparse_csr(SPMM<CSR>& spmm, CuSparse& cusparse)
 		CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
 
 	size_t tmp = 0;
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.dense[i], spmm.dev.s.cols, BENCHMARKING_DENSE_N_COLS[i], spmm.dev.s.cols, spmm.dev.d[i], CUDA_R_32F, CUSPARSE_ORDER_COL));
-		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.res[i], spmm.dev.s.rows, BENCHMARKING_DENSE_N_COLS[i], BENCHMARKING_DENSE_N_COLS[i], spmm.dev.r[i], CUDA_R_32F, CUSPARSE_ORDER_ROW));
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
+		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.dense[i], spmm.dev.s.cols, BENCH_DIMS[i], spmm.dev.s.cols, spmm.dev.d[i], CUDA_R_32F, CUSPARSE_ORDER_COL));
+		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.res[i], spmm.dev.s.rows, BENCH_DIMS[i], BENCH_DIMS[i], spmm.dev.r[i], CUDA_R_32F, CUSPARSE_ORDER_ROW));
 
 		CUSPARSE_CHECK(cusparseSpMM_bufferSize(cusparse.handle,
 			CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
@@ -573,9 +573,9 @@ void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse)
 		CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
 
 	size_t tmp = 0;
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.dense[i], BENCHMARKING_DENSE_N_ROWS[i], spmm.dev.s.rows, spmm.dev.s.rows, spmm.dev.d[i], CUDA_R_32F, CUSPARSE_ORDER_ROW));
-		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.res[i], spmm.dev.s.cols, BENCHMARKING_DENSE_N_ROWS[i], spmm.dev.s.cols, spmm.dev.r[i], CUDA_R_32F, CUSPARSE_ORDER_COL));
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
+		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.dense[i], BENCH_DIMS[i], spmm.dev.s.rows, spmm.dev.s.rows, spmm.dev.d[i], CUDA_R_32F, CUSPARSE_ORDER_ROW));
+		CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse.res[i], spmm.dev.s.cols, BENCH_DIMS[i], spmm.dev.s.cols, spmm.dev.r[i], CUDA_R_32F, CUSPARSE_ORDER_COL));
 
 		CUSPARSE_CHECK(cusparseSpMM_bufferSize(cusparse.handle,
 			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
@@ -612,14 +612,14 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
     * Once for the input
     * Twice for the result
     **/
-	spmm.b_size = sparse_b_size_aligned + 2 * BENCHMARKING_TOTAL_DENSE_B_SIZE;
+	spmm.b_size = sparse_b_size_aligned + 2 * BENCH_DIMS_BSIZE;
 	spmm.host.data = cuda_malloc_host(spmm.b_size);
 	spmm.host.d[0] = reinterpret_cast<float*>(spmm.host.data);
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_COLS); ++i) {
-		generate_token_embeddings(spmm.host.d[i], BENCHMARKING_DENSE_N_COLS[i] * MAT_SIZE);
-		if (i + 1 < std::size(BENCHMARKING_DENSE_N_COLS)) {
-			spmm.host.d[i + 1] = spmm.host.d[i] + BENCHMARKING_DENSE_N_COLS[i] * MAT_SIZE;
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
+		generate_token_embeddings(spmm.host.d[i], BENCH_DIMS[i] * MAT_SIZE);
+		if (i + 1 < std::size(BENCH_DIMS)) {
+			spmm.host.d[i + 1] = spmm.host.d[i] + BENCH_DIMS[i] * MAT_SIZE;
 		}
 	}
 
@@ -629,8 +629,8 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 	assert((reinterpret_cast<uintptr_t>(spmm.host.d[3]) & (ALIGNMENT_BYTES - 1)) == 0);
 	assert((reinterpret_cast<uintptr_t>(spmm.host.d[4]) & (ALIGNMENT_BYTES - 1)) == 0);
 
-	void* start_of_sparse = spmm.host.d[std::size(BENCHMARKING_DENSE_N_COLS) - 1] +                          // from the last ptr of spmm.host.d
-	                        BENCHMARKING_DENSE_N_COLS[std::size(BENCHMARKING_DENSE_N_COLS) - 1] * MAT_SIZE;  // skip 512 * 512 floats
+	void* start_of_sparse = spmm.host.d[std::size(BENCH_DIMS) - 1] +           // from the last ptr of spmm.host.d
+	                        BENCH_DIMS[std::size(BENCH_DIMS) - 1] * MAT_SIZE;  // skip 512 * 512 floats
 
 	// start_of_sparse is 128-byte aligned guaranteed
 	spmm.host.s = parse_dlmc(start_of_sparse, spmm.sparse_path);
@@ -642,9 +642,9 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 	uintptr_t ptr = reinterpret_cast<uintptr_t>(start_of_sparse) + spmm.host.s.b_size;
 
 	// TODO: use uintptr_t instead of pointer arithmetic on float* (??)
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_COLS); ++i) {
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		spmm.host.r[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCHMARKING_DENSE_N_COLS[i] * MAT_SIZE * sizeof(float);
+		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
 	}
 	// assert((reinterpret_cast<uintptr_t>(spmm.host.r[0]) & (ALIGNMENT_BYTES - 1)) == 0);
 	// assert((reinterpret_cast<uintptr_t>(spmm.host.r[1]) & (ALIGNMENT_BYTES - 1)) == 0);
@@ -663,14 +663,14 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
    */
 
 	spmm.dev.data = cuda_malloc_device(spmm.b_size);
-	CUDA_CHECK(cudaMemcpy(spmm.dev.data, spmm.host.data, spmm.host.s.b_size + BENCHMARKING_TOTAL_DENSE_B_SIZE, cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(spmm.dev.data, spmm.host.data, spmm.host.s.b_size + BENCH_DIMS_BSIZE, cudaMemcpyHostToDevice));
 
 	// Partition dev
 	ptr = reinterpret_cast<uintptr_t>(spmm.dev.data);
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_COLS); ++i) {
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		spmm.dev.d[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCHMARKING_DENSE_N_COLS[i] * MAT_SIZE * sizeof(float);
+		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
 	}
 
 	// TODO: This trashes the previous empty object and makes a new one. Make a good copy assignment operator function instead.
@@ -679,9 +679,9 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 
 	ptr += spmm.host.s.b_size;
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_COLS); ++i) {
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		spmm.dev.r[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCHMARKING_DENSE_N_COLS[i] * MAT_SIZE * sizeof(float);
+		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
 	}
 }
 
@@ -706,14 +706,14 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
     * Once for the input
     * Twice for the result
     **/
-	spmm.b_size = sparse_b_size_aligned + 2 * BENCHMARKING_TOTAL_DENSE_B_SIZE;
+	spmm.b_size = sparse_b_size_aligned + 2 * BENCH_DIMS_BSIZE;
 	spmm.host.data = cuda_malloc_host(spmm.b_size);
 	spmm.host.d[0] = reinterpret_cast<float*>(spmm.host.data);
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
-		generate_token_embeddings(spmm.host.d[i], BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE);
-		if (i + 1 < std::size(BENCHMARKING_DENSE_N_ROWS)) {
-			spmm.host.d[i + 1] = spmm.host.d[i] + BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE;
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
+		generate_token_embeddings(spmm.host.d[i], BENCH_DIMS[i] * MAT_SIZE);
+		if (i + 1 < std::size(BENCH_DIMS)) {
+			spmm.host.d[i + 1] = spmm.host.d[i] + BENCH_DIMS[i] * MAT_SIZE;
 		}
 	}
 
@@ -723,8 +723,8 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
 	assert((reinterpret_cast<uintptr_t>(spmm.host.d[3]) & (ALIGNMENT_BYTES - 1)) == 0);
 	assert((reinterpret_cast<uintptr_t>(spmm.host.d[4]) & (ALIGNMENT_BYTES - 1)) == 0);
 
-	void* start_of_sparse = spmm.host.d[std::size(BENCHMARKING_DENSE_N_ROWS) - 1] +                          // from the last ptr of spmm.host.d
-	                        BENCHMARKING_DENSE_N_ROWS[std::size(BENCHMARKING_DENSE_N_ROWS) - 1] * MAT_SIZE;  // skip 512 * 512 floats
+	void* start_of_sparse = spmm.host.d[std::size(BENCH_DIMS) - 1] +           // from the last ptr of spmm.host.d
+	                        BENCH_DIMS[std::size(BENCH_DIMS) - 1] * MAT_SIZE;  // skip 512 * 512 floats
 
 	// start_of_sparse is 128-byte aligned guaranteed
 	spmm.host.s = parse_csc_dlmc(start_of_sparse, spmm.sparse_path);
@@ -737,9 +737,9 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
 	uintptr_t ptr = reinterpret_cast<uintptr_t>(start_of_sparse) + spmm.host.s.b_size;
 
 	// TODO: use uintptr_t instead of pointer arithmetic on float* (??)
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		spmm.host.r[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
+		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
 	}
 	assert((reinterpret_cast<uintptr_t>(spmm.host.r[0]) & (ALIGNMENT_BYTES - 1)) == 0);
 	assert((reinterpret_cast<uintptr_t>(spmm.host.r[1]) & (ALIGNMENT_BYTES - 1)) == 0);
@@ -758,14 +758,14 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
    */
 
 	spmm.dev.data = cuda_malloc_device(spmm.b_size);
-	CUDA_CHECK(cudaMemcpy(spmm.dev.data, spmm.host.data, spmm.host.s.b_size + BENCHMARKING_TOTAL_DENSE_B_SIZE, cudaMemcpyHostToDevice));
+	CUDA_CHECK(cudaMemcpy(spmm.dev.data, spmm.host.data, spmm.host.s.b_size + BENCH_DIMS_BSIZE, cudaMemcpyHostToDevice));
 
 	// Partition dev
 	ptr = reinterpret_cast<uintptr_t>(spmm.dev.data);
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		spmm.dev.d[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
+		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
 	}
 
 	// TODO: This trashes the previous empty object and makes a new one. Make a good copy assignment operator function instead.
@@ -774,18 +774,18 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
 
 	ptr += spmm.host.s.b_size;
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		spmm.dev.r[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCHMARKING_DENSE_N_ROWS[i] * MAT_SIZE * sizeof(float);
+		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
 	}
 }
 
 bool warmup_spmm_csr(SPMM<CSR>& spmm, const uint32_t size_idx, void (*run_kernel)(SPMM<CSR>&, const uint32_t))
 {
-	const size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
+	const size_t res_size = BENCH_DIMS[size_idx] * MAT_SIZE;
 	CUDA_CHECK(cudaMemset(spmm.dev.r[size_idx], 0.0f, res_size * sizeof(float)));
 	// PERF: Bounds check
-	assert(size_idx < std::size(BENCHMARKING_DENSE_N_ROWS) - 1);
+	assert(size_idx < std::size(BENCH_DIMS) - 1);
 	run_kernel(spmm, size_idx);
 
 	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
@@ -807,7 +807,7 @@ bool warmup_spmm_csr(SPMM<CSR>& spmm, const uint32_t size_idx, void (*run_kernel
 
 	cusparseDestroySpMat(cusparse.sparse);
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		cusparseDestroyDnMat(cusparse.dense[i]);
 		cusparseDestroyDnMat(cusparse.res[i]);
 	}
@@ -818,10 +818,10 @@ bool warmup_spmm_csr(SPMM<CSR>& spmm, const uint32_t size_idx, void (*run_kernel
 
 bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint32_t size_idx, void (*run_kernel)(SPMM<CSC>&, const uint32_t))
 {
-	const size_t res_size = BENCHMARKING_DENSE_N_ROWS[size_idx] * MAT_SIZE;
+	const size_t res_size = BENCH_DIMS[size_idx] * MAT_SIZE;
 	CUDA_CHECK(cudaMemset(spmm.dev.r[size_idx], 0.0f, res_size * sizeof(float)));
 	// PERF: Bounds check
-	assert(size_idx < std::size(BENCHMARKING_DENSE_N_ROWS) - 1);  // DON'T REMOVE, YOU ARE DOING size_idx + 1 later
+	assert(size_idx < std::size(BENCH_DIMS) - 1);  // DON'T REMOVE, YOU ARE DOING size_idx + 1 later
 	run_kernel(spmm, size_idx);
 
 	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
@@ -843,7 +843,7 @@ bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint32_t size_idx, void (*run_kernel
 
 	cusparseDestroySpMat(cusparse.sparse);
 
-	for (size_t i = 0; i < std::size(BENCHMARKING_DENSE_N_ROWS); ++i) {
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		cusparseDestroyDnMat(cusparse.dense[i]);
 		cusparseDestroyDnMat(cusparse.res[i]);
 	}
@@ -856,7 +856,7 @@ void run_spmm_naive_elemwise_gmem(SPMM<CSR>& spmm, const uint32_t idx)
 {
 	const size_t m = spmm.dev.s.rows;
 	const size_t k = spmm.dev.s.cols;
-	const size_t n = BENCHMARKING_DENSE_N_ROWS[idx];
+	const size_t n = BENCH_DIMS[idx];
 
 	constexpr size_t BM = 8;
 	constexpr size_t BK = BM;
@@ -870,7 +870,7 @@ void run_spmm_naive_elemwise_gmem(SPMM<CSR>& spmm, const uint32_t idx)
 
 void run_spmm_naive_elemwise_csc_gmem(SPMM<CSC>& spmm, const uint32_t idx)
 {
-	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+	const size_t m = BENCH_DIMS[idx];
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
@@ -886,7 +886,7 @@ void run_spmm_naive_elemwise_csc_gmem(SPMM<CSC>& spmm, const uint32_t idx)
 
 void run_spmm_naive_elemwise_csc_smem(SPMM<CSC>& spmm, const uint32_t idx)
 {
-	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+	const size_t m = BENCH_DIMS[idx];
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
@@ -898,7 +898,7 @@ void run_spmm_naive_elemwise_csc_smem(SPMM<CSC>& spmm, const uint32_t idx)
 
 void run_spmm_coalesced_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx)
 {
-	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+	const size_t m = BENCH_DIMS[idx];
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
@@ -925,7 +925,7 @@ void run_spmm_coalesced_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx)
 
 void run_spmm_coalesced_nnzwise(SPMM<CSC>& spmm, const uint32_t idx)
 {
-	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+	const size_t m = BENCH_DIMS[idx];
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
@@ -939,7 +939,7 @@ void run_spmm_coalesced_nnzwise(SPMM<CSC>& spmm, const uint32_t idx)
 
 void run_spmm_coalesced_nnzwise_no_smem(SPMM<CSC>& spmm, const uint32_t idx)
 {
-	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+	const size_t m = BENCH_DIMS[idx];
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
@@ -953,7 +953,7 @@ void run_spmm_coalesced_nnzwise_no_smem(SPMM<CSC>& spmm, const uint32_t idx)
 
 void run_spmm_coalesced_nnzwise_last(SPMM<CSC>& spmm, const uint32_t idx)
 {
-	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+	const size_t m = BENCH_DIMS[idx];
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
@@ -968,7 +968,7 @@ void run_spmm_coalesced_nnzwise_last(SPMM<CSC>& spmm, const uint32_t idx)
 
 void run_spmm_vectorized_nnzwise_regs(SPMM<CSC>& spmm, const uint32_t idx)
 {
-	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
+	const size_t m = BENCH_DIMS[idx];
 	const size_t k = spmm.dev.s.rows;
 	const size_t n = spmm.dev.s.cols;
 
