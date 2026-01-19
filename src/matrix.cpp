@@ -160,31 +160,6 @@ std::string construct_path(const std::filesystem::path base_path, const BodyType
 	return path;
 }
 
-Tensor read_tensor(const DLMC& dlmc, const BodyType bt, const AttentionMechanism am, const size_t layer, const SparseMatrixType sparse_matrix_type)
-{
-	Tensor tensor;
-
-	std::string data_dir_string = construct_path(dlmc.base_path + dlmc.pruning_method + dlmc.sparsity, bt, am, layer);
-
-	for (size_t i = 0; i < dlmc.suffixes.size(); ++i) {
-		const auto full_path = tensor.path.string() + dlmc.suffixes[i];
-		if (!std::filesystem::exists(full_path) || !std::filesystem::is_regular_file(full_path)) {
-			throw std::runtime_error("Tensor component doesn't exist: " + full_path);
-		}
-
-		std::ifstream file_stream(full_path);
-		DLMCHeader    header = parse_dlmc_header(file_stream);
-
-		if (sparse_matrix_type == SparseMatrixType::CSC) {
-			tensor.b_size += calc_sparse_b_size(header.n_cols, header.nnz);
-		} else {
-			tensor.b_size += calc_sparse_b_size(header.n_rows, header.nnz);
-		}
-		tensor.shape[i] = std::move(header);
-	}
-	return tensor;
-}
-
 static CSR read_mask(const DLMC& dlmc, const size_t sequence_size, const size_t band_size_ratio, const size_t sparsity)
 {
 	const std::filesystem::path path = std::format("{}{}{}m_{}_0{}_{}.smtx",
