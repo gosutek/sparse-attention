@@ -612,7 +612,7 @@ void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse)
  * 6. Copies mem block to device
  * 7. Partitions the device mem block
  */
-void prepare_spmm_csr(SPMM<CSR>& spmm)
+void load_spmm_csr(SPMM<CSR>& spmm)
 {
 	if (!std::filesystem::exists(spmm.sparse_path) || !std::filesystem::is_regular_file(spmm.sparse_path)) {
 		throw std::runtime_error("Invalid file given: " + spmm.sparse_path.string());
@@ -635,7 +635,7 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 	size_t row_ptr_b_size = sizeof(uint32_t) * (header.n_rows + 1);
 	size_t col_idx_b_size = sizeof(uint32_t) * header.nnz;
 	size_t val_b_size = sizeof(float) * header.nnz;
-	// TODO: Does calc_padding_bytes() return anything other than 0?
+	//TODO: Does calc_padding_bytes() return anything other than 0?
 	// Do I need this?
 	size_t sparse_b_size_aligned = row_ptr_b_size + calc_padding_bytes(row_ptr_b_size, ALIGNMENT_BYTES) +
 	                               col_idx_b_size + calc_padding_bytes(col_idx_b_size, ALIGNMENT_BYTES) +
@@ -644,8 +644,10 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 	// Allocate for Input + Result
 	spmm.b_size = sparse_b_size_aligned + 2 * BENCH_DIMS_BSIZE;
 	spmm.host.data = cuda_malloc_host(spmm.b_size);
-	spmm.host.d[0] = reinterpret_cast<float*>(spmm.host.data);
+	spmm.host.s = parse_dlmc(spmm.host.data, spmm.sparse_path);
 
+	void* start_of_dense = reinterpret_cast<uintptr_t>(spmm.host.s.row_ptr) + spmm.host.s.b_size;  // at the start of the sparse matrix, skip spmm.host.s.b_size bytes.
+	spmm.host.d[0] = reinterpret_cast<float*>(start_of_dense);
 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		generate_token_embeddings(spmm.host.d[i], BENCH_DIMS[i] * MAT_SIZE);
 		if (i + 1 < std::size(BENCH_DIMS)) {
@@ -653,44 +655,16 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 		}
 	}
 
-	assert((reinterpret_cast<uintptr_t>(spmm.host.d[0]) & (ALIGNMENT_BYTES - 1)) == 0);
-	assert((reinterpret_cast<uintptr_t>(spmm.host.d[1]) & (ALIGNMENT_BYTES - 1)) == 0);
-	assert((reinterpret_cast<uintptr_t>(spmm.host.d[2]) & (ALIGNMENT_BYTES - 1)) == 0);
-	assert((reinterpret_cast<uintptr_t>(spmm.host.d[3]) & (ALIGNMENT_BYTES - 1)) == 0);
-	assert((reinterpret_cast<uintptr_t>(spmm.host.d[4]) & (ALIGNMENT_BYTES - 1)) == 0);
-
-	void* start_of_sparse = spmm.host.d[std::size(BENCH_DIMS) - 1] +           // from the last ptr of spmm.host.d
-	                        BENCH_DIMS[std::size(BENCH_DIMS) - 1] * MAT_SIZE;  // skip 512 * 512 floats
-
-	// start_of_sparse is 128-byte aligned guaranteed
-	spmm.host.s = parse_dlmc(start_of_sparse, spmm.sparse_path);
-
-	assert((reinterpret_cast<uintptr_t>(spmm.host.s.row_ptr) & (ALIGNMENT_BYTES - 1)) == 0);
-	assert((reinterpret_cast<uintptr_t>(spmm.host.s.col_idx) & (ALIGNMENT_BYTES - 1)) == 0);
-	assert((reinterpret_cast<uintptr_t>(spmm.host.s.val) & (ALIGNMENT_BYTES - 1)) == 0);
-
-	uintptr_t ptr = reinterpret_cast<uintptr_t>(start_of_sparse) + spmm.host.s.b_size;
+	uintptr_t ptr = reinterpret_cast<uintptr_t>(start_of_dense) + BENCH_DIMS[std::size(BENCH_DIMS) - 1] * MAT_SIZE;  // skip the dense matrix
 
 	// TODO: use uintptr_t instead of pointer arithmetic on float* (??)
 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		spmm.host.r[i] = reinterpret_cast<float*>(ptr);
 		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
 	}
-	// assert((reinterpret_cast<uintptr_t>(spmm.host.r[0]) & (ALIGNMENT_BYTES - 1)) == 0);
-	// assert((reinterpret_cast<uintptr_t>(spmm.host.r[1]) & (ALIGNMENT_BYTES - 1)) == 0);
-	// assert((reinterpret_cast<uintptr_t>(spmm.host.r[2]) & (ALIGNMENT_BYTES - 1)) == 0);
-	// assert((reinterpret_cast<uintptr_t>(spmm.host.r[3]) & (ALIGNMENT_BYTES - 1)) == 0);
-	// assert((reinterpret_cast<uintptr_t>(spmm.host.r[4]) & (ALIGNMENT_BYTES - 1)) == 0);
 
 	// WARN: asserts cost
 	assert(sparse_b_size_aligned == spmm.host.s.b_size);
-
-	/*
-      * +------+------+-------+-------+-------+---------+---------+-----+------+------+-------+-------+-------+
-      * | x_32 | x_64 | x_128 | x_256 | x_512 | col_ptr | row_idx | val | r_32 | r_64 | r_128 | r_256 | r_512 |
-      * +------+------+-------+-------+-------+---------+---------+-----+------+------+-----+---+-------------+
-      * +------------------------------------------HOST/DEVICE------------------------------------------------+
-   */
 
 	spmm.dev.data = cuda_malloc_device(spmm.b_size);
 	CUDA_CHECK(cudaMemcpy(spmm.dev.data, spmm.host.data, spmm.host.s.b_size + BENCH_DIMS_BSIZE, cudaMemcpyHostToDevice));
@@ -698,16 +672,16 @@ void prepare_spmm_csr(SPMM<CSR>& spmm)
 	// Partition dev
 	ptr = reinterpret_cast<uintptr_t>(spmm.dev.data);
 
-	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
-		spmm.dev.d[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
-	}
-
 	// TODO: This trashes the previous empty object and makes a new one. Make a good copy assignment operator function instead.
 	spmm.dev.s = CSR(spmm.host.s.rows, spmm.host.s.cols, spmm.host.s.nnz);
 	spmm.dev.s.partition(ptr);
 
 	ptr += spmm.host.s.b_size;
+
+	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
+		spmm.dev.d[i] = reinterpret_cast<float*>(ptr);
+		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
+	}
 
 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		spmm.dev.r[i] = reinterpret_cast<float*>(ptr);

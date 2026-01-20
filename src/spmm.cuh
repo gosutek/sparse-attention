@@ -32,7 +32,7 @@ void* cuda_malloc_host(size_t b_size);
 void  cuda_dealloc_host(void* ptr);
 void  cuda_dealloc_device(void* ptr);
 
-void prepare_spmm_csr(SPMM<CSR>& spmm);
+void load_spmm_csr(SPMM<CSR>& spmm);
 void prepare_spmm_csc(SPMM<CSC>& spmm);
 
 bool warmup_spmm_csr(SPMM<CSR>& spmm, const uint32_t size_idx, void (*run_kernel)(SPMM<CSR>&, const uint32_t));
