@@ -541,7 +541,9 @@ __global__ void softmax(
 
 void prepare_cusparse_csr(SPMM<CSR>& spmm, CuSparse& cusparse)
 {
-	prepare_spmm_csr(spmm);
+	if (!spmm.host.data || !spmm.dev.data) {
+		throw std::runtime_error("prepare_cusparse_csr() received a unallocated SPMM<CSR>&");
+	}
 	CUSPARSE_CHECK(cusparseCreateCsr(&cusparse.sparse,
 		spmm.dev.s.rows, spmm.dev.s.cols, spmm.host.s.nnz,
 		spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val,
