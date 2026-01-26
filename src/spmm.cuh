@@ -50,6 +50,8 @@ void load_spmm_dlmc(SPMM<CSR>& spmm, const std::filesystem::path& sparse_path, c
 /* @brief Expects an empty `spmm` and the filepath to the sparse matrix in DLMC format. Randomly generates the dense matrix. */
 void load_spmm_dlmc_with_generated_dense(SPMM<CSR>& spmm, const std::filesystem::path& sparse_path);
 
+void preprocess_spmm_dlmc(SPMM<CSR>& spmm, const std::filesystem::path& sparse_path, const std::filesystem::path& dense_path);
+
 size_t get_row_major_byte_size(const RowMajorHeader& header);
 size_t get_dlmc_byte_size(const DLMCHeader& header);
 

@@ -596,9 +596,23 @@ void load_spmm_dlmc(SPMM<CSR>& spmm, const std::filesystem::path& sparse_path, c
 
 }
 
+// TODO: Don't pass dense_path, instead you need a list of files here.
+void preprocess_spmm_dlmc(SPMM<CSR>& spmm, const std::filesystem::path& sparse_path, const std::filesystem::path& dense_path)
 {
-	std::ifstream file_stream = { path };
-	DLMCHeader    header = parse_dlmc_header(file_stream);
+	std::ifstream sparse_stream = { sparse_path };
+	std::ifstream dense_stream = { dense_path };
+
+	DLMCHeader     sparse_header = parse_dlmc_header(sparse_stream);
+	RowMajorHeader dense_header = parse_row_major_header(dense_stream);
+
+	if (sparse_header.n_cols != dense_header.n_rows) {
+		// TODO: Move exceptions outside of cuda files
+		throw std::runtime_error("Wrong dimensions");
+	}
+
+	spmm.b_size = get_dlmc_byte_size(sparse_header) + get_row_major_byte_size(dense_header);
+}
+
 // TODO: Move this to matrix.h
 size_t get_row_major_byte_size(const RowMajorHeader& header)
 {
