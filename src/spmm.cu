@@ -594,6 +594,21 @@ void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse)
 	}
 }
 
+size_t peek_dlmc_size(SPMM<CSR>& spmm, const std::filesystem::path& path)
+{
+	std::ifstream file_stream = { path };
+	DLMCHeader    header = parse_dlmc_header(file_stream);
+
+	size_t row_ptr_b_size = sizeof(uint32_t) * (header.n_rows + 1);
+	size_t col_idx_b_size = sizeof(uint32_t) * header.nnz;
+	size_t val_b_size = sizeof(float) * header.nnz;
+	//TODO: Does calc_padding_bytes() return anything other than 0?
+	// Do I need this?
+	return row_ptr_b_size + calc_padding_bytes(row_ptr_b_size, ALIGNMENT_BYTES) +
+	       col_idx_b_size + calc_padding_bytes(col_idx_b_size, ALIGNMENT_BYTES) +
+	       val_b_size + calc_padding_bytes(val_b_size, ALIGNMENT_BYTES);
+}
+
 /**
  * @brief Parsing, allocation and loading of both sparse and dense
  *
@@ -606,8 +621,6 @@ void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse)
  *
  * where 'x' the dense matrices, 'r' the result matrices and 'n' = std::size(DENSE_COLS);
  *
- * 1. Parses DLMC Header
- * 2. Calculates byte sizes
  * 3. Allocates host space
  * 4. Generates the dense matrix and loads into host mem
  * 5. Parses the sparse matrix and loads into host mem
@@ -630,21 +643,6 @@ void load_spmm_csr(SPMM<CSR>& spmm)
 		return;
 	}
 
-	// We do a fast header parsing of the file first, to allocate exactly to the size needed
-	std::ifstream file_stream = { spmm.sparse_path };
-	DLMCHeader    header = parse_dlmc_header(file_stream);
-
-	size_t row_ptr_b_size = sizeof(uint32_t) * (header.n_rows + 1);
-	size_t col_idx_b_size = sizeof(uint32_t) * header.nnz;
-	size_t val_b_size = sizeof(float) * header.nnz;
-	//TODO: Does calc_padding_bytes() return anything other than 0?
-	// Do I need this?
-	size_t sparse_b_size_aligned = row_ptr_b_size + calc_padding_bytes(row_ptr_b_size, ALIGNMENT_BYTES) +
-	                               col_idx_b_size + calc_padding_bytes(col_idx_b_size, ALIGNMENT_BYTES) +
-	                               val_b_size + calc_padding_bytes(val_b_size, ALIGNMENT_BYTES);
-
-	// Allocate for Input + Result
-	spmm.b_size = sparse_b_size_aligned + 2 * BENCH_DIMS_BSIZE;
 	spmm.host.data = cuda_malloc_host(spmm.b_size);
 	spmm.host.s = parse_dlmc(spmm.host.data, spmm.sparse_path);
 

@@ -33,6 +33,10 @@ void  cuda_dealloc_host(void* ptr);
 void  cuda_dealloc_device(void* ptr);
 
 void load_spmm_csr(SPMM<CSR>& spmm);
+
+/* @brief Parses the DLMC header and sets the `b_size` members of `spmm`. */
+size_t peek_dlmc_size(SPMM<CSR>& spmm, const std::filesystem::path& path);
+
 void prepare_spmm_csc(SPMM<CSC>& spmm);
 
 bool warmup_spmm_csr(SPMM<CSR>& spmm, const uint32_t size_idx, void (*run_kernel)(SPMM<CSR>&, const uint32_t));
