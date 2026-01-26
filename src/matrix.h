@@ -126,6 +126,7 @@ std::vector<float> csc_to_col_major(const CSC& mat);
 float              measure_sparsity(void* s, size_t size);
 size_t             calc_sparse_b_size(const size_t n, const size_t nnz);
 DLMCHeader         parse_dlmc_header(std::ifstream& file_stream);
+RowMajorHeader     parse_row_major_header(std::ifstream& file_stream);
 void               generate_token_embeddings(void* dst, size_t size);
 CSR                parse_dlmc(void* dst, const std::filesystem::path& filepath);
 CSC                parse_csc_dlmc(void* dst, const std::filesystem::path& filepath);

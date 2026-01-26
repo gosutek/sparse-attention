@@ -58,6 +58,23 @@ DLMCHeader parse_dlmc_header(std::ifstream& file_stream)
 	return res;
 }
 
+RowMajorHeader parse_row_major_header(std::ifstream& file_stream)
+{
+	RowMajorHeader res;
+	std::string    token;
+	std::string    header_line;
+	std::getline(file_stream, header_line);
+
+	std::istringstream header_stream(header_line);
+	std::getline(header_stream, token, ',');
+	res.n_rows = static_cast<size_t>(std::stoi(token));
+
+	std::getline(header_stream, token, ',');
+	res.n_cols = static_cast<size_t>(std::stoi(token));
+
+	return res;
+}
+
 /*
  * Calculates the size of a CSR or CSC matrix in bytes for float values
  * Accounts for non-square matrices

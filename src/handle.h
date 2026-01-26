@@ -42,6 +42,11 @@ struct DLMCHeader
 	size_t n_rows{}, n_cols{}, nnz{};
 };
 
+struct RowMajorHeader
+{
+	size_t n_rows{}, n_cols{};
+};
+
 /**
  * A tensor of the 4 weight matrices
  * of a single layer
@@ -115,7 +120,7 @@ struct SpmmMemHandle
 template <typename WeightFormat>
 struct SPMM
 {
-	std::filesystem::path sparse_path;
+	std::filesystem::path sparse_path;  // TODO: Remove this crap.
 	size_t                b_size = 0;
 
 	SpmmMemHandle<WeightFormat> host;
