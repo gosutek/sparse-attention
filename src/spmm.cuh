@@ -32,11 +32,15 @@ void* cuda_malloc_host(size_t b_size);
 void  cuda_dealloc_host(void* ptr);
 void  cuda_dealloc_device(void* ptr);
 
-void load_spmm_csr(SPMM<CSR>& spmm);
+/* @brief Expects an empty `spmm` and filepaths to both sparse (DLMC format) and dense matrix (first line size, second line data in row major). */
+void load_spmm_dlmc(SPMM<CSR>& spmm, const std::filesystem::path& sparse_path, const std::filesystem::path& dense_path);
+/* @brief Expects an empty `spmm` and the filepath to the sparse matrix in DLMC format. Randomly generates the dense matrix. */
+void load_spmm_dlmc_with_generated_dense(SPMM<CSR>& spmm, const std::filesystem::path& sparse_path);
 
 /* @brief Parses the DLMC header and sets the `b_size` members of `spmm`. */
 size_t peek_dlmc_size(SPMM<CSR>& spmm, const std::filesystem::path& path);
 
+void prepare_spmm_mem_csr(SPMM<CSR>& spmm);
 void prepare_spmm_csc(SPMM<CSC>& spmm);
 
 bool warmup_spmm_csr(SPMM<CSR>& spmm, const uint32_t size_idx, void (*run_kernel)(SPMM<CSR>&, const uint32_t));

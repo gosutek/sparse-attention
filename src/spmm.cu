@@ -594,6 +594,10 @@ void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse)
 	}
 }
 
+void load_spmm_dlmc(SPMM<CSR>& spmm, const std::filesystem::path& sparse_path, const std::filesystem::path& dense_path)
+{
+}
+
 size_t peek_dlmc_size(SPMM<CSR>& spmm, const std::filesystem::path& path)
 {
 	std::ifstream file_stream = { path };
@@ -621,13 +625,13 @@ size_t peek_dlmc_size(SPMM<CSR>& spmm, const std::filesystem::path& path)
  *
  * where 'x' the dense matrices, 'r' the result matrices and 'n' = std::size(DENSE_COLS);
  *
- * 3. Allocates host space
- * 4. Generates the dense matrix and loads into host mem
- * 5. Parses the sparse matrix and loads into host mem
- * 6. Copies mem block to device
- * 7. Partitions the device mem block
+ * 1. Allocates host space
+ * 2. Generates the dense matrix and loads into host mem ~~~~~~~~~~~~~~~~~~
+ * 3. Parses the sparse matrix and loads into host mem
+ * 4. Copies mem block to device
+ * 5. Partitions the device mem block
  */
-void load_spmm_csr(SPMM<CSR>& spmm)
+void prepare_spmm_mem_csr(SPMM<CSR>& spmm)
 {
 	if (!std::filesystem::exists(spmm.sparse_path) || !std::filesystem::is_regular_file(spmm.sparse_path)) {
 		throw std::runtime_error("Invalid file given: " + spmm.sparse_path.string());

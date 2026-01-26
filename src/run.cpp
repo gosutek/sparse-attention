@@ -139,7 +139,7 @@ Benchmark benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const uint32_t), con
 		spmm.sparse_path = data_dir_path + "q.smtx";
 	}
 
-	load_spmm_csr(spmm);
+	prepare_spmm_mem_csr(spmm);
 
 	float       time;
 	cudaEvent_t start, stop;
@@ -328,7 +328,7 @@ int main(int argc, char* argv[])
       *    |                                       ALLOCATING                                         |
       *    +------------------------------------------------------------------------------------------+
       */
-			load_spmm_csr(spmm);
+			prepare_spmm_mem_csr(spmm);
 
 			switch (kernel) {
 			case 1:
