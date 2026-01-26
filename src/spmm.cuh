@@ -37,8 +37,8 @@ void load_spmm_dlmc(SPMM<CSR>& spmm, const std::filesystem::path& sparse_path, c
 /* @brief Expects an empty `spmm` and the filepath to the sparse matrix in DLMC format. Randomly generates the dense matrix. */
 void load_spmm_dlmc_with_generated_dense(SPMM<CSR>& spmm, const std::filesystem::path& sparse_path);
 
-/* @brief Parses the DLMC header and sets the `b_size` members of `spmm`. */
-size_t peek_dlmc_size(SPMM<CSR>& spmm, const std::filesystem::path& path);
+/* @brief Parses the DLMC header and returns the total byte size. */
+size_t peek_dlmc_size(const std::filesystem::path& path);
 
 void prepare_spmm_mem_csr(SPMM<CSR>& spmm);
 void prepare_spmm_csc(SPMM<CSC>& spmm);

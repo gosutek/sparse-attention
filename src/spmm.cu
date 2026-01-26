@@ -599,6 +599,7 @@ void load_spmm_dlmc(SPMM<CSR>& spmm, const std::filesystem::path& sparse_path, c
 }
 
 size_t peek_dlmc_size(SPMM<CSR>& spmm, const std::filesystem::path& path)
+size_t peek_dlmc_size(const std::filesystem::path& path)
 {
 	std::ifstream file_stream = { path };
 	DLMCHeader    header = parse_dlmc_header(file_stream);
