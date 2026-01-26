@@ -1,18 +1,8 @@
-#include <cassert>
-#include <cstddef>
-#include <cstdint>
-#include <cstdio>
-#include <cstring>
-#include <cusparse.h>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <stdexcept>
-
 #include "handle.h"
 #include "matrix.h"
 #include "spmm.cuh"
 #include "utils.h"
+#include <stdexcept>
 
 void* cuda_malloc_device(size_t b_size)
 {
