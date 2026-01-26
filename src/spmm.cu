@@ -586,6 +586,14 @@ void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse)
 
 void load_spmm_dlmc(SPMM<CSR>& spmm, const std::filesystem::path& sparse_path, const std::filesystem::path& dense_path)
 {
+	if (!std::filesystem::exists(sparse_path) || !std::filesystem::is_regular_file(sparse_path)) {
+		// TODO: Move exceptions outside of cuda files
+		throw std::runtime_error("Invalid sparse path given: " + sparse_path.string());
+	} else if (!std::filesystem::exists(dense_path) || !std::filesystem::is_regular_file(sparse_path)) {
+		// TODO: Move exceptions outside of cuda files
+		throw std::runtime_error("Invalid dense path given");
+	}
+
 }
 
 size_t peek_dlmc_size(SPMM<CSR>& spmm, const std::filesystem::path& path)
@@ -624,10 +632,6 @@ size_t peek_dlmc_size(const std::filesystem::path& path)
  */
 void prepare_spmm_mem_csr(SPMM<CSR>& spmm)
 {
-	if (!std::filesystem::exists(spmm.sparse_path) || !std::filesystem::is_regular_file(spmm.sparse_path)) {
-		throw std::runtime_error("Invalid file given: " + spmm.sparse_path.string());
-	}
-
 	// Should be nullptrs
 	if (spmm.host.data || spmm.dev.data) {
 		// TODO: Should be a recoverable exception
