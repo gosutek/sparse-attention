@@ -599,6 +599,11 @@ void load_spmm_dlmc(SPMM<CSR>& spmm, const std::filesystem::path& sparse_path, c
 {
 	std::ifstream file_stream = { path };
 	DLMCHeader    header = parse_dlmc_header(file_stream);
+// TODO: Move this to matrix.h
+size_t get_row_major_byte_size(const RowMajorHeader& header)
+{
+	return header.n_rows * header.n_cols * sizeof(float);
+}
 
 // TODO: Move this to matrix.h
 size_t get_dlmc_byte_size(const DLMCHeader& header)
