@@ -15,22 +15,22 @@
 		}                                                              \
 	} while (0)
 
+std::string construct_path(const std::filesystem::path base_path, const BodyType bt, const AttentionMechanism am, const size_t layer)
 {
-	if (!std::filesystem::exists(filepath) && !std::filesystem::is_regular_file(filepath)) {
-		throw std::runtime_error(filepath.string() + " does not exist\n");
+	std::string path = base_path;
+	if (bt == BodyType::Encoder) {
+		path += "body_encoder_";
+	} else {
+		path += "body_decoder_";
 	}
-	std::vector<float> res;
-	res.reserve(size);
+	path += "layer_" + std::to_string(layer) + "_";
 
-	std::ifstream file_stream(filepath, std::ios_base::in);
-	if (!file_stream) {
-		throw std::runtime_error("Failed to open file:" + filepath.string());
+	if (am == AttentionMechanism::SelfAttention) {
+		path += "self_attention_multihead_attention_";
+	} else {
+		path += "encdec_attention_multihead_attention_";
 	}
-	float tmp;
-	while (file_stream >> tmp) {
-		res.push_back(tmp);
-	}
-	return res;
+	return path;
 }
 
 /*
