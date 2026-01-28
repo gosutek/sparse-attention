@@ -353,7 +353,7 @@ int main(int argc, char* argv[])
 				cuda_dealloc_host(spmm.host.data);
 			}
 			if (spmm.dev.data) {
-				cuda_dealloc_host(spmm.dev.data);
+				cuda_dealloc_device(spmm.dev.data);
 			}
 		} else if (argv[i][1] == 'l') {
 			list_kernels();
