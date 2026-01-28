@@ -15,24 +15,6 @@
 		}                                                              \
 	} while (0)
 
-std::string construct_path(const std::filesystem::path base_path, const BodyType bt, const AttentionMechanism am, const size_t layer)
-{
-	std::string path = base_path;
-	if (bt == BodyType::Encoder) {
-		path += "body_encoder_";
-	} else {
-		path += "body_decoder_";
-	}
-	path += "layer_" + std::to_string(layer) + "_";
-
-	if (am == AttentionMechanism::SelfAttention) {
-		path += "self_attention_multihead_attention_";
-	} else {
-		path += "encdec_attention_multihead_attention_";
-	}
-	return path;
-}
-
 /*
  * a(m, k)
  * b(k, n)

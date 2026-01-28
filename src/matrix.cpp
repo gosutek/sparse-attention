@@ -1,16 +1,5 @@
 #include "matrix.h"
 
-void* cuda_malloc_host(size_t size);
-void  cuda_dealloc_host(void* ptr);
-
-/*
- * w_q
- * w_k
- * w_v
- * w_o
- * x
- */
-
 void generate_token_embeddings(void* dst, size_t size)
 {
 	float* ptr = reinterpret_cast<float*>(dst);
@@ -47,6 +36,9 @@ DLMCHeader parse_dlmc_header(std::ifstream& file_stream)
 	return res;
 }
 
+/*
+ * WARN: This moves the filestream pointer
+ */
 RowMajorHeader parse_row_major_header(std::ifstream& file_stream)
 {
 	RowMajorHeader res;
@@ -165,22 +157,6 @@ std::vector<float> read_row_major_from_rm(const std::filesystem::path& filepath,
 		res.push_back(tmp);
 	}
 	return res;
-}
-
-static CSR read_mask(const DLMC& dlmc, const size_t sequence_size, const size_t band_size_ratio, const size_t sparsity)
-{
-	const std::filesystem::path path = std::format("{}{}{}m_{}_0{}_{}.smtx",
-		dlmc.base_path, dlmc.pruning_method, dlmc.sparsity,
-		sequence_size, band_size_ratio, sparsity);
-
-	if (!std::filesystem::exists(path) || !std::filesystem::is_regular_file(path)) {
-		throw std::runtime_error("Mask file doesn't exist: " + path.stem().string());
-	}
-
-	std::ifstream file_stream(path);
-	DLMCHeader    header = parse_dlmc_header(file_stream);
-
-	return { header.n_rows, header.n_cols, header.nnz };
 }
 
 CSR parse_dlmc(void* dst, const std::filesystem::path& filepath)

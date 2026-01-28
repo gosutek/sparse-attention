@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <iostream>
 #include <vector>
@@ -41,5 +42,3 @@ std::ostream& operator<<(std::ostream& out_stream, const std::array<T, N>& arr)
 	out_stream << "]";
 	return out_stream;
 }
-
-std::string construct_path(const std::filesystem::path base_path, const BodyType bt, const AttentionMechanism am, const size_t layer);
