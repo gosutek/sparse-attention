@@ -1,8 +1,11 @@
 #pragma once
 
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <vector>
+
+#include "handle.h"
 
 bool verify_res(const float* const actual, const float* const expected, size_t n);
 

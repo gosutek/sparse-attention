@@ -1,13 +1,5 @@
 #include "utils.h"
 
-#include <cmath>
-#include <filesystem>
-#include <format>
-#include <fstream>
-#include <stdexcept>
-
-#include "matrix.h"
-
 #ifndef MAT_SIZE
 #	define MAT_SIZE 512
 #endif
