@@ -14,6 +14,16 @@ enum class SparseMatrixType
 	CSR
 };
 
+struct DLMCHeader
+{
+	size_t n_rows{}, n_cols{}, nnz{};
+};
+
+struct RowMajorHeader
+{
+	size_t n_rows{}, n_cols{};
+};
+
 /**
  * Doesn't and shouldn't own any
  * resources pointed to by row_ptr, col_idx, val
@@ -24,17 +34,17 @@ struct CSR
 	uint32_t* col_idx = nullptr;
 	float*    val = nullptr;
 
-	size_t rows{}, cols{}, nnz{};
+	size_t nrows{}, ncols{}, nnz{};
 	size_t row_ptr_size{}, col_idx_size{}, val_size{};
 
 	size_t b_size{};
 
 	CSR() {}
 
-	CSR(size_t _rows, size_t _cols, size_t _nnz) :
-		rows(_rows), cols(_cols), nnz(_nnz)
+	CSR(size_t rows, size_t cols, size_t nnz) :
+		nrows(rows), ncols(cols), nnz(nnz)
 	{
-		row_ptr_size = rows + 1;
+		row_ptr_size = nrows + 1;
 		col_idx_size = nnz;
 		val_size = nnz;
 
@@ -47,13 +57,13 @@ struct CSR
 		         val_b_size + calc_padding_bytes(val_b_size, ALIGNMENT_BYTES);
 	}
 
-	CSR(const CSR& other) :
-		rows(other.rows), cols(other.cols), nnz(other.nnz),
-		row_ptr_size(other.row_ptr_size), col_idx_size(other.col_idx_size), val_size(other.val_size),
-		b_size(other.b_size) {}
+	CSR(const CSR& other) = default;
 
 	CSR& operator=(const CSR& other) = default;
+
 	CSR(CSR&& other) = default;
+
+	CSR& operator=(CSR&& other) = default;
 
 	void partition(uintptr_t ptr)
 	{
@@ -79,18 +89,17 @@ struct CSC
 	uint32_t* row_idx = nullptr;
 	float*    val = nullptr;
 
-	size_t rows{}, cols{}, nnz{};
+	size_t nrows{}, ncols{}, nnz{};
 	size_t col_ptr_size{}, row_idx_size{}, val_size{};
 
 	size_t b_size{};
-	size_t max_nnz_per_col{};
 
 	CSC() {}
 
-	CSC(size_t _rows, size_t _cols, size_t _nnz) :
-		rows(_rows), cols(_cols), nnz(_nnz)
+	CSC(size_t rows, size_t cols, size_t nnz) :
+		nrows(rows), ncols(cols), nnz(nnz)
 	{
-		col_ptr_size = cols + 1;
+		col_ptr_size = ncols + 1;
 		row_idx_size = nnz;
 		val_size = nnz;
 
@@ -103,13 +112,13 @@ struct CSC
 		         val_b_size + calc_padding_bytes(val_b_size, ALIGNMENT_BYTES);
 	}
 
-	CSC(const CSC& other) :
-		rows(other.rows), cols(other.cols), nnz(other.nnz),
-		col_ptr_size(other.col_ptr_size), row_idx_size(other.row_idx_size), val_size(other.val_size),
-		b_size(other.b_size), max_nnz_per_col(other.max_nnz_per_col) {}
+	CSC(const CSC& other) = default;
 
 	CSC& operator=(const CSC& other) = default;
+
 	CSC(CSC&& other) = default;
+
+	CSC& operator=(CSC&& other) = default;
 
 	void partition(uintptr_t ptr)
 	{

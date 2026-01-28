@@ -37,16 +37,6 @@ enum class AttentionMechanism
 	CrossAttention
 };
 
-struct DLMCHeader
-{
-	size_t n_rows{}, n_cols{}, nnz{};
-};
-
-struct RowMajorHeader
-{
-	size_t n_rows{}, n_cols{};
-};
-
 /**
  * A tensor of the 4 weight matrices
  * of a single layer

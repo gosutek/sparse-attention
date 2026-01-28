@@ -78,7 +78,7 @@ size_t calc_sparse_b_size(const size_t n, const size_t nnz)
 	return b_ptr_size + b_idx_size + b_val_size;
 }
 
-size_t calc_max_nnz_per_col(const CSC& csc)
+[[maybe_unused]] size_t calc_max_nnz_per_col(const CSC& csc)
 {
 	uint32_t res = 0;
 	for (size_t i = 0; i < csc.col_ptr_size - 1; ++i) {
@@ -87,25 +87,25 @@ size_t calc_max_nnz_per_col(const CSC& csc)
 	return res;
 }
 
-std::vector<float> csr_to_row_major(const CSR& mat)
+[[maybe_unused]] std::vector<float> csr_to_row_major(const CSR& mat)
 {
-	std::vector<float> res(mat.rows * mat.cols, 0.0f);
+	std::vector<float> res(mat.nrows * mat.ncols, 0.0f);
 
-	for (size_t i = 0; i < mat.rows; ++i) {
+	for (size_t i = 0; i < mat.nrows; ++i) {
 		for (size_t j = mat.row_ptr[i]; j < mat.row_ptr[i + 1]; ++j) {
-			res[i * mat.cols + mat.col_idx[j]] = mat.val[j];
+			res[i * mat.ncols + mat.col_idx[j]] = mat.val[j];
 		}
 	}
 	return res;
 }
 
-std::vector<float> csc_to_col_major(const CSC& mat)
+[[maybe_unused]] std::vector<float> csc_to_col_major(const CSC& mat)
 {
-	std::vector<float> res(mat.rows * mat.cols, 0.0f);
+	std::vector<float> res(mat.nrows * mat.ncols, 0.0f);
 
-	for (size_t i = 0; i < mat.cols; ++i) {
+	for (size_t i = 0; i < mat.ncols; ++i) {
 		for (size_t j = mat.col_ptr[i]; j < mat.col_ptr[i + 1]; ++j) {
-			res[i * mat.rows + mat.row_idx[j]] = mat.val[j];
+			res[i * mat.nrows + mat.row_idx[j]] = mat.val[j];
 		}
 	}
 	return res;
@@ -113,22 +113,22 @@ std::vector<float> csc_to_col_major(const CSC& mat)
 
 static void csr_to_csc(CSC& mat, const std::vector<uint32_t>& row_ptr_vec, const std::vector<uint32_t>& col_idx_vec)
 {
-	std::vector<uint32_t> col_count(mat.cols, 0);
+	std::vector<uint32_t> col_count(mat.ncols, 0);
 	for (size_t i = 0; i < mat.nnz; ++i) {
 		col_count[col_idx_vec[i]]++;
 	}
 
 	mat.col_ptr[0] = 0;
-	for (size_t col = 0; col < mat.cols; ++col) {
+	for (size_t col = 0; col < mat.ncols; ++col) {
 		mat.col_ptr[col + 1] = mat.col_ptr[col] + col_count[col];
 	}
 
-	std::vector<uint32_t> cur_pos(mat.cols);
-	for (size_t col = 0; col < mat.cols; ++col) {
+	std::vector<uint32_t> cur_pos(mat.ncols);
+	for (size_t col = 0; col < mat.ncols; ++col) {
 		cur_pos[col] = mat.col_ptr[col];
 	}
 
-	for (size_t row = 0; row < mat.rows; ++row) {
+	for (uint32_t row = 0; row < mat.nrows; ++row) {
 		for (size_t i = row_ptr_vec[row]; i < row_ptr_vec[row + 1]; ++i) {
 			uint32_t col = col_idx_vec[i];
 			uint32_t dest_pos = cur_pos[col]++;
@@ -145,25 +145,26 @@ float measure_sparsity(void* s, size_t size)
 		if (ptr[i] == 0)
 			nz++;
 	}
-	return nz / size;
+	return nz / static_cast<float>(size);
 }
 
-std::string construct_path(const std::filesystem::path base_path, const BodyType bt, const AttentionMechanism am, const size_t layer)
+std::vector<float> read_row_major_from_rm(const std::filesystem::path& filepath, size_t size)
 {
-	std::string path = base_path;
-	if (bt == BodyType::Encoder) {
-		path += "body_encoder_";
-	} else {
-		path += "body_decoder_";
+	if (!std::filesystem::exists(filepath) && !std::filesystem::is_regular_file(filepath)) {
+		throw std::runtime_error(filepath.string() + " does not exist\n");
 	}
-	path += "layer_" + std::to_string(layer) + "_";
+	std::vector<float> res;
+	res.reserve(size);
 
-	if (am == AttentionMechanism::SelfAttention) {
-		path += "self_attention_multihead_attention_";
-	} else {
-		path += "encdec_attention_multihead_attention_";
+	std::ifstream file_stream(filepath, std::ios_base::in);
+	if (!file_stream) {
+		throw std::runtime_error("Failed to open file:" + filepath.string());
 	}
-	return path;
+	float tmp;
+	while (file_stream >> tmp) {
+		res.push_back(tmp);
+	}
+	return res;
 }
 
 static CSR read_mask(const DLMC& dlmc, const size_t sequence_size, const size_t band_size_ratio, const size_t sparsity)
