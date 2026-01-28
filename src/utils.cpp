@@ -15,10 +15,6 @@
 		}                                                              \
 	} while (0)
 
-void run(MHSA<CSC, CSR>& mhsa, float* res);
-void cuda_dealloc_host(void* ptr);
-
-std::vector<float> read_row_major_from_rm(const std::filesystem::path& filepath, size_t size)
 {
 	if (!std::filesystem::exists(filepath) && !std::filesystem::is_regular_file(filepath)) {
 		throw std::runtime_error(filepath.string() + " does not exist\n");
@@ -77,55 +73,6 @@ static std::vector<float> host_spmm_rm_rm(std::vector<float> a, std::vector<floa
 	}
 
 	return res;
-}
-
-[[maybe_unused]] static void test_host_spmm_rm_cm(const std::filesystem::path& filepath, size_t m, size_t k, size_t n)
-{
-	if (std::filesystem::is_regular_file(filepath) && filepath.extension() == ".rm") {
-		const auto a_matrix_file = filepath.parent_path() / filepath.stem().replace_filename(filepath.stem().string().append("_a.rm"));
-		const auto b_matrix_file = filepath.parent_path() / filepath.stem().replace_filename(filepath.stem().string().append("_b.cm"));
-		if (!std::filesystem::exists(a_matrix_file)) {
-			throw std::runtime_error("Expected file not found for testing: " + a_matrix_file.string());
-		}
-		if (!std::filesystem::exists(b_matrix_file)) {
-			throw std::runtime_error("Expected file not found for testing: " + b_matrix_file.string());
-		}
-		std::cout << std::format("Testing 'host_spmm' with file: {}\n", filepath.string());
-		// WARN: change hardcoded values
-		std::vector<float> a = read_row_major_from_rm(a_matrix_file, m * k);
-		std::vector<float> b = read_row_major_from_rm(b_matrix_file, k * n);
-		std::vector<float> actual = host_spmm_rm_cm(a, b, m, k, n);
-		std::vector<float> expected = read_row_major_from_rm(filepath, m * n);
-
-		// ASSERT_EQ(expected, actual, "The matrices differ in values.\n");
-		// TODO: Call verify_res() instead
-
-		std::cout << "Test successful\n";
-	}
-}
-
-[[maybe_unused]] static void test_host_spmm_rm_rm(const std::filesystem::path& filepath, size_t m, size_t k, size_t n)
-{
-	if (std::filesystem::is_regular_file(filepath) && filepath.extension() == ".rm") {
-		const auto a_matrix_file = filepath.parent_path() / filepath.stem().replace_filename(filepath.stem().string().append("_a.rm"));
-		const auto b_matrix_file = filepath.parent_path() / filepath.stem().replace_filename(filepath.stem().string().append("_b.rm"));
-		if (!std::filesystem::exists(a_matrix_file)) {
-			throw std::runtime_error("Expected file not found for testing: " + a_matrix_file.string());
-		}
-		if (!std::filesystem::exists(b_matrix_file)) {
-			throw std::runtime_error("Expected file not found for testing: " + b_matrix_file.string());
-		}
-		std::cout << std::format("Testing 'host_spmm' with file: {}\n", filepath.string());
-		std::vector<float> a = read_row_major_from_rm(a_matrix_file, m * k);
-		std::vector<float> b = read_row_major_from_rm(b_matrix_file, k * n);
-		std::vector<float> actual = host_spmm_rm_rm(a, b, m, k, n);
-		std::vector<float> expected = read_row_major_from_rm(filepath, m * n);
-
-		// ASSERT_EQ(expected, actual, "The matrices differ in values.\n");
-		// TODO: Call verify_res() instead
-
-		std::cout << "Test successful\n";
-	}
 }
 
 bool verify_res(const float* const actual, const float* const expected, size_t n)
