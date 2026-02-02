@@ -37,6 +37,10 @@ namespace Csr
 		uint32_t* col_idx;
 		float*    val;
 
+		size_t row_ptr_count;
+		size_t col_idx_count;
+		size_t val_count;
+
 		size_t row_ptr_bytes;
 		size_t col_idx_bytes;
 		size_t val_bytes;
@@ -48,6 +52,10 @@ namespace Csr
 		mat.rows = rows;
 		mat.cols = cols;
 		mat.nnz = nnz;
+
+		mat.row_ptr_count = rows + 1;
+		mat.col_idx_count = nnz;
+		mat.val_count = nnz;
 
 		mat.row_ptr_bytes = (rows + 1) * sizeof(uint32_t);
 		mat.col_idx_bytes = nnz * sizeof(uint32_t);
@@ -83,6 +91,10 @@ namespace Csc
 		uint32_t* row_idx;
 		float*    val;
 
+		size_t col_ptr_count;
+		size_t row_idx_count;
+		size_t val_count;
+
 		size_t col_ptr_bytes;
 		size_t row_idx_bytes;
 		size_t val_bytes;
@@ -94,6 +106,10 @@ namespace Csc
 		mat.rows = rows;
 		mat.cols = cols;
 		mat.nnz = nnz;
+
+		mat.col_ptr_count = cols + 1;
+		mat.row_idx_count = nnz;
+		mat.val_count = nnz;
 
 		mat.col_ptr_bytes = (cols + 1) * sizeof(uint32_t);
 		mat.row_idx_bytes = nnz * sizeof(uint32_t);
