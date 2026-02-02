@@ -3,26 +3,22 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <format>
 #include <fstream>
 #include <random>
 #include <string>
 #include <vector>
 
-enum class SparseMatrixType
+struct DlmcHeader
 {
-	CSC,
-	CSR
-};
-
-struct DLMCHeader
-{
-	size_t n_rows{}, n_cols{}, nnz{};
+	uint32_t rows;
+	uint32_t cols;
+	uint32_t nnz;
 };
 
 struct RowMajorHeader
 {
-	size_t n_rows{}, n_cols{};
+	uint32_t rows;
+	uint32_t cols;
 };
 
 namespace Csr
@@ -67,7 +63,7 @@ namespace Csr
 		mat.val = nullptr;
 	}
 
-	inline void partition(Matrix& mat, uintptr_t* base_ptr)
+	inline void partition(Matrix& mat, uintptr_t base_ptr)
 	{
 		mat.row_ptr = reinterpret_cast<uint32_t*>(base_ptr);
 
@@ -129,13 +125,13 @@ namespace Csc
 	}
 }  // namespace Csc
 
-// std::vector<float> csr_to_row_major(const Csr& mat);
-// std::vector<float> csc_to_col_major(const CSC& mat);
-float          measure_sparsity(void* s, size_t size);
-size_t         calc_sparse_b_size(const size_t n, const size_t nnz);
-DLMCHeader     parse_dlmc_header(std::ifstream& file_stream);
-RowMajorHeader parse_row_major_header(std::ifstream& file_stream);
-void           generate_token_embeddings(void* dst, size_t size);
-// Csr                parse_dlmc(void* dst, const std::filesystem::path& filepath);
-// CSC                parse_csc_dlmc(void* dst, const std::filesystem::path& filepath);
-// size_t             calc_max_nnz_per_col(const CSC& csc);
+std::vector<float> csr_to_row_major(const Csr::Matrix& mat);
+std::vector<float> csc_to_col_major(const Csc::Matrix& mat);
+float              measure_sparsity(void* s, size_t size);
+size_t             calc_sparse_b_size(const size_t n, const size_t nnz);
+DlmcHeader         parse_dlmc_header(std::ifstream& file_stream);
+RowMajorHeader     parse_row_major_header(std::ifstream& file_stream);
+void               generate_token_embeddings(void* dst, size_t size);
+Csr::Matrix        parse_dlmc(void* dst, const std::filesystem::path& filepath);
+Csc::Matrix        parse_csc_dlmc(void* dst, const std::filesystem::path& filepath);
+size_t             calc_max_nnz_per_col(const Csc::Matrix& csc);
