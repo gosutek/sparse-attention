@@ -1,7 +1,11 @@
+#include <cstring>
 #include <filesystem>
 #include <format>
 #include <iostream>
 #include <vector>
+
+#include "allocator.h"
+#include "utils.h"
 
 constexpr const char* prunning_methods[] = { "l0_regularization/", "variational_dropout/", "magnitude_pruning/", "random_pruning/" };
 constexpr const char* sparsity_arr[] = { "0.5/", "0.6/", "0.7/", "0.8/", "0.9/", "0.95/", "0.98/" };
@@ -289,31 +293,38 @@ constexpr const char* DEFAULT_TEST_DIR = "test/dlmc/";
 
 int main(int argc, char* argv[])
 {
+	std::vector<std::filesystem::path> input_files;
 	if (argc < 2) {
-		std::cout << std::format("No directory given, falling back to default: {}\n", DEFAULT_TEST_DIR);
+		std::cout << std::format("No directory given, falling back to default: '{}'\n", DEFAULT_TEST_DIR);
 
 		const std::filesystem::path arg_dir(DEFAULT_TEST_DIR);
+		input_files = collect_rec_input(arg_dir);
+
+	} else if (argc == 2) {  // For every '.smtx' in the dir, spmm with a generated dense
+		const std::filesystem::path arg_dir(argv[1]);
 		if (!std::filesystem::exists(arg_dir)) {
-			std::cout << std::format("Directory given does not exist: {}. Exiting...\n", arg_dir.string());
+			std::cout << std::format("File/Directory given does not exist: '{}'.\nExiting...\n", arg_dir.string());
 			return -1;
 		}
-		if (!std::filesystem::is_directory(arg_dir)) {
-			std::cout << "Path is not a directory...Exiting...\n"
-					  << std::endl;
-			return -1;
-		}
-
-		std::vector<std::filesystem::path>                  input_files;
-		const std::filesystem::recursive_directory_iterator rec_dir_iter(arg_dir);
-
-		for (const std::filesystem::path& path : rec_dir_iter) {
-			if (std::filesystem::is_regular_file(path) && path.extension() == ".smtx") {
-				input_files.push_back(path);
+		if (std::filesystem::is_directory(arg_dir)) {
+			// TODO: make a better print
+			std::cout << std::format("Directory given.\n");
+			input_files = collect_rec_input(arg_dir);
+		} else if (std::filesystem::is_regular_file(arg_dir)) {
+			if (arg_dir.extension() != ".smtx") {
+				std::cout << std::format("Non '.smtx' file given: '{}'\n", arg_dir.string());
 			}
+			std::cout << std::format("File given.\n");
+		} else {
+			std::cout << std::format("Unknown path: '{}'\n", arg_dir.string());
+			return -1;
 		}
-		std::cout << std::format("Found {} '.smtx' file(s) in directory '{}'\n", input_files.size(), arg_dir.string());
-
-		return 0;
+	} else if (argc == 3) {  //
+		std::cout << std::format("Not implemented yet\n");
+		return -1;
+	} else {
+		std::cout << std::format("Give either the directory or path (sparse LOR dense)\n");
+		return -1;
 	}
 
 	// for (int i = 1; i < argc; ++i) {

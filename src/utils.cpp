@@ -1,9 +1,5 @@
 #include "utils.h"
 
-#ifndef MAT_SIZE
-#	define MAT_SIZE 512
-#endif
-
 // TODO: expected == actual is garbage
 #define ASSERT_EQ(expected, actual, message)                           \
 	do {                                                               \
@@ -15,13 +11,33 @@
 		}                                                              \
 	} while (0)
 
+std::vector<std::filesystem::path> collect_rec_input(const std::filesystem::path& path)
+{
+	uint32_t                                            n_unknown_extention_files{};
+	std::vector<std::filesystem::path>                  input_files;
+	const std::filesystem::recursive_directory_iterator rec_dir_iter(path);
+
+	for (const std::filesystem::path& path : rec_dir_iter) {
+		if (std::filesystem::is_regular_file(path) && path.extension() == ".smtx") {
+			input_files.push_back(path);
+		} else {
+			n_unknown_extention_files++;
+		}
+	}
+	std::cout << std::format("Found in directory '{}':\n", path.string())
+			  << std::format("\t- {} '.smtx' file(s)\n", input_files.size())
+			  << std::format("\t- {} unsupported file(s)\n", n_unknown_extention_files);
+
+	return input_files;
+}
+
 /*
  * a(m, k)
  * b(k, n)
  * c(m, n)
  * Expects b to be in column-major
  */
-static std::vector<float> host_spmm_rm_cm(const std::vector<float>& a, const std::vector<float>& b, size_t m, size_t k, size_t n)
+[[maybe_unused]] static std::vector<float> host_spmm_rm_cm(const std::vector<float>& a, const std::vector<float>& b, size_t m, size_t k, size_t n)
 {
 	std::vector<float> res;
 	res.reserve(m * n);
@@ -39,7 +55,7 @@ static std::vector<float> host_spmm_rm_cm(const std::vector<float>& a, const std
 	return res;
 }
 
-static std::vector<float> host_spmm_rm_rm(std::vector<float> a, std::vector<float> b, size_t m, size_t k, size_t n)
+[[maybe_unused]] static std::vector<float> host_spmm_rm_rm(std::vector<float> a, std::vector<float> b, size_t m, size_t k, size_t n)
 {
 	std::vector<float> res;
 	res.reserve(m * n);

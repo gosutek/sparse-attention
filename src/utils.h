@@ -1,12 +1,11 @@
 #pragma once
 
+#include <cmath>
 #include <filesystem>
 #include <format>
 #include <fstream>
 #include <iostream>
 #include <vector>
-
-#include "handle.h"
 
 bool verify_res(const float* const actual, const float* const expected, size_t n);
 
@@ -42,3 +41,5 @@ std::ostream& operator<<(std::ostream& out_stream, const std::array<T, N>& arr)
 	out_stream << "]";
 	return out_stream;
 }
+
+std::vector<std::filesystem::path> collect_rec_input(const std::filesystem::path& path);

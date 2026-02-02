@@ -122,7 +122,7 @@ void prepare_spmm_mem_csr(SPMM<CSR>& spmm)
 	ptr = reinterpret_cast<uintptr_t>(spmm.dev.data);
 
 	// TODO: This trashes the previous empty object and makes a new one. Make a good copy assignment operator function instead.
-	spmm.dev.s = CSR(spmm.host.s.rows, spmm.host.s.cols, spmm.host.s.nnz);
+	spmm.dev.s = Csr(spmm.host.s.rows, spmm.host.s.cols, spmm.host.s.nnz);
 	spmm.dev.s.partition(ptr);
 
 	ptr += spmm.host.s.b_size;

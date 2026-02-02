@@ -8,7 +8,6 @@
 
 #include "cuda/api/memory.cuh"
 #include "matrix.h"
-#include "spmm.cuh"
 
 class HostArena
 {
