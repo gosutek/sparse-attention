@@ -25,13 +25,13 @@ DlmcHeader parse_dlmc_header(std::ifstream& file_stream)
 
 	std::istringstream header_stream(header_line);
 	std::getline(header_stream, token, ',');
-	res.n_rows = static_cast<size_t>(std::stoi(token));
+	res.rows = static_cast<uint32_t>(std::stoul(token));
 
 	std::getline(header_stream, token, ',');
-	res.n_cols = static_cast<size_t>(std::stoi(token));
+	res.cols = static_cast<uint32_t>(std::stoul(token));
 
 	std::getline(header_stream, token, ',');
-	res.nnz = static_cast<size_t>(std::stoi(token));
+	res.nnz = static_cast<uint32_t>(std::stoul(token));
 
 	return res;
 }
@@ -48,10 +48,10 @@ RowMajorHeader parse_row_major_header(std::ifstream& file_stream)
 
 	std::istringstream header_stream(header_line);
 	std::getline(header_stream, token, ',');
-	res.n_rows = static_cast<size_t>(std::stoi(token));
+	res.rows = static_cast<uint32_t>(std::stoul(token));
 
 	std::getline(header_stream, token, ',');
-	res.n_cols = static_cast<size_t>(std::stoi(token));
+	res.cols = static_cast<uint32_t>(std::stoul(token));
 
 	return res;
 }
