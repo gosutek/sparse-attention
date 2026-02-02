@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <format>
@@ -24,123 +25,101 @@ struct RowMajorHeader
 	size_t n_rows{}, n_cols{};
 };
 
-/**
- * Doesn't and shouldn't own any
- * resources pointed to by row_ptr, col_idx, val
- */
-struct CSR
+namespace Csr
 {
-	uint32_t* row_ptr = nullptr;
-	uint32_t* col_idx = nullptr;
-	float*    val = nullptr;
-
-	size_t nrows{}, ncols{}, nnz{};
-	size_t row_ptr_size{}, col_idx_size{}, val_size{};
-
-	size_t b_size{};
-
-	CSR() {}
-
-	CSR(size_t rows, size_t cols, size_t nnz) :
-		nrows(rows), ncols(cols), nnz(nnz)
+	struct Matrix
 	{
-		row_ptr_size = nrows + 1;
-		col_idx_size = nnz;
-		val_size = nnz;
+		uint32_t rows;
+		uint32_t cols;
+		uint32_t nnz;
 
-		const size_t row_ptr_b_size = row_ptr_size * sizeof(uint32_t);
-		const size_t col_idx_b_size = col_idx_size * sizeof(uint32_t);
-		const size_t val_b_size = val_size * sizeof(float);
+		uint32_t* row_ptr;
+		uint32_t* col_idx;
+		float*    val;
 
-		b_size = row_ptr_b_size + calc_padding_bytes(row_ptr_b_size, ALIGNMENT_BYTES) +
-		         col_idx_b_size + calc_padding_bytes(col_idx_b_size, ALIGNMENT_BYTES) +
-		         val_b_size + calc_padding_bytes(val_b_size, ALIGNMENT_BYTES);
+		size_t row_ptr_bytes;
+		size_t col_idx_bytes;
+		size_t val_bytes;
+		size_t total_bytes;
+	};
+
+	inline void init(Matrix& mat, uint32_t rows, uint32_t cols, uint32_t nnz)
+	{
+		mat.rows = rows;
+		mat.cols = cols;
+		mat.nnz = nnz;
+
+		mat.row_ptr_bytes = (rows + 1) * sizeof(uint32_t);
+		mat.col_idx_bytes = nnz * sizeof(uint32_t);
+		mat.val_bytes = nnz * sizeof(float);
+		mat.total_bytes = mat.row_ptr_bytes + mat.col_idx_bytes + mat.val_bytes;
+
+		mat.row_ptr = nullptr;
+		mat.col_idx = nullptr;
+		mat.val = nullptr;
 	}
 
-	CSR(const CSR& other) = default;
-
-	CSR& operator=(const CSR& other) = default;
-
-	CSR(CSR&& other) = default;
-
-	CSR& operator=(CSR&& other) = default;
-
-	void partition(uintptr_t ptr)
+	inline void partition(Matrix& mat, uintptr_t* base_ptr)
 	{
-		row_ptr = reinterpret_cast<uint32_t*>(ptr);
+		mat.row_ptr = reinterpret_cast<uint32_t*>(base_ptr);
 
-		size_t b_size = row_ptr_size * sizeof(uint32_t);
-		ptr += b_size + calc_padding_bytes(b_size, ALIGNMENT_BYTES);
-		col_idx = reinterpret_cast<uint32_t*>(ptr);
+		base_ptr += mat.row_ptr_bytes;
+		mat.col_idx = reinterpret_cast<uint32_t*>(base_ptr);
 
-		b_size = col_idx_size * sizeof(uint32_t);
-		ptr += b_size + calc_padding_bytes(b_size, ALIGNMENT_BYTES);
-		val = reinterpret_cast<float*>(ptr);
+		base_ptr += mat.col_idx_bytes;
+		mat.val = reinterpret_cast<float*>(base_ptr);
 	}
-};
+}  // namespace Csr
 
-/**
- * Doesn't and shouldn't own any
- * resources pointed to by col_ptr, row_idx, val
- */
-struct CSC
+namespace Csc
 {
-	uint32_t* col_ptr = nullptr;
-	uint32_t* row_idx = nullptr;
-	float*    val = nullptr;
-
-	size_t nrows{}, ncols{}, nnz{};
-	size_t col_ptr_size{}, row_idx_size{}, val_size{};
-
-	size_t b_size{};
-
-	CSC() {}
-
-	CSC(size_t rows, size_t cols, size_t nnz) :
-		nrows(rows), ncols(cols), nnz(nnz)
+	struct Matrix
 	{
-		col_ptr_size = ncols + 1;
-		row_idx_size = nnz;
-		val_size = nnz;
+		uint32_t rows;
+		uint32_t cols;
+		uint32_t nnz;
 
-		const size_t col_ptr_b_size = col_ptr_size * sizeof(uint32_t);
-		const size_t row_idx_b_size = row_idx_size * sizeof(uint32_t);
-		const size_t val_b_size = val_size * sizeof(float);
+		uint32_t* col_ptr;
+		uint32_t* row_idx;
+		float*    val;
 
-		b_size = col_ptr_b_size + calc_padding_bytes(col_ptr_b_size, ALIGNMENT_BYTES) +
-		         row_idx_b_size + calc_padding_bytes(row_idx_b_size, ALIGNMENT_BYTES) +
-		         val_b_size + calc_padding_bytes(val_b_size, ALIGNMENT_BYTES);
+		size_t col_ptr_bytes;
+		size_t row_idx_bytes;
+		size_t val_bytes;
+		size_t total_bytes;
+	};
+
+	inline void init(Matrix& mat, uint32_t rows, uint32_t cols, uint32_t nnz)
+	{
+		mat.rows = rows;
+		mat.cols = cols;
+		mat.nnz = nnz;
+
+		mat.col_ptr_bytes = (cols + 1) * sizeof(uint32_t);
+		mat.row_idx_bytes = nnz * sizeof(uint32_t);
+		mat.val_bytes = nnz * sizeof(float);
+		mat.total_bytes = mat.col_ptr_bytes + mat.row_idx_bytes + mat.val_bytes;
 	}
 
-	CSC(const CSC& other) = default;
-
-	CSC& operator=(const CSC& other) = default;
-
-	CSC(CSC&& other) = default;
-
-	CSC& operator=(CSC&& other) = default;
-
-	void partition(uintptr_t ptr)
+	inline void partition(Matrix& mat, uintptr_t base_ptr)
 	{
-		col_ptr = reinterpret_cast<uint32_t*>(ptr);
+		mat.col_ptr = reinterpret_cast<uint32_t*>(base_ptr);
 
-		size_t b_size = col_ptr_size * sizeof(uint32_t);
-		ptr += b_size + calc_padding_bytes(b_size, ALIGNMENT_BYTES);
-		row_idx = reinterpret_cast<uint32_t*>(ptr);
+		base_ptr += mat.col_ptr_bytes;
+		mat.row_idx = reinterpret_cast<uint32_t*>(base_ptr);
 
-		b_size = row_idx_size * sizeof(uint32_t);
-		ptr += b_size + calc_padding_bytes(b_size, ALIGNMENT_BYTES);
-		val = reinterpret_cast<float*>(ptr);
+		base_ptr += mat.row_idx_bytes;
+		mat.val = reinterpret_cast<float*>(base_ptr);
 	}
-};
+}  // namespace Csc
 
-std::vector<float> csr_to_row_major(const CSR& mat);
-std::vector<float> csc_to_col_major(const CSC& mat);
-float              measure_sparsity(void* s, size_t size);
-size_t             calc_sparse_b_size(const size_t n, const size_t nnz);
-DLMCHeader         parse_dlmc_header(std::ifstream& file_stream);
-RowMajorHeader     parse_row_major_header(std::ifstream& file_stream);
-void               generate_token_embeddings(void* dst, size_t size);
-CSR                parse_dlmc(void* dst, const std::filesystem::path& filepath);
-CSC                parse_csc_dlmc(void* dst, const std::filesystem::path& filepath);
-size_t             calc_max_nnz_per_col(const CSC& csc);
+// std::vector<float> csr_to_row_major(const Csr& mat);
+// std::vector<float> csc_to_col_major(const CSC& mat);
+float          measure_sparsity(void* s, size_t size);
+size_t         calc_sparse_b_size(const size_t n, const size_t nnz);
+DLMCHeader     parse_dlmc_header(std::ifstream& file_stream);
+RowMajorHeader parse_row_major_header(std::ifstream& file_stream);
+void           generate_token_embeddings(void* dst, size_t size);
+// Csr                parse_dlmc(void* dst, const std::filesystem::path& filepath);
+// CSC                parse_csc_dlmc(void* dst, const std::filesystem::path& filepath);
+// size_t             calc_max_nnz_per_col(const CSC& csc);
