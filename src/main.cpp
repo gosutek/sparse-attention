@@ -229,7 +229,7 @@ constexpr const char* DEFAULT_TEST_DIR = "test/dlmc/";
 // 	Benchmark res;
 //
 // 	CuSparse cusparse;
-// 	cusparseCreate(&cusparse.handle);
+// cusparseCreate(&cusparse.handle);
 //
 // 	std::string data_dir_path = construct_path("data/dlmc/transformer/" + prunning_method + sparsity, BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
 // 	if (prunning_method == "random_pruning/" || prunning_method == "magnitude_pruning/") {

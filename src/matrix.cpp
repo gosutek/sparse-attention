@@ -1,4 +1,7 @@
 #include "matrix.h"
+#include <cstdint>
+#include <iterator>
+#include <strings.h>
 
 void generate_token_embeddings(void* dst, size_t size)
 {
@@ -242,4 +245,112 @@ Csc::Matrix parse_csc_dlmc(void* dst, const std::filesystem::path& filepath)
 	}
 
 	return csc;
+}
+
+void create_sp_mat_csr(SpMatDescr_t& sp_mat_descr,
+	uint32_t                         rows,
+	uint32_t                         cols,
+	uint32_t                         nnz,
+	void*                            row_ptr,
+	void*                            col_idx,
+	void*                            values,
+	indexType_t                      index_type,
+	dataType_t                       val_type)
+{
+	if (sp_mat_descr) {
+		std::cout << std::format("Throw error here\n");
+	}
+
+	//TODO: This should actually call the arena allocator
+	sp_mat_descr = static_cast<SpMatDescr_t>(malloc(sizeof(*sp_mat_descr)));
+
+	sp_mat_descr->format = sparseFormat_t::SPARSE_FORMAT_CSR;
+
+	sp_mat_descr->rows = rows;
+	sp_mat_descr->cols = cols;
+	sp_mat_descr->nnz = nnz;
+
+	sp_mat_descr->index_type = index_type;
+
+	sp_mat_descr->csr.row_ptr = row_ptr;
+	sp_mat_descr->csr.col_idx = col_idx;
+	sp_mat_descr->values = values;
+
+	sp_mat_descr->csr.row_ptr_cnt = rows + 1;
+	sp_mat_descr->csr.col_idx_cnt = nnz;
+	sp_mat_descr->val_ptr_cnt = nnz;
+
+	switch (index_type) {
+	case indexType_t::INDEX_TYPE_16U:
+		sp_mat_descr->csr.row_ptr_bytes = (rows + 1) * sizeof(uint16_t);
+		sp_mat_descr->csr.col_idx_bytes = nnz * sizeof(uint16_t);
+		break;
+	case indexType_t::INDEX_TYPE_32U:
+		sp_mat_descr->csr.row_ptr_bytes = (rows + 1) * sizeof(uint32_t);
+		sp_mat_descr->csr.col_idx_bytes = nnz * sizeof(uint32_t);
+		break;
+	case indexType_t::INDEX_TYPE_64U:
+		sp_mat_descr->csr.row_ptr_bytes = (rows + 1) * sizeof(uint64_t);
+		sp_mat_descr->csr.col_idx_bytes = nnz * sizeof(uint64_t);
+		break;
+	}
+
+	switch (val_type) {
+	case dataType_t::DATA_TYPE_F32:
+		sp_mat_descr->val_ptr_bytes = nnz * sizeof(float);
+		break;
+	}
+}
+
+void create_sp_mat_csc(SpMatDescr_t& sp_mat_descr,
+	uint32_t                         rows,
+	uint32_t                         cols,
+	uint32_t                         nnz,
+	void*                            col_ptr,
+	void*                            row_idx,
+	void*                            values,
+	indexType_t                      index_type,
+	dataType_t                       val_type)
+{
+	if (sp_mat_descr) {
+		std::cout << std::format("Throw error here\n");
+	}
+
+	// TODO: This should actually call the arena allocator
+	sp_mat_descr = static_cast<SpMatDescr_t>(malloc(sizeof(*sp_mat_descr)));
+
+	sp_mat_descr->rows = rows;
+	sp_mat_descr->cols = cols;
+	sp_mat_descr->nnz = nnz;
+
+	sp_mat_descr->index_type = index_type;
+
+	sp_mat_descr->csc.col_ptr = col_ptr;
+	sp_mat_descr->csc.row_idx = row_idx;
+	sp_mat_descr->values = values;
+
+	sp_mat_descr->csc.col_ptr_cnt = cols + 1;
+	sp_mat_descr->csc.row_idx_cnt = nnz;
+	sp_mat_descr->val_ptr_cnt = nnz;
+
+	switch (index_type) {
+	case indexType_t::INDEX_TYPE_16U:
+		sp_mat_descr->csc.col_ptr_bytes = (cols + 1) * sizeof(uint16_t);
+		sp_mat_descr->csc.row_idx_bytes = nnz * sizeof(uint16_t);
+		break;
+	case indexType_t::INDEX_TYPE_32U:
+		sp_mat_descr->csc.col_ptr_bytes = (cols + 1) * sizeof(uint32_t);
+		sp_mat_descr->csc.row_idx_bytes = nnz * sizeof(uint32_t);
+		break;
+	case indexType_t::INDEX_TYPE_64U:
+		sp_mat_descr->csc.col_ptr_bytes = (cols + 1) * sizeof(uint64_t);
+		sp_mat_descr->csc.row_idx_bytes = nnz * sizeof(uint64_t);
+		break;
+	}
+
+	switch (val_type) {
+	case dataType_t::DATA_TYPE_F32:
+		sp_mat_descr->val_ptr_bytes = nnz * sizeof(float);
+		break;
+	}
 }
