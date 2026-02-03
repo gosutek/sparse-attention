@@ -7,17 +7,20 @@
 #include <vector>
 
 #include "cuda/api/memory.cuh"
+#include "cusparse.h"
 #include "matrix.h"
 
 class HostArena
 {
 private:
 	void*  _base;
+	void*  _curr;
 	size_t _size;
 
 public:
-	explicit HostArena(size_t size) : _size(size), _base(cuda_malloc_host(size))
+	explicit HostArena(size_t size) : _base(cuda_malloc_host(size)), _size(size)
 	{
+		_curr = _base;
 		assert(_base && "HostArena failed to allocate on host");
 	}
 
@@ -30,7 +33,7 @@ public:
 
 	HostArena& operator=(const HostArena&) = delete;
 
-	HostArena(HostArena&& other) noexcept : _size(other._size), _base(other._base)
+	HostArena(HostArena&& other) noexcept : _base(other._base), _size(other._size)
 	{
 		other._base = nullptr;
 		other._size = 0;
@@ -58,7 +61,7 @@ private:
 	size_t _size;
 
 public:
-	explicit DeviceArena(size_t size) : _size(size), _base(cuda_malloc_device(size))
+	explicit DeviceArena(size_t size) : _base(cuda_malloc_device(size)), _size(size)
 	{
 		assert(_base && "HostArena failed to allocate on host");
 	}
@@ -72,7 +75,7 @@ public:
 
 	DeviceArena& operator=(const HostArena&) = delete;
 
-	DeviceArena(DeviceArena&& other) noexcept : _size(other._size), _base(other._base)
+	DeviceArena(DeviceArena&& other) noexcept : _base(other._base), _size(other._size)
 	{
 		other._base = nullptr;
 		other._size = 0;
