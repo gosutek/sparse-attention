@@ -1,0 +1,337 @@
+#include "matrix.h"
+#include "spmm.h"
+
+static inline uint32_t* get_csr_row_ptr_u16(const SpMatDescr* const _sp)
+{
+	return (uint32_t*)_sp->csr.row_ptr;
+}
+
+/*
+ * Calculates the size of a CSR or CSC matrix in bytes for float values
+ * Accounts for non-square matrices
+ * n: main dimension's size (cols for CSC, rows for CSR)
+ */
+[[maybe_unused]] static inline size_t get_sparse_byte_size(const size_t n, const size_t nnz)
+{
+	size_t b_ptr_size = (n + 1) * sizeof(uint32_t);
+	size_t b_idx_size = nnz * sizeof(uint32_t);
+	size_t b_val_size = nnz * sizeof(float);
+
+	return b_ptr_size + b_idx_size + b_val_size;
+}
+
+[[maybe_unused]] static SpmmStatus_t get_max_nnz_per_row(size_t* const max_nnz_out, SpMatDescr* const sp_mat_descr)
+{
+	if (!sp_mat_descr || !max_nnz_out) {
+		return SPMM_STATUS_INVALID_VALUE;
+	}
+	*max_nnz_out = 0;
+
+	switch (sp_mat_descr->index_type) {
+	case INDEX_TYPE_16U:
+		for (size_t i = 0; i < sp_mat_descr->csr.row_ptr_cnt - 1; ++i) {
+			const size_t curr_col_nnz = ((uint16_t*)(sp_mat_descr->csr.row_ptr))[i + 1] - ((uint16_t*)(sp_mat_descr->csr.row_ptr))[i];
+			*max_nnz_out = *max_nnz_out > curr_col_nnz ? *max_nnz_out : curr_col_nnz;
+		}
+		break;
+	case INDEX_TYPE_32U:
+		for (size_t i = 0; i < sp_mat_descr->csr.row_ptr_cnt - 1; ++i) {
+			const size_t curr_col_nnz = ((uint32_t*)(sp_mat_descr->csr.row_ptr))[i + 1] - ((uint32_t*)(sp_mat_descr->csr.row_ptr))[i];
+			*max_nnz_out = *max_nnz_out > curr_col_nnz ? *max_nnz_out : curr_col_nnz;
+		}
+		break;
+	case INDEX_TYPE_64U:
+		for (size_t i = 0; i < sp_mat_descr->csr.row_ptr_cnt - 1; ++i) {
+			const size_t curr_col_nnz = ((uint64_t*)(sp_mat_descr->csr.row_ptr))[i + 1] - ((uint64_t*)(sp_mat_descr->csr.row_ptr))[i];
+			*max_nnz_out = *max_nnz_out > curr_col_nnz ? *max_nnz_out : curr_col_nnz;
+		}
+		break;
+	}
+	return SPMM_STATUS_SUCCESS;
+}
+
+// TODO: Convert to C
+// [[maybe_unused]] std::vector<float> csr_to_row_major(const Csr::Matrix& mat)
+// {
+// 	std::vector<float> res(mat.rows * mat.cols, 0.0f);
+//
+// 	for (size_t i = 0; i < mat.rows; ++i) {
+// 		for (size_t j = mat.row_ptr[i]; j < mat.row_ptr[i + 1]; ++j) {
+// 			res[i * mat.cols + mat.col_idx[j]] = mat.val[j];
+// 		}
+// 	}
+// 	return res;
+// }
+
+// TODO: Convert to C
+// [[maybe_unused]] std::vector<float> csc_to_col_major(const Csc::Matrix& mat)
+// {
+// 	std::vector<float> res(mat.rows * mat.cols, 0.0f);
+//
+// 	for (size_t i = 0; i < mat.cols; ++i) {
+// 		for (size_t j = mat.col_ptr[i]; j < mat.col_ptr[i + 1]; ++j) {
+// 			res[i * mat.rows + mat.row_idx[j]] = mat.val[j];
+// 		}
+// 	}
+// 	return res;
+// }
+
+// TODO: Convert to C
+// static void csr_to_csc(Csc::Matrix& mat, const std::vector<uint32_t>& row_ptr_vec, const std::vector<uint32_t>& col_idx_vec)
+// {
+// 	std::vector<uint32_t> col_count(mat.cols, 0);
+// 	for (size_t i = 0; i < mat.nnz; ++i) {
+// 		col_count[col_idx_vec[i]]++;
+// 	}
+//
+// 	mat.col_ptr[0] = 0;
+// 	for (size_t col = 0; col < mat.cols; ++col) {
+// 		mat.col_ptr[col + 1] = mat.col_ptr[col] + col_count[col];
+// 	}
+//
+// 	std::vector<uint32_t> cur_pos(mat.cols);
+// 	for (size_t col = 0; col < mat.cols; ++col) {
+// 		cur_pos[col] = mat.col_ptr[col];
+// 	}
+//
+// 	for (uint32_t row = 0; row < mat.rows; ++row) {
+// 		for (size_t i = row_ptr_vec[row]; i < row_ptr_vec[row + 1]; ++i) {
+// 			uint32_t col = col_idx_vec[i];
+// 			uint32_t dest_pos = cur_pos[col]++;
+// 			mat.row_idx[dest_pos] = row;
+// 		}
+// 	}
+// }
+
+// TODO: Convert to C
+float measure_sparsity(void* s, size_t size)
+{
+	float* ptr = (float*)(s);
+	float  nz = .0f;
+	for (size_t i = 0; i < size; i++) {
+		if (ptr[i] == 0)
+			nz++;
+	}
+	return nz / (float)(size);
+}
+
+// TODO: Move to run/
+// std::vector<float> read_row_major_from_rm(const std::filesystem::path& filepath, size_t size)
+// {
+// 	if (!std::filesystem::exists(filepath) && !std::filesystem::is_regular_file(filepath)) {
+// 		throw std::runtime_error(filepath.string() + " does not exist\n");
+// 	}
+// 	std::vector<float> res;
+// 	res.reserve(size);
+//
+// 	std::ifstream file_stream(filepath, std::ios_base::in);
+// 	if (!file_stream) {
+// 		throw std::runtime_error("Failed to open file:" + filepath.string());
+// 	}
+// 	float tmp;
+// 	while (file_stream >> tmp) {
+// 		res.push_back(tmp);
+// 	}
+// 	return res;
+// }
+
+// TODO: Move to run/
+// Csr::Matrix parse_dlmc(void* dst, const std::filesystem::path& filepath)
+// {
+// 	std::ifstream file_stream(filepath, std::ios_base::in);
+//
+// 	if (!file_stream) {
+// 		// TODO: Remove exceptions
+// 		throw std::runtime_error("Failed to open file stream for filepath: " + filepath.stem().string());
+// 	}
+//
+// 	DlmcHeader header = parse_dlmc_header(file_stream);
+//
+// 	Csr::Matrix csr;
+// 	Csr::init(csr, header.rows, header.cols, header.nnz);
+// 	Csr::partition(csr, reinterpret_cast<uintptr_t>(dst));
+//
+// 	std::string line, token;
+// 	std::getline(file_stream, line);
+// 	std::istringstream row_ptr_stream(line);
+// 	for (size_t i = 0; i < csr.row_ptr_count; ++i) {
+// 		row_ptr_stream >> token;
+// 		csr.row_ptr[i] = static_cast<uint32_t>(std::stoi(token));
+// 	}
+//
+// 	std::getline(file_stream, line);
+// 	std::istringstream col_idx_stream(line);
+// 	for (size_t i = 0; i < csr.col_idx_count; ++i) {
+// 		col_idx_stream >> token;
+// 		csr.col_idx[i] = static_cast<uint32_t>(std::stoi(token));
+// 	}
+//
+// 	std::random_device                    rd;
+// 	std::minstd_rand                      rng(rd());
+// 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+// 	for (size_t i = 0; i < csr.val_count; ++i) {
+// 		csr.val[i] = uni_real_dist(rng);
+// 	}
+//
+// 	return csr;
+// }
+
+// TODO: Move to run/
+// Csc::Matrix parse_csc_dlmc(void* dst, const std::filesystem::path& filepath)
+// {
+// 	std::ifstream file_stream(filepath, std::ios_base::in);
+//
+// 	if (!file_stream) {
+// 		// TODO: Remove exceptions
+// 		throw std::runtime_error("Failed to open file stream for filepath: " + filepath.stem().string());
+// 	}
+//
+// 	DlmcHeader  header = parse_dlmc_header(file_stream);
+// 	Csc::Matrix csc;
+// 	Csc::init(csc, header.rows, header.cols, header.nnz);
+// 	Csc::partition(csc, reinterpret_cast<uintptr_t>(dst));
+//
+// 	std::vector<uint32_t> row_ptr_vec(header.rows + 1, 0);
+//
+// 	std::string line, token;
+// 	std::getline(file_stream, line);
+// 	std::istringstream row_ptr_stream(line);
+// 	for (size_t i = 0; i < header.rows + 1; ++i) {
+// 		row_ptr_stream >> token;
+// 		row_ptr_vec[i] = static_cast<uint32_t>(std::stoi(token));
+// 	}
+//
+// 	std::vector<uint32_t> col_idx_vec(header.nnz, 0);
+//
+// 	std::getline(file_stream, line);
+// 	std::istringstream col_idx_stream(line);
+// 	for (size_t i = 0; i < header.nnz; ++i) {
+// 		col_idx_stream >> token;
+// 		col_idx_vec[i] = static_cast<uint32_t>(std::stoi(token));
+// 	}
+//
+// 	csr_to_csc(csc, row_ptr_vec, col_idx_vec);
+//
+// 	std::random_device                    rd;
+// 	std::minstd_rand                      rng(rd());
+// 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+// 	for (size_t i = 0; i < csc.val_count; ++i) {
+// 		csc.val[i] = uni_real_dist(rng);
+// 	}
+//
+// 	return csc;
+// }
+
+SpmmStatus_t create_sp_mat_csr(SpMatDescr_t* sp_mat_descr,
+	uint32_t                                 rows,
+	uint32_t                                 cols,
+	uint32_t                                 nnz,
+	void*                                    row_ptr,
+	void*                                    col_idx,
+	void*                                    values,
+	indexType_t                              index_type,
+	dataType_t                               val_type)
+{
+	if (sp_mat_descr == NULL || *sp_mat_descr != NULL) {
+		return SPMM_STATUS_INVALID_VALUE;
+	}
+
+	*sp_mat_descr = (SpMatDescr_t)(malloc(sizeof(SpMatDescr)));
+	if (*sp_mat_descr == NULL) {
+		return SPMM_STATUS_ALLOC_FAILED;
+	}
+
+	(*sp_mat_descr)->format = SPARSE_FORMAT_CSR;
+
+	(*sp_mat_descr)->rows = rows;
+	(*sp_mat_descr)->cols = cols;
+	(*sp_mat_descr)->nnz = nnz;
+
+	(*sp_mat_descr)->index_type = index_type;
+
+	(*sp_mat_descr)->csr.row_ptr = row_ptr;
+	(*sp_mat_descr)->csr.col_idx = col_idx;
+	(*sp_mat_descr)->values = values;
+
+	(*sp_mat_descr)->csr.row_ptr_cnt = rows + 1;
+	(*sp_mat_descr)->csr.col_idx_cnt = nnz;
+	(*sp_mat_descr)->val_ptr_cnt = nnz;
+
+	switch (index_type) {
+	case INDEX_TYPE_16U:
+		(*sp_mat_descr)->csr.row_ptr_bytes = (rows + 1) * sizeof(uint16_t);
+		(*sp_mat_descr)->csr.col_idx_bytes = nnz * sizeof(uint16_t);
+		break;
+	case INDEX_TYPE_32U:
+		(*sp_mat_descr)->csr.row_ptr_bytes = (rows + 1) * sizeof(uint32_t);
+		(*sp_mat_descr)->csr.col_idx_bytes = nnz * sizeof(uint32_t);
+		break;
+	case INDEX_TYPE_64U:
+		(*sp_mat_descr)->csr.row_ptr_bytes = (rows + 1) * sizeof(uint64_t);
+		(*sp_mat_descr)->csr.col_idx_bytes = nnz * sizeof(uint64_t);
+		break;
+	}
+
+	switch (val_type) {
+	case DATA_TYPE_F32:
+		(*sp_mat_descr)->val_ptr_bytes = nnz * sizeof(float);
+		break;
+	}
+	return SPMM_STATUS_SUCCESS;
+}
+
+SpmmStatus_t create_sp_mat_csc(SpMatDescr_t* sp_mat_descr,
+	uint32_t                                 rows,
+	uint32_t                                 cols,
+	uint32_t                                 nnz,
+	void*                                    col_ptr,
+	void*                                    row_idx,
+	void*                                    values,
+	indexType_t                              index_type,
+	dataType_t                               val_type)
+{
+	if (sp_mat_descr == NULL || *sp_mat_descr != NULL) {
+		return SPMM_STATUS_INVALID_VALUE;
+	}
+
+	*sp_mat_descr = (SpMatDescr_t)(malloc(sizeof(SpMatDescr)));
+	if (*sp_mat_descr == NULL) {
+		return SPMM_STATUS_ALLOC_FAILED;
+	}
+
+	(*sp_mat_descr)->rows = rows;
+	(*sp_mat_descr)->cols = cols;
+	(*sp_mat_descr)->nnz = nnz;
+
+	(*sp_mat_descr)->index_type = index_type;
+
+	(*sp_mat_descr)->csc.col_ptr = col_ptr;
+	(*sp_mat_descr)->csc.row_idx = row_idx;
+	(*sp_mat_descr)->values = values;
+
+	(*sp_mat_descr)->csc.col_ptr_cnt = cols + 1;
+	(*sp_mat_descr)->csc.row_idx_cnt = nnz;
+	(*sp_mat_descr)->val_ptr_cnt = nnz;
+
+	switch (index_type) {
+	case INDEX_TYPE_16U:
+		(*sp_mat_descr)->csc.col_ptr_bytes = (cols + 1) * sizeof(uint16_t);
+		(*sp_mat_descr)->csc.row_idx_bytes = nnz * sizeof(uint16_t);
+		break;
+	case INDEX_TYPE_32U:
+		(*sp_mat_descr)->csc.col_ptr_bytes = (cols + 1) * sizeof(uint32_t);
+		(*sp_mat_descr)->csc.row_idx_bytes = nnz * sizeof(uint32_t);
+		break;
+	case INDEX_TYPE_64U:
+		(*sp_mat_descr)->csc.col_ptr_bytes = (cols + 1) * sizeof(uint64_t);
+		(*sp_mat_descr)->csc.row_idx_bytes = nnz * sizeof(uint64_t);
+		break;
+	}
+
+	switch (val_type) {
+	case DATA_TYPE_F32:
+		(*sp_mat_descr)->val_ptr_bytes = nnz * sizeof(float);
+		break;
+	}
+	return SPMM_STATUS_SUCCESS;
+}
