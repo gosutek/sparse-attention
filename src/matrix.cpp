@@ -3,6 +3,8 @@
 #include <iterator>
 #include <strings.h>
 
+#include "header.h"
+
 void generate_token_embeddings(void* dst, size_t size)
 {
 	float* ptr = reinterpret_cast<float*>(dst);

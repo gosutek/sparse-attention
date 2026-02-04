@@ -1,9 +1,9 @@
 #pragma once
 
-#include <array>
 #include <cusparse.h>
-#include <filesystem>
-#include <string>
+
+#include "allocator.h"
+#include "header.h"
 
 constexpr size_t MAX_N_LAYERS = 6;
 constexpr size_t MAT_SIZE = 512;

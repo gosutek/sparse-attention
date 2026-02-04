@@ -8,6 +8,7 @@
 
 #include "cuda/api/memory.cuh"
 #include "cusparse.h"
+#include "header.h"
 #include "matrix.h"
 
 class HostArena

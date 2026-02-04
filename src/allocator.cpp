@@ -1,4 +1,5 @@
 #include "allocator.h"
+#include "header.h"
 
 // TODO: MOVE THESE
 #define CEIL_DIV(M, N) (((M) + (N) - 1) / (N))
