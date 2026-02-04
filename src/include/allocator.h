@@ -2,10 +2,10 @@
 
 #include <cassert>
 
-#include "cuda/api/memory.cuh"
 #include "cusparse.h"
 #include "header.h"
 #include "matrix.h"
+#include "memory.cuh"
 
 struct Arena
 {

@@ -12,6 +12,65 @@ constexpr const char* sparsity_arr[] = { "0.5/", "0.6/", "0.7/", "0.8/", "0.9/",
 constexpr const char* custom_sparse[] = { "1024/" };
 constexpr const char* DEFAULT_TEST_DIR = "test/dlmc/";
 
+// TODO: Move to run/
+// void generate_token_embeddings(void* dst, size_t size)
+// {
+// 	float* ptr = reinterpret_cast<float*>(dst);
+//
+// 	std::random_device                    rd;
+// 	std::minstd_rand                      rng(rd());
+// 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+//
+// 	for (size_t i = 0; i < size; ++i) {
+// 		ptr[i] = uni_real_dist(rng);
+// 	}
+// }
+
+/*
+ * WARN: This moves the filestream pointer
+ */
+// TODO: Move to run/
+// DlmcHeader parse_dlmc_header(std::ifstream& file_stream)
+// {
+// 	DlmcHeader  res;
+// 	std::string token;
+// 	std::string header_line;
+// 	std::getline(file_stream, header_line);
+//
+// 	std::istringstream header_stream(header_line);
+// 	std::getline(header_stream, token, ',');
+// 	res.rows = static_cast<uint32_t>(std::stoul(token));
+//
+// 	std::getline(header_stream, token, ',');
+// 	res.cols = static_cast<uint32_t>(std::stoul(token));
+//
+// 	std::getline(header_stream, token, ',');
+// 	res.nnz = static_cast<uint32_t>(std::stoul(token));
+//
+// 	return res;
+// }
+
+/*
+ * WARN: This moves the filestream pointer
+ */
+// TODO: Move to run/
+// RowMajorHeader parse_row_major_header(std::ifstream& file_stream)
+// {
+// 	RowMajorHeader res;
+// 	std::string    token;
+// 	std::string    header_line;
+// 	std::getline(file_stream, header_line);
+//
+// 	std::istringstream header_stream(header_line);
+// 	std::getline(header_stream, token, ',');
+// 	res.rows = static_cast<uint32_t>(std::stoul(token));
+//
+// 	std::getline(header_stream, token, ',');
+// 	res.cols = static_cast<uint32_t>(std::stoul(token));
+//
+// 	return res;
+// }
+
 // struct Benchmark
 // {
 // 	float  time[std::size(BENCH_DIMS)];
@@ -293,39 +352,39 @@ constexpr const char* DEFAULT_TEST_DIR = "test/dlmc/";
 
 int main(int argc, char* argv[])
 {
-	std::vector<std::filesystem::path> input_files;
-	if (argc < 2) {
-		std::cout << std::format("No directory given, falling back to default: '{}'\n", DEFAULT_TEST_DIR);
-
-		const std::filesystem::path arg_dir(DEFAULT_TEST_DIR);
-		input_files = collect_rec_input(arg_dir);
-
-	} else if (argc == 2) {  // For every '.smtx' in the dir, spmm with a generated dense
-		const std::filesystem::path arg_dir(argv[1]);
-		if (!std::filesystem::exists(arg_dir)) {
-			std::cout << std::format("File/Directory given does not exist: '{}'.\nExiting...\n", arg_dir.string());
-			return -1;
-		}
-		if (std::filesystem::is_directory(arg_dir)) {
-			// TODO: make a better print
-			std::cout << std::format("Directory given.\n");
-			input_files = collect_rec_input(arg_dir);
-		} else if (std::filesystem::is_regular_file(arg_dir)) {
-			if (arg_dir.extension() != ".smtx") {
-				std::cout << std::format("Non '.smtx' file given: '{}'\n", arg_dir.string());
-			}
-			std::cout << std::format("File given.\n");
-		} else {
-			std::cout << std::format("Unknown path: '{}'\n", arg_dir.string());
-			return -1;
-		}
-	} else if (argc == 3) {  //
-		std::cout << std::format("Not implemented yet\n");
-		return -1;
-	} else {
-		std::cout << std::format("Give either the directory or path (sparse LOR dense)\n");
-		return -1;
-	}
+	// std::vector<std::filesystem::path> input_files;
+	// if (argc < 2) {
+	// 	std::cout << std::format("No directory given, falling back to default: '{}'\n", DEFAULT_TEST_DIR);
+	//
+	// 	const std::filesystem::path arg_dir(DEFAULT_TEST_DIR);
+	// 	input_files = collect_rec_input(arg_dir);
+	//
+	// } else if (argc == 2) {  // For every '.smtx' in the dir, spmm with a generated dense
+	// 	const std::filesystem::path arg_dir(argv[1]);
+	// 	if (!std::filesystem::exists(arg_dir)) {
+	// 		std::cout << std::format("File/Directory given does not exist: '{}'.\nExiting...\n", arg_dir.string());
+	// 		return -1;
+	// 	}
+	// 	if (std::filesystem::is_directory(arg_dir)) {
+	// 		// TODO: make a better print
+	// 		std::cout << std::format("Directory given.\n");
+	// 		input_files = collect_rec_input(arg_dir);
+	// 	} else if (std::filesystem::is_regular_file(arg_dir)) {
+	// 		if (arg_dir.extension() != ".smtx") {
+	// 			std::cout << std::format("Non '.smtx' file given: '{}'\n", arg_dir.string());
+	// 		}
+	// 		std::cout << std::format("File given.\n");
+	// 	} else {
+	// 		std::cout << std::format("Unknown path: '{}'\n", arg_dir.string());
+	// 		return -1;
+	// 	}
+	// } else if (argc == 3) {  //
+	// 	std::cout << std::format("Not implemented yet\n");
+	// 	return -1;
+	// } else {
+	// 	std::cout << std::format("Give either the directory or path (sparse LOR dense)\n");
+	// 	return -1;
+	// }
 
 	// for (int i = 1; i < argc; ++i) {
 	// 	if (argv[i][0] != '-') {
