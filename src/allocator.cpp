@@ -14,6 +14,31 @@
 		}                                                                                                    \
 	} while (0)
 
+// TODO: Need to pass the data type here
+SpmmStatus_t arena_init(Arena* arena, size_t size)
+{
+	if (arena->_base != NULL) {
+		return SPMM_STATUS_INVALID_VALUE;
+	}
+	arena->_base = malloc(size);
+	if (arena->_base == NULL) {
+		return SPMM_STATUS_ALLOC_FAILED;
+	}
+	return SPMM_STATUS_SUCCESS;
+}
+
+SpmmStatus_t arena_free(Arena* arena)
+{
+	if (arena->_base == NULL) {
+		return SPMM_STATUS_INVALID_VALUE;
+	}
+	free(arena->_base);
+	if (arena->_base != NULL) {
+		return SPMM_STATUS_ALLOC_FAILED;
+	}
+	return SPMM_STATUS_SUCCESS;
+}
+
 void load_spmm_dlmc(SPMM<CSR>& spmm, const std::filesystem::path sparse_path, std::vector<std::filesystem::path> dense_path_list)
 {
 	if (!std::filesystem::exists(sparse_path) || !std::filesystem::is_regular_file(sparse_path)) {

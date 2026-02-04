@@ -11,88 +11,13 @@
 #include "header.h"
 #include "matrix.h"
 
-class HostArena
+struct Arena
 {
-private:
 	void*  _base;
 	void*  _curr;
 	size_t _size;
-
-public:
-	explicit HostArena(size_t size) : _base(cuda_malloc_host(size)), _size(size)
-	{
-		_curr = _base;
-		assert(_base && "HostArena failed to allocate on host");
-	}
-
-	~HostArena()
-	{
-		cuda_dealloc_host(_base);
-	}
-
-	HostArena(const HostArena&) = delete;
-
-	HostArena& operator=(const HostArena&) = delete;
-
-	HostArena(HostArena&& other) noexcept : _base(other._base), _size(other._size)
-	{
-		other._base = nullptr;
-		other._size = 0;
-	}
-
-	HostArena& operator=(HostArena&& other) noexcept
-	{
-		if (this != &other) {
-			cuda_dealloc_host(_base);
-
-			_size = other._size;
-			_base = other._base;
-
-			other._base = nullptr;
-			other._size = 0;
-		}
-		return *this;
-	}
+	size_t _used;
 };
 
-class DeviceArena
-{
-private:
-	void*  _base;
-	size_t _size;
-
-public:
-	explicit DeviceArena(size_t size) : _base(cuda_malloc_device(size)), _size(size)
-	{
-		assert(_base && "HostArena failed to allocate on host");
-	}
-
-	~DeviceArena()
-	{
-		cuda_dealloc_device(_base);
-	}
-
-	DeviceArena(const DeviceArena&) = delete;
-
-	DeviceArena& operator=(const HostArena&) = delete;
-
-	DeviceArena(DeviceArena&& other) noexcept : _base(other._base), _size(other._size)
-	{
-		other._base = nullptr;
-		other._size = 0;
-	}
-
-	DeviceArena& operator=(DeviceArena&& other) noexcept
-	{
-		if (this != &other) {
-			cuda_dealloc_device(_base);
-
-			_size = other._size;
-			_base = other._base;
-
-			other._base = nullptr;
-			other._size = 0;
-		}
-		return *this;
-	}
-};
+SpmmStatus_t arena_init(Arena* arena, size_t size);
+SpmmStatus_t arena_free(Arena* arena);
