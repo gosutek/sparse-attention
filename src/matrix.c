@@ -1,11 +1,6 @@
 #include "matrix.h"
 #include "spmm.h"
 
-static inline uint32_t* get_csr_row_ptr_u16(const SpMatDescr* const _sp)
-{
-	return (uint32_t*)_sp->csr.row_ptr;
-}
-
 /*
  * Calculates the size of a CSR or CSC matrix in bytes for float values
  * Accounts for non-square matrices
