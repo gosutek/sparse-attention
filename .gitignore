@@ -10,14 +10,5 @@ cmake_install.cmake
 
 cute
 
-log/
-evaluation/
-test/
-
-valgrind*
-sanitizer*
-*.log
-*nsys-rep
-*ncu-rep
 .cache/
-.clangd
+examples/data/
