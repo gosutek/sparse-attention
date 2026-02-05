@@ -8,8 +8,8 @@
 
 typedef enum
 {
-	SPARSE_FORMAT_CSR = 1,
-	SPARSE_FORMAT_CSC = 2,
+	SPARSE_FORMAT_CSR = 0,
+	SPARSE_FORMAT_CSC = 1,
 } SparseFormat_t;
 
 typedef enum
@@ -44,13 +44,13 @@ typedef struct SpMatDescr
 	float* val;
 } SpMatDescr;
 
-inline size_t spmatdescr_ptr_count_get(const SpMatDescr* const sp);
-inline size_t spmatdescr_ptr_bytes_get(const SpMatDescr* const sp);
-inline size_t spmatdescr_idx_count_get(const SpMatDescr* const sp);
-inline size_t spmatdescr_idx_bytes_get(const SpMatDescr* const sp);
-inline size_t spmatdescr_val_count_get(const SpMatDescr* const sp);
-inline size_t spmatdescr_val_bytes_get(const SpMatDescr* const sp);
-inline size_t spmatdescr_byte_size_get(const SpMatDescr* const sp);
+inline size_t sp_mat_ptr_count_get(const SpMatDescr* const sp);
+inline size_t sp_mat_ptr_bytes_get(const SpMatDescr* const sp);
+inline size_t sp_mat_idx_count_get(const SpMatDescr* const sp);
+inline size_t sp_mat_idx_bytes_get(const SpMatDescr* const sp);
+inline size_t sp_mat_val_count_get(const SpMatDescr* const sp);
+inline size_t sp_mat_val_bytes_get(const SpMatDescr* const sp);
+inline size_t sp_mat_byte_size_get(const SpMatDescr* const sp);
 
 typedef struct DnMatDescr
 {

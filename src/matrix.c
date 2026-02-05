@@ -1,7 +1,7 @@
 #include "matrix.h"
 #include "spmm.h"
 
-inline size_t spmatdescr_ptr_count_get(const SpMatDescr* const sp)
+inline size_t sp_mat_ptr_count_get(const SpMatDescr* const sp)
 {
 	switch (sp->format) {
 	case SPARSE_FORMAT_CSR:
@@ -11,34 +11,34 @@ inline size_t spmatdescr_ptr_count_get(const SpMatDescr* const sp)
 	}
 }
 
-inline size_t spmatdescr_ptr_bytes_get(const SpMatDescr* const sp)
+inline size_t sp_mat_ptr_bytes_get(const SpMatDescr* const sp)
 {
-	return spmatdescr_ptr_count_get(sp) * (sizeof *(sp->csr.row_ptr));  // sizeof uint might be faster but less flexible when it comes to accepting more types
+	return sp_mat_ptr_count_get(sp) * (sizeof *(sp->csr.row_ptr));  // sizeof uint might be faster but less flexible when it comes to accepting more types
 }
 
-inline size_t spmatdescr_idx_count_get(const SpMatDescr* const sp)
+inline size_t sp_mat_idx_count_get(const SpMatDescr* const sp)
 {
 	return sp->nnz;
 }
 
-inline size_t spmatdescr_idx_bytes_get(const SpMatDescr* const sp)
+inline size_t sp_mat_idx_bytes_get(const SpMatDescr* const sp)
 {
 	return sp->nnz * (sizeof *(sp->csr.col_idx));
 }
 
-inline size_t spmatdescr_val_count_get(const SpMatDescr* const sp)
+inline size_t sp_mat_val_count_get(const SpMatDescr* const sp)
 {
 	return sp->nnz;
 }
 
-inline size_t spmatdescr_val_bytes_get(const SpMatDescr* const sp)
+inline size_t sp_mat_val_bytes_get(const SpMatDescr* const sp)
 {
 	return sp->nnz * (sizeof *(sp->val));
 }
 
-inline size_t spmatdescr_byte_size_get(const SpMatDescr* const sp)
+inline size_t sp_mat_byte_size_get(const SpMatDescr* const sp)
 {
-	return spmatdescr_ptr_bytes_get(sp) + spmatdescr_idx_bytes_get(sp) + spmatdescr_val_bytes_get(sp);
+	return sp_mat_ptr_bytes_get(sp) + sp_mat_idx_bytes_get(sp) + sp_mat_val_bytes_get(sp);
 }
 
 /*
@@ -61,7 +61,7 @@ static SpmmStatus_t get_max_nnz_per_row(size_t* const max_nnz_out, SpMatDescr* c
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 	*max_nnz_out = 0;
-	const size_t row_ptr_count = spmatdescr_ptr_count_get(sp_mat_descr);
+	const size_t row_ptr_count = sp_mat_ptr_count_get(sp_mat_descr);
 
 	for (size_t i = 0; i < row_ptr_count - 1; ++i) {
 		const size_t curr_col_nnz = ((uint32_t*)(sp_mat_descr->csr.row_ptr))[i + 1] - ((uint32_t*)(sp_mat_descr->csr.row_ptr))[i];
@@ -260,7 +260,7 @@ SpmmStatus_t create_sp_mat_csr(SpMatDescr_t* sp_mat_descr,
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
-	*sp_mat_descr = (SpMatDescr_t)(malloc(sizeof(SpMatDescr)));
+	*sp_mat_descr = (SpMatDescr_t)(malloc(sizeof *sp_mat_descr));
 	if (*sp_mat_descr == NULL) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
@@ -290,10 +290,12 @@ SpmmStatus_t create_sp_mat_csc(SpMatDescr_t* sp_mat_descr,
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
-	*sp_mat_descr = (SpMatDescr_t)(malloc(sizeof(SpMatDescr)));
+	*sp_mat_descr = (SpMatDescr_t)(malloc(sizeof *sp_mat_descr));
 	if (*sp_mat_descr == NULL) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
+
+	(*sp_mat_descr)->format = SPARSE_FORMAT_CSC;
 
 	(*sp_mat_descr)->rows = rows;
 	(*sp_mat_descr)->cols = cols;
