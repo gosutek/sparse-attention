@@ -15,8 +15,6 @@ typedef enum
 typedef struct SpMatDescr
 {
 	SparseFormat_t format;
-	indexType_t    index_type;
-	dataType_t     data_type;
 
 	uint32_t rows;
 	uint32_t cols;
@@ -26,26 +24,25 @@ typedef struct SpMatDescr
 	{
 		struct
 		{
-			void* row_ptr;
-			void* col_idx;
 
 			size_t row_ptr_cnt;
 			size_t col_idx_cnt;
 
 			size_t row_ptr_bytes;
 			size_t col_idx_bytes;
+			uint32_t* row_ptr;
+			uint32_t* col_idx;
 		} csr;
 
 		struct
 		{
-			void* col_ptr;
-			void* row_idx;
-
 			size_t col_ptr_cnt;
 			size_t row_idx_cnt;
 
 			size_t col_ptr_bytes;
 			size_t row_idx_bytes;
+			uint32_t* col_ptr;
+			uint32_t* row_idx;
 		} csc;
 	};
 
@@ -55,20 +52,21 @@ typedef struct SpMatDescr
 	size_t val_ptr_bytes;
 
 	size_t total_bytes;
+	float* val;
 } SpMatDescr;
 
-struct DlmcHeader
+typedef struct
 {
 	uint32_t rows;
 	uint32_t cols;
 	uint32_t nnz;
-};
+} DlmcHeader;
 
-struct RowMajorHeader
+typedef struct
 {
 	uint32_t rows;
 	uint32_t cols;
-};
+} RowMajorHeader;
 
 // namespace Csr
 // {

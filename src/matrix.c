@@ -6,7 +6,7 @@
  * Accounts for non-square matrices
  * n: main dimension's size (cols for CSC, rows for CSR)
  */
-[[maybe_unused]] static inline size_t get_sparse_byte_size(const size_t n, const size_t nnz)
+static inline size_t get_sparse_byte_size(const size_t n, const size_t nnz)
 {
 	size_t b_ptr_size = (n + 1) * sizeof(uint32_t);
 	size_t b_idx_size = nnz * sizeof(uint32_t);
@@ -15,7 +15,7 @@
 	return b_ptr_size + b_idx_size + b_val_size;
 }
 
-[[maybe_unused]] static SpmmStatus_t get_max_nnz_per_row(size_t* const max_nnz_out, SpMatDescr* const sp_mat_descr)
+static SpmmStatus_t get_max_nnz_per_row(size_t* const max_nnz_out, SpMatDescr* const sp_mat_descr)
 {
 	if (!sp_mat_descr || !max_nnz_out) {
 		return SPMM_STATUS_INVALID_VALUE;
@@ -221,11 +221,9 @@ SpmmStatus_t create_sp_mat_csr(SpMatDescr_t* sp_mat_descr,
 	uint32_t                                 rows,
 	uint32_t                                 cols,
 	uint32_t                                 nnz,
-	void*                                    row_ptr,
-	void*                                    col_idx,
-	void*                                    values,
-	indexType_t                              index_type,
-	dataType_t                               val_type)
+	uint32_t*                                row_ptr,
+	uint32_t*                                col_idx,
+	float*                                   val)
 {
 	if (sp_mat_descr == NULL || *sp_mat_descr != NULL) {
 		return SPMM_STATUS_INVALID_VALUE;
@@ -242,11 +240,9 @@ SpmmStatus_t create_sp_mat_csr(SpMatDescr_t* sp_mat_descr,
 	(*sp_mat_descr)->cols = cols;
 	(*sp_mat_descr)->nnz = nnz;
 
-	(*sp_mat_descr)->index_type = index_type;
-
 	(*sp_mat_descr)->csr.row_ptr = row_ptr;
 	(*sp_mat_descr)->csr.col_idx = col_idx;
-	(*sp_mat_descr)->values = values;
+	(*sp_mat_descr)->val = val;
 
 	(*sp_mat_descr)->csr.row_ptr_cnt = rows + 1;
 	(*sp_mat_descr)->csr.col_idx_cnt = nnz;
@@ -279,11 +275,9 @@ SpmmStatus_t create_sp_mat_csc(SpMatDescr_t* sp_mat_descr,
 	uint32_t                                 rows,
 	uint32_t                                 cols,
 	uint32_t                                 nnz,
-	void*                                    col_ptr,
-	void*                                    row_idx,
-	void*                                    values,
-	indexType_t                              index_type,
-	dataType_t                               val_type)
+	uint32_t*                                col_ptr,
+	uint32_t*                                row_idx,
+	float*                                   val)
 {
 	if (sp_mat_descr == NULL || *sp_mat_descr != NULL) {
 		return SPMM_STATUS_INVALID_VALUE;
@@ -298,11 +292,9 @@ SpmmStatus_t create_sp_mat_csc(SpMatDescr_t* sp_mat_descr,
 	(*sp_mat_descr)->cols = cols;
 	(*sp_mat_descr)->nnz = nnz;
 
-	(*sp_mat_descr)->index_type = index_type;
-
 	(*sp_mat_descr)->csc.col_ptr = col_ptr;
 	(*sp_mat_descr)->csc.row_idx = row_idx;
-	(*sp_mat_descr)->values = values;
+	(*sp_mat_descr)->val = val;
 
 	(*sp_mat_descr)->csc.col_ptr_cnt = cols + 1;
 	(*sp_mat_descr)->csc.row_idx_cnt = nnz;

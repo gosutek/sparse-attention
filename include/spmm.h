@@ -1,8 +1,7 @@
-#pragma once
+#ifndef SPMM_H
+#define SPMM_H
 
 #include <stdint.h>
-
-// public header
 
 typedef enum
 {
@@ -20,17 +19,20 @@ typedef enum
 	SPMM_STATUS_INSUFFICIENT_RESOURCES = 11
 } SpmmStatus_t;
 
-typedef enum
-{
-	INDEX_TYPE_16U = 1,
-	INDEX_TYPE_32U = 2,
-	INDEX_TYPE_64U = 3,
-} indexType_t;
+// INFO: Off for now
+// typedef enum
+// {
+// 	INDEX_TYPE_16U = 1,
+// 	INDEX_TYPE_32U = 2,
+// 	INDEX_TYPE_64U = 3,
+// } indexType_t;
 
-typedef enum
-{
-	DATA_TYPE_F32 = 1,
-} dataType_t;
+// INFO: Off for now
+// typedef enum
+// {
+// 	DATA_TYPE_F32 = 1,
+// 	DATA_TYPE_F64 = 2,
+// } dataType_t;
 
 struct Context;
 typedef struct Context* Handle_t;
@@ -45,18 +47,16 @@ SpmmStatus_t create_sp_mat_csr(SpMatDescr_t* sp_mat_descr,
 	uint32_t                                 rows,
 	uint32_t                                 cols,
 	uint32_t                                 nnz,
-	void*                                    row_ptr,
-	void*                                    col_idx,
-	void*                                    values,
-	indexType_t                              index_type,
-	dataType_t                               val_type);
+	uint32_t*                                row_ptr,
+	uint32_t*                                col_idx,
+	float*                                   val);
 
 SpmmStatus_t create_sp_mat_csc(SpMatDescr_t* sp_mat_descr,
 	uint32_t                                 rows,
 	uint32_t                                 cols,
 	uint32_t                                 nnz,
-	void*                                    col_ptr,
-	void*                                    row_idx,
-	void*                                    values,
-	indexType_t                              index_type,
-	dataType_t                               val_type);
+	uint32_t*                                col_ptr,
+	uint32_t*                                row_idx,
+	float*                                   val);
+
+#endif  // SPMM_H
