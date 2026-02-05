@@ -70,18 +70,24 @@ static SpmmStatus_t get_max_nnz_per_row(size_t* const max_nnz_out, SpMatDescr* c
 	return SPMM_STATUS_SUCCESS;
 }
 
-// TODO: Convert to C
-// [[maybe_unused]] std::vector<float> csr_to_row_major(const Csr::Matrix& mat)
-// {
-// 	std::vector<float> res(mat.rows * mat.cols, 0.0f);
-//
-// 	for (size_t i = 0; i < mat.rows; ++i) {
-// 		for (size_t j = mat.row_ptr[i]; j < mat.row_ptr[i + 1]; ++j) {
-// 			res[i * mat.cols + mat.col_idx[j]] = mat.val[j];
-// 		}
-// 	}
-// 	return res;
-// }
+SpmmStatus_t sp_csr_convert_row_major(SpMatDescr_t sp, DnMatDescr_t dn)
+{
+	if (!sp || !dn) {  // I except both of these to be allocated
+		return SPMM_STATUS_NOT_INITIALIZED;
+	}
+
+	if (sp->format != SPARSE_FORMAT_CSR) {
+		return SPMM_STATUS_NOT_SUPPORTED;
+	}
+
+	for (size_t i = 0; i < sp->rows; ++i) {
+		const uint32_t* const row_ptr = sp->csr.row_ptr;
+		for (uint32_t j = row_ptr[i]; j < row_ptr[i + 1]; ++j) {
+			dn->val[i * sp->cols + sp->csr.col_idx[j]] = sp->val[j];
+		}
+	}
+	return SPMM_STATUS_SUCCESS;
+}
 
 // TODO: Convert to C
 // [[maybe_unused]] std::vector<float> csc_to_col_major(const Csc::Matrix& mat)
