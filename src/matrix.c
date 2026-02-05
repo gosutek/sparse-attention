@@ -61,26 +61,11 @@ static SpmmStatus_t get_max_nnz_per_row(size_t* const max_nnz_out, SpMatDescr* c
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 	*max_nnz_out = 0;
+	const size_t row_ptr_count = spmatdescr_ptr_count_get(sp_mat_descr);
 
-	switch (sp_mat_descr->index_type) {
-	case INDEX_TYPE_16U:
-		for (size_t i = 0; i < sp_mat_descr->csr.row_ptr_cnt - 1; ++i) {
-			const size_t curr_col_nnz = ((uint16_t*)(sp_mat_descr->csr.row_ptr))[i + 1] - ((uint16_t*)(sp_mat_descr->csr.row_ptr))[i];
-			*max_nnz_out = *max_nnz_out > curr_col_nnz ? *max_nnz_out : curr_col_nnz;
-		}
-		break;
-	case INDEX_TYPE_32U:
-		for (size_t i = 0; i < sp_mat_descr->csr.row_ptr_cnt - 1; ++i) {
-			const size_t curr_col_nnz = ((uint32_t*)(sp_mat_descr->csr.row_ptr))[i + 1] - ((uint32_t*)(sp_mat_descr->csr.row_ptr))[i];
-			*max_nnz_out = *max_nnz_out > curr_col_nnz ? *max_nnz_out : curr_col_nnz;
-		}
-		break;
-	case INDEX_TYPE_64U:
-		for (size_t i = 0; i < sp_mat_descr->csr.row_ptr_cnt - 1; ++i) {
-			const size_t curr_col_nnz = ((uint64_t*)(sp_mat_descr->csr.row_ptr))[i + 1] - ((uint64_t*)(sp_mat_descr->csr.row_ptr))[i];
-			*max_nnz_out = *max_nnz_out > curr_col_nnz ? *max_nnz_out : curr_col_nnz;
-		}
-		break;
+	for (size_t i = 0; i < row_ptr_count - 1; ++i) {
+		const size_t curr_col_nnz = ((uint32_t*)(sp_mat_descr->csr.row_ptr))[i + 1] - ((uint32_t*)(sp_mat_descr->csr.row_ptr))[i];
+		*max_nnz_out = *max_nnz_out > curr_col_nnz ? *max_nnz_out : curr_col_nnz;
 	}
 	return SPMM_STATUS_SUCCESS;
 }
