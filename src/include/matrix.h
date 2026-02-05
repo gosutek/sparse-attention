@@ -24,36 +24,27 @@ typedef struct SpMatDescr
 	{
 		struct
 		{
-
-			size_t row_ptr_cnt;
-			size_t col_idx_cnt;
-
-			size_t row_ptr_bytes;
-			size_t col_idx_bytes;
 			uint32_t* row_ptr;
 			uint32_t* col_idx;
 		} csr;
 
 		struct
 		{
-			size_t col_ptr_cnt;
-			size_t row_idx_cnt;
-
-			size_t col_ptr_bytes;
-			size_t row_idx_bytes;
 			uint32_t* col_ptr;
 			uint32_t* row_idx;
 		} csc;
 	};
 
-	void* values;
-
-	size_t val_ptr_cnt;
-	size_t val_ptr_bytes;
-
-	size_t total_bytes;
 	float* val;
 } SpMatDescr;
+
+inline size_t spmatdescr_ptr_count_get(const SpMatDescr* const sp);
+inline size_t spmatdescr_ptr_bytes_get(const SpMatDescr* const sp);
+inline size_t spmatdescr_idx_count_get(const SpMatDescr* const sp);
+inline size_t spmatdescr_idx_bytes_get(const SpMatDescr* const sp);
+inline size_t spmatdescr_val_count_get(const SpMatDescr* const sp);
+inline size_t spmatdescr_val_bytes_get(const SpMatDescr* const sp);
+inline size_t spmatdescr_byte_size_get(const SpMatDescr* const sp);
 
 typedef struct
 {

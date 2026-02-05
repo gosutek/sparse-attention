@@ -1,6 +1,46 @@
 #include "matrix.h"
 #include "spmm.h"
 
+inline size_t spmatdescr_ptr_count_get(const SpMatDescr* const sp)
+{
+	switch (sp->format) {
+	case SPARSE_FORMAT_CSR:
+		return sp->rows + 1;
+	case SPARSE_FORMAT_CSC:
+		return sp->cols + 1;
+	}
+}
+
+inline size_t spmatdescr_ptr_bytes_get(const SpMatDescr* const sp)
+{
+	return spmatdescr_ptr_count_get(sp) * (sizeof *(sp->csr.row_ptr));  // sizeof uint might be faster but less flexible when it comes to accepting more types
+}
+
+inline size_t spmatdescr_idx_count_get(const SpMatDescr* const sp)
+{
+	return sp->nnz;
+}
+
+inline size_t spmatdescr_idx_bytes_get(const SpMatDescr* const sp)
+{
+	return sp->nnz * (sizeof *(sp->csr.col_idx));
+}
+
+inline size_t spmatdescr_val_count_get(const SpMatDescr* const sp)
+{
+	return sp->nnz;
+}
+
+inline size_t spmatdescr_val_bytes_get(const SpMatDescr* const sp)
+{
+	return sp->nnz * (sizeof *(sp->val));
+}
+
+inline size_t spmatdescr_byte_size_get(const SpMatDescr* const sp)
+{
+	return spmatdescr_ptr_bytes_get(sp) + spmatdescr_idx_bytes_get(sp) + spmatdescr_val_bytes_get(sp);
+}
+
 /*
  * Calculates the size of a CSR or CSC matrix in bytes for float values
  * Accounts for non-square matrices
@@ -244,30 +284,6 @@ SpmmStatus_t create_sp_mat_csr(SpMatDescr_t* sp_mat_descr,
 	(*sp_mat_descr)->csr.col_idx = col_idx;
 	(*sp_mat_descr)->val = val;
 
-	(*sp_mat_descr)->csr.row_ptr_cnt = rows + 1;
-	(*sp_mat_descr)->csr.col_idx_cnt = nnz;
-	(*sp_mat_descr)->val_ptr_cnt = nnz;
-
-	switch (index_type) {
-	case INDEX_TYPE_16U:
-		(*sp_mat_descr)->csr.row_ptr_bytes = (rows + 1) * sizeof(uint16_t);
-		(*sp_mat_descr)->csr.col_idx_bytes = nnz * sizeof(uint16_t);
-		break;
-	case INDEX_TYPE_32U:
-		(*sp_mat_descr)->csr.row_ptr_bytes = (rows + 1) * sizeof(uint32_t);
-		(*sp_mat_descr)->csr.col_idx_bytes = nnz * sizeof(uint32_t);
-		break;
-	case INDEX_TYPE_64U:
-		(*sp_mat_descr)->csr.row_ptr_bytes = (rows + 1) * sizeof(uint64_t);
-		(*sp_mat_descr)->csr.col_idx_bytes = nnz * sizeof(uint64_t);
-		break;
-	}
-
-	switch (val_type) {
-	case DATA_TYPE_F32:
-		(*sp_mat_descr)->val_ptr_bytes = nnz * sizeof(float);
-		break;
-	}
 	return SPMM_STATUS_SUCCESS;
 }
 
@@ -296,29 +312,5 @@ SpmmStatus_t create_sp_mat_csc(SpMatDescr_t* sp_mat_descr,
 	(*sp_mat_descr)->csc.row_idx = row_idx;
 	(*sp_mat_descr)->val = val;
 
-	(*sp_mat_descr)->csc.col_ptr_cnt = cols + 1;
-	(*sp_mat_descr)->csc.row_idx_cnt = nnz;
-	(*sp_mat_descr)->val_ptr_cnt = nnz;
-
-	switch (index_type) {
-	case INDEX_TYPE_16U:
-		(*sp_mat_descr)->csc.col_ptr_bytes = (cols + 1) * sizeof(uint16_t);
-		(*sp_mat_descr)->csc.row_idx_bytes = nnz * sizeof(uint16_t);
-		break;
-	case INDEX_TYPE_32U:
-		(*sp_mat_descr)->csc.col_ptr_bytes = (cols + 1) * sizeof(uint32_t);
-		(*sp_mat_descr)->csc.row_idx_bytes = nnz * sizeof(uint32_t);
-		break;
-	case INDEX_TYPE_64U:
-		(*sp_mat_descr)->csc.col_ptr_bytes = (cols + 1) * sizeof(uint64_t);
-		(*sp_mat_descr)->csc.row_idx_bytes = nnz * sizeof(uint64_t);
-		break;
-	}
-
-	switch (val_type) {
-	case DATA_TYPE_F32:
-		(*sp_mat_descr)->val_ptr_bytes = nnz * sizeof(float);
-		break;
-	}
 	return SPMM_STATUS_SUCCESS;
 }
