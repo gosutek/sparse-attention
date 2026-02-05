@@ -299,3 +299,51 @@ SpmmStatus_t create_sp_mat_csc(SpMatDescr_t* sp_mat_descr,
 
 	return SPMM_STATUS_SUCCESS;
 }
+
+SpmmStatus_t create_dn_mat_row_major(DnMatDescr_t* dn_mat_descr,
+	uint32_t                                       rows,
+	uint32_t                                       cols,
+	float*                                         val)
+{
+	if (dn_mat_descr == NULL || *dn_mat_descr != NULL) {
+		return SPMM_STATUS_INVALID_VALUE;
+	}
+
+	*dn_mat_descr = (DnMatDescr_t)(malloc(sizeof *dn_mat_descr));
+	if (*dn_mat_descr == NULL) {
+		return SPMM_STATUS_ALLOC_FAILED;
+	}
+
+	(*dn_mat_descr)->format = DENSE_FORMAT_ROW_MAJOR;
+
+	(*dn_mat_descr)->rows = rows;
+	(*dn_mat_descr)->cols = cols;
+
+	(*dn_mat_descr)->val = val;
+
+	return SPMM_STATUS_SUCCESS;
+}
+
+SpmmStatus_t create_dn_mat_col_major(DnMatDescr_t* dn_mat_descr,
+	uint32_t                                       rows,
+	uint32_t                                       cols,
+	float*                                         val)
+{
+	if (dn_mat_descr == NULL || *dn_mat_descr != NULL) {
+		return SPMM_STATUS_INVALID_VALUE;
+	}
+
+	*dn_mat_descr = (DnMatDescr_t)(malloc(sizeof *dn_mat_descr));
+	if (*dn_mat_descr == NULL) {
+		return SPMM_STATUS_ALLOC_FAILED;
+	}
+
+	(*dn_mat_descr)->format = DENSE_FORMAT_COL_MAJOR;
+
+	(*dn_mat_descr)->rows = rows;
+	(*dn_mat_descr)->cols = cols;
+
+	(*dn_mat_descr)->val = val;
+
+	return SPMM_STATUS_SUCCESS;
+}

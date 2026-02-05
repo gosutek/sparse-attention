@@ -12,6 +12,12 @@ typedef enum
 	SPARSE_FORMAT_CSC = 2,
 } SparseFormat_t;
 
+typedef enum
+{
+	DENSE_FORMAT_ROW_MAJOR = 0,
+	DENSE_FORMAT_COL_MAJOR = 1,
+} DenseFormat_t;
+
 typedef struct SpMatDescr
 {
 	SparseFormat_t format;
@@ -45,6 +51,16 @@ inline size_t spmatdescr_idx_bytes_get(const SpMatDescr* const sp);
 inline size_t spmatdescr_val_count_get(const SpMatDescr* const sp);
 inline size_t spmatdescr_val_bytes_get(const SpMatDescr* const sp);
 inline size_t spmatdescr_byte_size_get(const SpMatDescr* const sp);
+
+typedef struct DnMatDescr
+{
+	DenseFormat_t format;
+
+	uint32_t rows;
+	uint32_t cols;
+
+	float* val;
+} DnMatDescr;
 
 typedef struct
 {

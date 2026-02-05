@@ -59,4 +59,17 @@ SpmmStatus_t create_sp_mat_csc(SpMatDescr_t* sp_mat_descr,
 	uint32_t*                                row_idx,
 	float*                                   val);
 
+struct DnMatDescr;
+typedef struct DnMatDescr* DnMatDescr_t;
+
+SpmmStatus_t create_dn_mat_row_major(DnMatDescr_t* dn_mat_descr,
+	uint32_t                                       rows,
+	uint32_t                                       cols,
+	float*                                         val);
+
+SpmmStatus_t create_dn_mat_col_major(DnMatDescr_t* dn_mat_descr,
+	uint32_t                                       rows,
+	uint32_t                                       cols,
+	float*                                         val);
+
 #endif  // SPMM_H
