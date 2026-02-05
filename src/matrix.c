@@ -93,6 +93,30 @@ SpmmStatus_t sp_csr_convert_row_major(SpMatDescr_t sp, DnMatDescr_t dn)
 	return SPMM_STATUS_SUCCESS;
 }
 
+SpmmStatus_t sp_csc_convert_col_major(SpMatDescr_t sp, DnMatDescr_t dn)
+{
+	if (!sp || !dn) {
+		return SPMM_STATUS_NOT_INITIALIZED;
+	}
+
+	if (sp->format != SPARSE_FORMAT_CSC) {
+		return SPMM_STATUS_NOT_SUPPORTED;
+	}
+
+	for (size_t i = 0; i < sp->rows * sp->cols; ++i) {
+		dn->val[i] = 0;
+	}
+
+	for (size_t i = 0; i < sp->cols; ++i) {
+		const uint32_t* const col_ptr = sp->csc.col_ptr;
+		for (uint32_t j = col_ptr[i]; j < col_ptr[i + 1]; ++j) {
+			dn->val[i * sp->rows + sp->csc.row_idx[j]] = sp->val[j];
+		}
+	}
+
+	return SPMM_STATUS_SUCCESS;
+}
+
 // TODO: Convert to C
 // [[maybe_unused]] std::vector<float> csc_to_col_major(const Csc::Matrix& mat)
 // {

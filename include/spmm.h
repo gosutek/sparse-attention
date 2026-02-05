@@ -74,5 +74,6 @@ SpmmStatus_t create_dn_mat_col_major(DnMatDescr_t* dn_mat_descr,
 
 // MAT UTILS
 SpmmStatus_t sp_csr_convert_row_major(SpMatDescr_t sp, DnMatDescr_t dn);
+SpmmStatus_t sp_csc_convert_col_major(SpMatDescr_t sp, DnMatDescr_t dn);
 
 #endif  // SPMM_H
