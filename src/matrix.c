@@ -80,6 +80,10 @@ SpmmStatus_t sp_csr_convert_row_major(SpMatDescr_t sp, DnMatDescr_t dn)
 		return SPMM_STATUS_NOT_SUPPORTED;
 	}
 
+	for (size_t i = 0; i < sp->rows * sp->cols; ++i) {
+		dn->val[i] = 0;
+	}
+
 	for (size_t i = 0; i < sp->rows; ++i) {
 		const uint32_t* const row_ptr = sp->csr.row_ptr;
 		for (uint32_t j = row_ptr[i]; j < row_ptr[i + 1]; ++j) {
