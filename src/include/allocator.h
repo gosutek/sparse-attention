@@ -1,19 +1,23 @@
-#pragma once
+#ifndef ALLOCATOR_H
+#define ALLOCATOR_H
 
-#include <cassert>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include "cusparse.h"
-#include "header.h"
-#include "matrix.h"
-#include "memory.cuh"
-
-struct Arena
+typedef struct
 {
-	void*  _base;
-	void*  _curr;
-	size_t _size;
-	size_t _used;
-};
+	uint64_t mem_alloc_pos;
+} MemArena;
 
-SpmmStatus_t arena_init(Arena* arena, size_t size);
-SpmmStatus_t arena_free(Arena* arena);
+void mem_arena_create(MemArena** const arena, uint64_t size);
+void mem_arena_destroy(MemArena* arena);
+
+void mem_arena_push(MemArena* const arena, uint64_t size, const void** ptr_out);
+void mem_arena_push_zero(MemArena* const arena, uint64_t size, void** ptr_out);
+
+void mem_arena_pop(MemArena* const arena, uint64_t size);
+
+uint64_t mem_arena_pos_get(const MemArena* const);
+
+#endif  // ALLOCATOR_H
