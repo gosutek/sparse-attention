@@ -1,5 +1,4 @@
 #include "allocator.h"
-#include <cstring>
 
 inline void mem_arena_create(MemArena** const arena, uint64_t size)
 {
