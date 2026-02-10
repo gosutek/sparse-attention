@@ -33,19 +33,6 @@ inline uint64_t mem_arena_pos_get(const MemArena* const arena)
 	return arena->mem_alloc_pos;
 }
 
-// // TODO: MOVE THESE
-// #define CEIL_DIV(M, N) (((M) + (N) - 1) / (N))
-//
-// #define CUSPARSE_CHECK(x)                                                                                    \
-// 	do {                                                                                                     \
-// 		cusparseStatus_t err = x;                                                                            \
-// 		if (err != CUSPARSE_STATUS_SUCCESS) {                                                                \
-// 			fprintf(stderr, "CUSPARSE error in %s at %s:%d: %s (%s=%d)\n", __FUNCTION__, __FILE__, __LINE__, \
-// 				cusparseGetErrorString(err), cusparseGetErrorName(err), err);                                \
-// 			abort();                                                                                         \
-// 		}                                                                                                    \
-// 	} while (0)
-//
 // // TODO: Need to pass the data type here
 // SpmmStatus_t arena_init(Arena* arena, size_t size)
 // {
