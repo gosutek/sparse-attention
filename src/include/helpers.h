@@ -5,9 +5,9 @@
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define CEIL_DIV(m, n) (((m) + (n) - 1) / (n))
 #define PAD(n, p) ((p) - ((n) & ((p) - 1)) & ((p) - 1))
-#define GIB(n) ((n) * (1 << 30))
-#define MIB(n) ((n) * (1 << 20))
-#define KIB(n) ((n) * (1 < < 10))
+#define GIB(n) ((uint64_t)(n) << 30)
+#define MIB(n) ((uint64_t)(n) << 20)
+#define KIB(n) ((uint64_t)(n) << 10)
 
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \
