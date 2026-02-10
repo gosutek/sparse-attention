@@ -29,4 +29,13 @@
 		}                                                                                                    \
 	} while (0)
 
+#define SPMM_CHECK(x)                                                                          \
+	do {                                                                                       \
+		SpmmStatus_t err = x;                                                                  \
+		if (err != SPMM_STATUS_SUCCESS) {                                                      \
+			fprintf(stderr, "SPMM error in %s at %s:%d: \n", __FUNCTION__, __FILE__, __LINE__) \
+				abort();                                                                       \
+		}                                                                                      \
+	} while (0)
+
 #endif  // HELPERS_H
