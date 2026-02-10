@@ -292,7 +292,7 @@ SpmmStatus_t create_sp_mat_csr(SpMatDescr_t* sp_mat_descr,
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
-	*sp_mat_descr = (SpMatDescr_t)(malloc(sizeof *sp_mat_descr));
+	*sp_mat_descr = (SpMatDescr_t)(malloc(sizeof **sp_mat_descr));
 	if (*sp_mat_descr == NULL) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
@@ -322,7 +322,7 @@ SpmmStatus_t create_sp_mat_csc(SpMatDescr_t* sp_mat_descr,
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
-	*sp_mat_descr = (SpMatDescr_t)(malloc(sizeof *sp_mat_descr));
+	*sp_mat_descr = (SpMatDescr_t)(malloc(sizeof **sp_mat_descr));
 	if (*sp_mat_descr == NULL) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
@@ -349,7 +349,7 @@ SpmmStatus_t create_dn_mat_row_major(DnMatDescr_t* dn_mat_descr,
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
-	*dn_mat_descr = (DnMatDescr_t)(malloc(sizeof *dn_mat_descr));
+	*dn_mat_descr = (DnMatDescr_t)(malloc(sizeof **dn_mat_descr));
 	if (*dn_mat_descr == NULL) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
@@ -373,7 +373,7 @@ SpmmStatus_t create_dn_mat_col_major(DnMatDescr_t* dn_mat_descr,
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
-	*dn_mat_descr = (DnMatDescr_t)(malloc(sizeof *dn_mat_descr));
+	*dn_mat_descr = (DnMatDescr_t)(malloc(sizeof **dn_mat_descr));
 	if (*dn_mat_descr == NULL) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
