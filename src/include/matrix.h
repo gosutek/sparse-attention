@@ -62,6 +62,8 @@ typedef struct DnMatDescr
 	float* val;
 } DnMatDescr;
 
+inline uint64_t dn_mat_bytes_get(const DnMatDescr* const sp);
+
 typedef struct
 {
 	uint32_t rows;

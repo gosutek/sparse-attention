@@ -5,7 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct
+#include "helpers.h"
+#include "spmm.h"
+
+typedef struct MemArena
 {
 	uint64_t mem_alloc_pos;
 } MemArena;
