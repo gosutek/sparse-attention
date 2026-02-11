@@ -1,9 +1,10 @@
+#include <stdio.h>  // TODO: remove
+#include <sys/mman.h>
+#include <unistd.h>
+
 #include "allocator.h"
 #include "helpers.h"
 #include "spmm.h"
-#include "stdio.h"  // TODO: remove
-#include <sys/mman.h>
-#include <unistd.h>
 
 /*
       * +------------------------------------------------------------------------------+
@@ -63,6 +64,8 @@ inline uint64_t mem_arena_pos_get(const MemArena* const arena)
 	return arena->pos;
 }
 
+#if defined(__linux__)
+
 inline static uint32_t vm_get_page_size()
 {
 	return (uint32_t)sysconf(_SC_PAGESIZE);
@@ -95,6 +98,10 @@ inline static int32_t vm_uncommit(void* addr, const uint64_t size)
 	}
 	return madvise(addr, size, MADV_DONTNEED) == 0; /* Subsequent access will result in zero-fill-on-demand pages */
 }
+
+#else
+#	error "VIRTUAL MEMORY ALLOCATION NOT IMPLEMENTED FOR CURRENT PLATFORM"
+#endif
 
 /*
       * +------------------------------------------------------------------------------+
