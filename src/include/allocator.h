@@ -13,24 +13,24 @@
 typedef struct MemArena
 {
 	uint64_t reserve_size;
+	uint64_t commit_size;
 
-	uint64_t mem_alloc_pos;
+	uint64_t commit_pos;
+	uint64_t pos;
 } MemArena;
 
 inline static int32_t mem_arena_create(MemArena** const arena, uint64_t reserve_size);
-inline static void    mem_arena_destroy(MemArena* arena);
+inline static int32_t mem_arena_destroy(MemArena* arena);
 
-inline static void mem_arena_push(MemArena* const arena, uint64_t size, const void** ptr_out);
-inline static void mem_arena_push_zero(MemArena* const arena, uint64_t size, void** ptr_out);
+inline static int32_t mem_arena_push(MemArena* const arena, uint64_t size, const void** ptr_out);
+inline static int32_t mem_arena_pop(MemArena* const arena, uint64_t size);
 
-inline static void mem_arena_pop(MemArena* const arena, uint64_t size);
-
-inline static uint64_t mem_arena_pos_get(const MemArena* const);
+inline uint64_t mem_arena_pos_get(const MemArena* const arena);
 
 #if defined(__linux__)
 
 inline static uint32_t vm_get_page_size();
-inline static void*    vm_reserve(const uint64_t reserve_size);
+inline static void*    vm_reserve(const uint64_t size);
 inline static int32_t  vm_release(void* ptr, const uint64_t size);
 inline static int32_t  vm_commit(void* addr, const uint64_t size);
 inline static void     vm_uncommit();

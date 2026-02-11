@@ -11,52 +11,56 @@
       * +------------------------------------------------------------------------------+
 */
 
-inline static int32_t mem_arena_create(MemArena** const arena, uint64_t reserve_size)
+// TODO: Implement an internal error enum and change the return types of these functions
+//
+// INFO: COMMIT SIZE SHOULD BE PAGE-SIZE ALIGNED AND DERIVED FROM AN ALLOCATION STRATEGY SIMILAR TO VECTOR OR SOMETHING :)
+
+inline static int32_t mem_arena_create(MemArena** const arena, const uint64_t reserve_size, const uint64_t commit_size)
 {
 	const uint32_t page_size = vm_get_page_size();
 	const uint64_t pa_reserve_size = reserve_size + PADDING_POW2(reserve_size, page_size);
+	const uint64_t pa_commit_size = commit_size + PADDING_POW2(commit_size, page_size);
 
-	*arena = (MemArena*)vm_reserve(pa_reserve_size);
+	*arena = (MemArena*)vm_reserve(reserve_size);
+	if (!(*arena)) {
+		return -1;
+	}
+
+	int32_t ret_code = vm_commit(*arena, pa_commit_size); /* Allocate for the MemArena members */
+	if (ret_code != 0) {
+		return -1;
+	}
 
 	(*arena)->reserve_size = pa_reserve_size;
-	(*arena)->mem_alloc_pos = sizeof **arena;
+	(*arena)->commit_size = pa_commit_size;
+
+	(*arena)->commit_pos = pa_commit_size;
+	(*arena)->pos = sizeof **arena;
+
 	return 0;
 }
 
-inline static void mem_arena_destroy(MemArena* arena)
+inline static int32_t mem_arena_destroy(MemArena* arena)
 {
-	// TODO: Swap this to virtual memory allocation
-	free(arena);
+	return vm_release(arena, arena->reserve_size) == 0;
 }
 
-// TODO:
-// 1. size -> reserve_size
-// 2. add commit_size
-inline static void mem_arena_push(MemArena* const arena, uint64_t size, const void** ptr_out)
+inline static int32_t mem_arena_push(MemArena* const arena, uint64_t size, const void** ptr_out)
 {
-	*ptr_out = arena + arena->mem_alloc_pos;
-	arena->mem_alloc_pos += size;
+	// TODO: Fill this
+	return 0;
 }
 
-// TODO:
-// 1. size -> reserve_size
-// 2. add commit_size
-inline static void mem_arena_push_zero(MemArena* const arena, uint64_t size, void** ptr_out)
+inline static int32_t mem_arena_pop(MemArena* const arena, uint64_t size)
 {
-	*ptr_out = arena + arena->mem_alloc_pos;
-	arena->mem_alloc_pos += size;
-
-	memset(*ptr_out, 0, size);
+	// TODO: Fill this
+	return 0;
 }
 
-inline static void mem_arena_pop(MemArena* const arena, uint64_t size)
+// TODO: Do I need this anymore?
+inline uint64_t mem_arena_pos_get(const MemArena* const arena)
 {
-	arena->mem_alloc_pos -= size;
-}
-
-inline static uint64_t mem_arena_pos_get(const MemArena* const arena)
-{
-	return arena->mem_alloc_pos;
+	return arena->pos;
 }
 
 inline static uint32_t vm_get_page_size()
