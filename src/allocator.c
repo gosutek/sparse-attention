@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <stdio.h>  // TODO: remove
 #include <sys/mman.h>
 #include <unistd.h>
@@ -18,6 +19,7 @@
 
 inline static int32_t mem_arena_create(MemArena** const arena, const uint64_t reserve_size, const uint64_t commit_size)
 {
+	// TODO: Debug print these at some point to ensure correctness.
 	const uint32_t page_size = vm_get_page_size();
 	const uint64_t pa_reserve_size = reserve_size + PADDING_POW2(reserve_size, page_size);
 	const uint64_t pa_commit_size = commit_size + PADDING_POW2(commit_size, page_size);
@@ -46,9 +48,32 @@ inline static int32_t mem_arena_destroy(MemArena* arena)
 	return vm_release(arena, arena->reserve_size) == 0;
 }
 
-inline static int32_t mem_arena_push(MemArena* const arena, uint64_t size, const void** ptr_out)
+inline static int32_t mem_arena_push(MemArena* const arena, uint64_t req_size, const void** ptr_out)
 {
-	// TODO: Fill this
+	/*
+   * 1. Ensure that we have enough allocated mem for the size
+   * Do I have enough allocted mem to spare? (req_size < commit_size)
+   * if req_size < allocated mem: go
+   * if not
+   * if I commit more, is there enough reserved? (commit_size < reserve_size)
+   * 2. Return pointer
+   * 3. Increment pos
+   */
+
+	const uint64_t aligned_pos = arena->pos + PADDING_POW2(arena->pos, sizeof(void*));
+	const uint64_t new_pos = aligned_pos + req_size;
+
+	if (new_pos > arena->reserve_size) {
+		abort();
+	} else if (new_pos > arena->commit_size) {
+		// TODO: Commit more mem
+		vm_commit((uint8_t*)arena + arena->commit_pos, arena->commit_size);
+		arena->commit_pos += arena->commit_size;
+	}
+
+	*ptr_out = (uint8_t*)arena + aligned_pos;
+	arena->pos = new_pos;
+
 	return 0;
 }
 
@@ -122,6 +147,7 @@ SpmmStatus_t
 	}
 	return SPMM_STATUS_SUCCESS;
 }
+
 SpmmStatus_t exec_ctx_destroy(ExecutionContext_t* ctx)
 {
 	if (!*ctx) {
