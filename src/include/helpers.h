@@ -4,7 +4,7 @@
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define CEIL_DIV(m, n) (((m) + (n) - 1) / (n))
-#define PAD(n, p) ((p) - ((n) & ((p) - 1)) & ((p) - 1))
+#define PADDING_POW2(n, p) ((p) - ((n) & ((p) - 1)) & ((p) - 1))
 #define GIB(n) ((uint64_t)(n) << 30)
 #define MIB(n) ((uint64_t)(n) << 20)
 #define KIB(n) ((uint64_t)(n) << 10)
