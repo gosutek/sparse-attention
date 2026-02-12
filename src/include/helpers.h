@@ -38,4 +38,10 @@
 		}                                                                                      \
 	} while (0)
 
+typedef enum
+{
+	SPMM_INTERNAL_STATUS_SUCCESS = 0,
+	SPMM_INTERNAL_STATUS_MEMOP_FAIL = 1
+} SpmmInternalStatus_t;
+
 #endif  // HELPERS_H
