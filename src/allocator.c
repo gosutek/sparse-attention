@@ -1,4 +1,3 @@
-#include <cstdint>
 #include <stdio.h>  // TODO: remove
 #include <sys/mman.h>
 #include <unistd.h>
@@ -50,16 +49,6 @@ inline static int32_t mem_arena_destroy(MemArena* arena)
 
 inline static int32_t mem_arena_push(MemArena* const arena, uint64_t req_size, const void** ptr_out)
 {
-	/*
-   * 1. Ensure that we have enough allocated mem for the size
-   * Do I have enough allocted mem to spare? (req_size < commit_size)
-   * if req_size < allocated mem: go
-   * if not
-   * if I commit more, is there enough reserved? (commit_size < reserve_size)
-   * 2. Return pointer
-   * 3. Increment pos
-   */
-
 	const uint64_t aligned_pos = arena->pos + PADDING_POW2(arena->pos, sizeof(void*)); /* the pointer returned should be naturally aligned */
 	const uint64_t new_pos = aligned_pos + req_size;
 
@@ -82,7 +71,15 @@ inline static int32_t mem_arena_push(MemArena* const arena, uint64_t req_size, c
 
 inline static int32_t mem_arena_pop(MemArena* const arena, uint64_t size)
 {
-	// TODO: Fill this
+	size = MIN(size, arena->pos - sizeof *arena); /* don't dealloc MemArena members */
+	arena->pos -= size;
+	return 0;
+}
+
+inline static int32_t mem_arena_pop_at(MemArena* const arena, uint64_t pos)
+{
+	uint64_t size = pos < arena->pos ? arena->pos - pos : 0;
+	mem_arena_pop(arena, size);
 	return 0;
 }
 
