@@ -1,4 +1,5 @@
 #include "matrix.h"
+#include "spmm.h"
 
 inline size_t sp_mat_ptr_count_get(const SpMatDescr* const sp)
 {
@@ -74,7 +75,7 @@ static SpmmStatus_t get_max_nnz_per_row(size_t* const max_nnz_out, SpMatDescr* c
 	return SPMM_STATUS_SUCCESS;
 }
 
-SpmmStatus_t sp_csr_convert_row_major(SpMatDescr_t sp, DnMatDescr_t dn)
+SpmmStatus_t sp_csr_to_row_major(SpMatDescr_t sp, DnMatDescr_t dn)
 {
 	if (!sp || !dn) {  // I except both of these to be allocated
 		return SPMM_STATUS_NOT_INITIALIZED;
@@ -84,9 +85,8 @@ SpmmStatus_t sp_csr_convert_row_major(SpMatDescr_t sp, DnMatDescr_t dn)
 		return SPMM_STATUS_NOT_SUPPORTED;
 	}
 
-	for (size_t i = 0; i < sp->rows * sp->cols; ++i) {
-		dn->val[i] = 0;
-	}
+	// INFO: Will need to change when you template out types
+	memset(&(dn->val), 0, sp->rows * sp->cols * (sizeof(float)));
 
 	for (size_t i = 0; i < sp->rows; ++i) {
 		const uint32_t* const row_ptr = sp->csr.row_ptr;
@@ -97,7 +97,7 @@ SpmmStatus_t sp_csr_convert_row_major(SpMatDescr_t sp, DnMatDescr_t dn)
 	return SPMM_STATUS_SUCCESS;
 }
 
-SpmmStatus_t sp_csc_convert_col_major(SpMatDescr_t sp, DnMatDescr_t dn)
+SpmmStatus_t sp_csc_to_col_major(SpMatDescr_t sp, DnMatDescr_t dn)
 {
 	if (!sp || !dn) {
 		return SPMM_STATUS_NOT_INITIALIZED;
@@ -107,9 +107,8 @@ SpmmStatus_t sp_csc_convert_col_major(SpMatDescr_t sp, DnMatDescr_t dn)
 		return SPMM_STATUS_NOT_SUPPORTED;
 	}
 
-	for (size_t i = 0; i < sp->rows * sp->cols; ++i) {
-		dn->val[i] = 0;
-	}
+	// INFO: Will need to change when you template out types
+	memset(&(dn->val), 0, sp->rows * sp->cols * (sizeof(float)));
 
 	for (size_t i = 0; i < sp->cols; ++i) {
 		const uint32_t* const col_ptr = sp->csc.col_ptr;
@@ -120,19 +119,6 @@ SpmmStatus_t sp_csc_convert_col_major(SpMatDescr_t sp, DnMatDescr_t dn)
 
 	return SPMM_STATUS_SUCCESS;
 }
-
-// TODO: Convert to C
-// [[maybe_unused]] std::vector<float> csc_to_col_major(const Csc::Matrix& mat)
-// {
-// 	std::vector<float> res(mat.rows * mat.cols, 0.0f);
-//
-// 	for (size_t i = 0; i < mat.cols; ++i) {
-// 		for (size_t j = mat.col_ptr[i]; j < mat.col_ptr[i + 1]; ++j) {
-// 			res[i * mat.rows + mat.row_idx[j]] = mat.val[j];
-// 		}
-// 	}
-// 	return res;
-// }
 
 // TODO: Convert to C
 // static void csr_to_csc(Csc::Matrix& mat, const std::vector<uint32_t>& row_ptr_vec, const std::vector<uint32_t>& col_idx_vec)

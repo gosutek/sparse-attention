@@ -78,8 +78,8 @@ extern "C"
 		float*                                         val);
 
 	// MAT UTILS
-	SpmmStatus_t sp_csr_convert_row_major(SpMatDescr_t sp, DnMatDescr_t dn);
-	SpmmStatus_t sp_csc_convert_col_major(SpMatDescr_t sp, DnMatDescr_t dn);
+	SpmmStatus_t sp_csr_to_row_major(SpMatDescr_t sp, DnMatDescr_t dn);
+	SpmmStatus_t sp_csc_to_col_major(SpMatDescr_t sp, DnMatDescr_t dn);
 
 #	if defined(__cplusplus)
 }
