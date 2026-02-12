@@ -60,14 +60,17 @@ inline static int32_t mem_arena_push(MemArena* const arena, uint64_t req_size, c
    * 3. Increment pos
    */
 
-	const uint64_t aligned_pos = arena->pos + PADDING_POW2(arena->pos, sizeof(void*));
+	const uint64_t aligned_pos = arena->pos + PADDING_POW2(arena->pos, sizeof(void*)); /* the pointer returned should be naturally aligned */
 	const uint64_t new_pos = aligned_pos + req_size;
 
 	if (new_pos > arena->reserve_size) {
 		abort();
-	} else if (new_pos > arena->commit_size) {
-		// TODO: Commit more mem
-		vm_commit((uint8_t*)arena + arena->commit_pos, arena->commit_size);
+	} else if (new_pos > arena->commit_pos) {
+		const uint64_t commit_size = CEIL_DIVI(new_pos, arena->commit_size);
+		if (commit_size > arena->reserve_size) {
+			abort();
+		}
+		vm_commit((uint8_t*)arena + arena->commit_pos, commit_size);
 		arena->commit_pos += arena->commit_size;
 	}
 
