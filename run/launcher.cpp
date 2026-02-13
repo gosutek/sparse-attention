@@ -544,3 +544,186 @@ void run_spmm_vectorized_nnzwise_regs(SPMM<CSC>& spmm, const uint32_t idx)
 
 	spmm_vectorized_nnzwise_regs<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
+
+std::vector<float> read_row_major_from_rm(const std::filesystem::path& filepath, size_t size)
+{
+	if (!std::filesystem::exists(filepath) && !std::filesystem::is_regular_file(filepath)) {
+		throw std::runtime_error(filepath.string() + " does not exist\n");
+	}
+	std::vector<float> res;
+	res.reserve(size);
+
+	std::ifstream file_stream(filepath, std::ios_base::in);
+	if (!file_stream) {
+		throw std::runtime_error("Failed to open file:" + filepath.string());
+	}
+	float tmp;
+	while (file_stream >> tmp) {
+		res.push_back(tmp);
+	}
+	return res;
+}
+
+Csr::Matrix parse_dlmc(void* dst, const std::filesystem::path& filepath)
+{
+	std::ifstream file_stream(filepath, std::ios_base::in);
+
+	if (!file_stream) {
+		// TODO: Remove exceptions
+		throw std::runtime_error("Failed to open file stream for filepath: " + filepath.stem().string());
+	}
+
+	DlmcHeader header = parse_dlmc_header(file_stream);
+
+	Csr::Matrix csr;
+	Csr::init(csr, header.rows, header.cols, header.nnz);
+	Csr::partition(csr, reinterpret_cast<uintptr_t>(dst));
+
+	std::string line, token;
+	std::getline(file_stream, line);
+	std::istringstream row_ptr_stream(line);
+	for (size_t i = 0; i < csr.row_ptr_count; ++i) {
+		row_ptr_stream >> token;
+		csr.row_ptr[i] = static_cast<uint32_t>(std::stoi(token));
+	}
+
+	std::getline(file_stream, line);
+	std::istringstream col_idx_stream(line);
+	for (size_t i = 0; i < csr.col_idx_count; ++i) {
+		col_idx_stream >> token;
+		csr.col_idx[i] = static_cast<uint32_t>(std::stoi(token));
+	}
+
+	std::random_device                    rd;
+	std::minstd_rand                      rng(rd());
+	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+	for (size_t i = 0; i < csr.val_count; ++i) {
+		csr.val[i] = uni_real_dist(rng);
+	}
+
+	return csr;
+}
+
+Csc::Matrix parse_csc_dlmc(void* dst, const std::filesystem::path& filepath)
+{
+	std::ifstream file_stream(filepath, std::ios_base::in);
+
+	if (!file_stream) {
+		// TODO: Remove exceptions
+		throw std::runtime_error("Failed to open file stream for filepath: " + filepath.stem().string());
+	}
+
+	DlmcHeader  header = parse_dlmc_header(file_stream);
+	Csc::Matrix csc;
+	Csc::init(csc, header.rows, header.cols, header.nnz);
+	Csc::partition(csc, reinterpret_cast<uintptr_t>(dst));
+
+	std::vector<uint32_t> row_ptr_vec(header.rows + 1, 0);
+
+	std::string line, token;
+	std::getline(file_stream, line);
+	std::istringstream row_ptr_stream(line);
+	for (size_t i = 0; i < header.rows + 1; ++i) {
+		row_ptr_stream >> token;
+		row_ptr_vec[i] = static_cast<uint32_t>(std::stoi(token));
+	}
+
+	std::vector<uint32_t> col_idx_vec(header.nnz, 0);
+
+	std::getline(file_stream, line);
+	std::istringstream col_idx_stream(line);
+	for (size_t i = 0; i < header.nnz; ++i) {
+		col_idx_stream >> token;
+		col_idx_vec[i] = static_cast<uint32_t>(std::stoi(token));
+	}
+
+	csr_to_csc(csc, row_ptr_vec, col_idx_vec);
+
+	std::random_device                    rd;
+	std::minstd_rand                      rng(rd());
+	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+	for (size_t i = 0; i < csc.val_count; ++i) {
+		csc.val[i] = uni_real_dist(rng);
+	}
+
+	return csc;
+}
+
+std::vector<std::filesystem::path> collect_rec_input(const std::filesystem::path& path)
+{
+	uint32_t                                            n_unknown_extention_files{};
+	std::vector<std::filesystem::path>                  input_files;
+	const std::filesystem::recursive_directory_iterator rec_dir_iter(path);
+
+	for (const std::filesystem::path& path : rec_dir_iter) {
+		if (std::filesystem::is_regular_file(path) && path.extension() == ".smtx") {
+			input_files.push_back(path);
+		} else {
+			n_unknown_extention_files++;
+		}
+	}
+	std::cout << std::format("Found in directory '{}':\n", path.string())
+			  << std::format("\t- {} '.smtx' file(s)\n", input_files.size())
+			  << std::format("\t- {} unsupported file(s)\n", n_unknown_extention_files);
+
+	return input_files;
+}
+
+/*
+ * a(m, k)
+ * b(k, n)
+ * c(m, n)
+ * Expects b to be in column-major
+ */
+[[maybe_unused]] static std::vector<float> host_spmm_rm_cm(const std::vector<float>& a, const std::vector<float>& b, size_t m, size_t k, size_t n)
+{
+	std::vector<float> res;
+	res.reserve(m * n);
+
+	for (size_t a_row = 0; a_row < m; ++a_row) {
+		for (size_t b_col = 0; b_col < n; ++b_col) {
+			float acc = 0;
+			for (size_t i = 0; i < k; ++i) {
+				acc += a[a_row * k + i] * b[b_col * k + i];
+			}
+			res.push_back(acc);
+		}
+	}
+
+	return res;
+}
+
+[[maybe_unused]] static std::vector<float> host_spmm_rm_rm(std::vector<float> a, std::vector<float> b, size_t m, size_t k, size_t n)
+{
+	std::vector<float> res;
+	res.reserve(m * n);
+
+	for (size_t a_row = 0; a_row < m; ++a_row) {
+		for (size_t b_col = 0; b_col < n; ++b_col) {
+			float acc = 0;
+			for (size_t i = 0; i < k; ++i) {
+				acc += a[a_row * k + i] * b[i * k + b_col];
+			}
+			res.push_back(acc);
+		}
+	}
+
+	return res;
+}
+
+bool verify_res(const float* const actual, const float* const expected, size_t n)
+{
+	double diff = 0.0;
+	for (size_t i = 0; i < n; ++i) {
+		diff = std::fabs(actual[i] - expected[i]);
+		// std::cout << std::format(
+		// 	"Actual: {}, Expected: {}, Diff: {}, Pos: {}\n", actual[i], expected[i], diff, i);
+		if (std::isnan(diff) || diff > 0.01) {
+			std::cout << std::format(
+				"Values diverge -> Actual: {}, Expected: {} (Diff {:.4f}), pos: {:d}\n",
+				actual[i], expected[i], diff, i);
+			return false;
+		}
+	}
+	return true;
+}

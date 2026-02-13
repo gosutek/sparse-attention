@@ -1,12 +1,18 @@
-#if !defined(SPMM_H)
-#	define SPMM_H
+#ifndef SPMM_H
+#define SPMM_H
 
-#	include <stdint.h>
+#include <stdint.h>
 
-#	if defined(__cplusplus)
+#if defined(__cplusplus)
 extern "C"
 {
-#	endif
+#endif
+
+	/*
+    * +------------------------------------------------------------------------------+
+    * |                             RETURN CODE ENUMS                                |
+    * +------------------------------------------------------------------------------+
+  */
 
 	typedef enum
 	{
@@ -24,6 +30,12 @@ extern "C"
 		SPMM_STATUS_INSUFFICIENT_RESOURCES = 11
 	} SpmmStatus_t;
 
+	/*
+    * +------------------------------------------------------------------------------+
+    * |                             MATRIX DESCRIPTORS                               |
+    * +------------------------------------------------------------------------------+
+  */
+
 	// INFO: Off for now
 	// typedef enum
 	// {
@@ -39,6 +51,8 @@ extern "C"
 	// 	DATA_TYPE_F64 = 2,
 	// } dataType_t;
 
+	// TODO: Could decouple arena from ctx, and have a separate workspace
+	// struct that gets initialized at a different point in time
 	struct MemArena;
 	typedef struct MemArena* ExecutionContext_t;
 
@@ -77,11 +91,18 @@ extern "C"
 		uint32_t                                       cols,
 		float*                                         val);
 
-	// MAT UTILS
+	/*
+    * +------------------------------------------------------------------------------+
+    * |                             MATRIX UTILITIES                                 |
+    * +------------------------------------------------------------------------------+
+  */
+
 	SpmmStatus_t sp_csr_to_row_major(SpMatDescr_t sp, DnMatDescr_t dn);
 	SpmmStatus_t sp_csc_to_col_major(SpMatDescr_t sp, DnMatDescr_t dn);
+	SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr);
 
-#	if defined(__cplusplus)
+#if defined(__cplusplus)
 }
-#	endif
+#endif
+
 #endif  // SPMM_H

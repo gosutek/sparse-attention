@@ -184,7 +184,7 @@ typedef struct
 
 // std::vector<float> csr_to_row_major(const Csr::Matrix& mat);
 // std::vector<float> csc_to_col_major(const Csc::Matrix& mat);
-float measure_sparsity(void* s, size_t size);
+float measure_sparsity(void* s, uint32_t size);
 // size_t             calc_sparse_b_size(const size_t n, const size_t nnz);
 // DlmcHeader         parse_dlmc_header(std::ifstream& file_stream);
 // RowMajorHeader     parse_row_major_header(std::ifstream& file_stream);

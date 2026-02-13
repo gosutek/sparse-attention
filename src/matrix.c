@@ -120,8 +120,11 @@ SpmmStatus_t sp_csc_to_col_major(SpMatDescr_t sp, DnMatDescr_t dn)
 	return SPMM_STATUS_SUCCESS;
 }
 
-// TODO: Convert to C
-// static void csr_to_csc(Csc::Matrix& mat, const std::vector<uint32_t>& row_ptr_vec, const std::vector<uint32_t>& col_idx_vec)
+SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr)
+{
+	return SPMM_STATUS_SUCCESS;
+}
+// SpmmStatus_t csr_to_csc(Csc::Matrix& mat, const std::vector<uint32_t>& row_ptr_vec, const std::vector<uint32_t>& col_idx_vec)
 // {
 // 	std::vector<uint32_t> col_count(mat.cols, 0);
 // 	for (size_t i = 0; i < mat.nnz; ++i) {
@@ -147,124 +150,40 @@ SpmmStatus_t sp_csc_to_col_major(SpMatDescr_t sp, DnMatDescr_t dn)
 // 	}
 // }
 
+/*
+ * Converts mtx from COO to CSR format
+ */
+// void coo_to_csr(COOMatrix& mtx)
+// {
+// 	std::vector<int>      row_ptr(static_cast<size_t>(mtx.rows) + 1, 0);
+// 	std::vector<uint32_t> col_idx(static_cast<size_t>(mtx.nnz));
+//
+// 	std::vector<float> val(static_cast<size_t>(mtx.nnz));
+//
+// 	std::sort(mtx.elements.begin(), mtx.elements.end(), [](const auto& a, const auto& b) { return std::tie(a.row, a.col) < std::tie(b.row, b.col); });
+//
+// 	for (size_t i = 0; i < mtx.elements.size(); ++i) {
+// 		const auto& e = mtx.elements[i];
+// 		row_ptr[static_cast<size_t>(e.row) + 1]++;
+// 		col_idx[i] = e.col;
+// 		val[i] = e.val;
+// 	}
+// 	std::partial_sum(row_ptr.begin(), row_ptr.end(), row_ptr.data());
+//
+// 	return;
+// }
+
 // TODO: Convert to C
-float measure_sparsity(void* s, size_t size)
+float measure_sparsity(void* s, uint32_t size)
 {
 	float* ptr = (float*)(s);
 	float  nz = .0f;
-	for (size_t i = 0; i < size; i++) {
+	for (uint32_t i = 0; i < size; i++) {
 		if (ptr[i] == 0)
 			nz++;
 	}
 	return nz / (float)(size);
 }
-
-// TODO: Move to run/
-// std::vector<float> read_row_major_from_rm(const std::filesystem::path& filepath, size_t size)
-// {
-// 	if (!std::filesystem::exists(filepath) && !std::filesystem::is_regular_file(filepath)) {
-// 		throw std::runtime_error(filepath.string() + " does not exist\n");
-// 	}
-// 	std::vector<float> res;
-// 	res.reserve(size);
-//
-// 	std::ifstream file_stream(filepath, std::ios_base::in);
-// 	if (!file_stream) {
-// 		throw std::runtime_error("Failed to open file:" + filepath.string());
-// 	}
-// 	float tmp;
-// 	while (file_stream >> tmp) {
-// 		res.push_back(tmp);
-// 	}
-// 	return res;
-// }
-
-// TODO: Move to run/
-// Csr::Matrix parse_dlmc(void* dst, const std::filesystem::path& filepath)
-// {
-// 	std::ifstream file_stream(filepath, std::ios_base::in);
-//
-// 	if (!file_stream) {
-// 		// TODO: Remove exceptions
-// 		throw std::runtime_error("Failed to open file stream for filepath: " + filepath.stem().string());
-// 	}
-//
-// 	DlmcHeader header = parse_dlmc_header(file_stream);
-//
-// 	Csr::Matrix csr;
-// 	Csr::init(csr, header.rows, header.cols, header.nnz);
-// 	Csr::partition(csr, reinterpret_cast<uintptr_t>(dst));
-//
-// 	std::string line, token;
-// 	std::getline(file_stream, line);
-// 	std::istringstream row_ptr_stream(line);
-// 	for (size_t i = 0; i < csr.row_ptr_count; ++i) {
-// 		row_ptr_stream >> token;
-// 		csr.row_ptr[i] = static_cast<uint32_t>(std::stoi(token));
-// 	}
-//
-// 	std::getline(file_stream, line);
-// 	std::istringstream col_idx_stream(line);
-// 	for (size_t i = 0; i < csr.col_idx_count; ++i) {
-// 		col_idx_stream >> token;
-// 		csr.col_idx[i] = static_cast<uint32_t>(std::stoi(token));
-// 	}
-//
-// 	std::random_device                    rd;
-// 	std::minstd_rand                      rng(rd());
-// 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
-// 	for (size_t i = 0; i < csr.val_count; ++i) {
-// 		csr.val[i] = uni_real_dist(rng);
-// 	}
-//
-// 	return csr;
-// }
-
-// TODO: Move to run/
-// Csc::Matrix parse_csc_dlmc(void* dst, const std::filesystem::path& filepath)
-// {
-// 	std::ifstream file_stream(filepath, std::ios_base::in);
-//
-// 	if (!file_stream) {
-// 		// TODO: Remove exceptions
-// 		throw std::runtime_error("Failed to open file stream for filepath: " + filepath.stem().string());
-// 	}
-//
-// 	DlmcHeader  header = parse_dlmc_header(file_stream);
-// 	Csc::Matrix csc;
-// 	Csc::init(csc, header.rows, header.cols, header.nnz);
-// 	Csc::partition(csc, reinterpret_cast<uintptr_t>(dst));
-//
-// 	std::vector<uint32_t> row_ptr_vec(header.rows + 1, 0);
-//
-// 	std::string line, token;
-// 	std::getline(file_stream, line);
-// 	std::istringstream row_ptr_stream(line);
-// 	for (size_t i = 0; i < header.rows + 1; ++i) {
-// 		row_ptr_stream >> token;
-// 		row_ptr_vec[i] = static_cast<uint32_t>(std::stoi(token));
-// 	}
-//
-// 	std::vector<uint32_t> col_idx_vec(header.nnz, 0);
-//
-// 	std::getline(file_stream, line);
-// 	std::istringstream col_idx_stream(line);
-// 	for (size_t i = 0; i < header.nnz; ++i) {
-// 		col_idx_stream >> token;
-// 		col_idx_vec[i] = static_cast<uint32_t>(std::stoi(token));
-// 	}
-//
-// 	csr_to_csc(csc, row_ptr_vec, col_idx_vec);
-//
-// 	std::random_device                    rd;
-// 	std::minstd_rand                      rng(rd());
-// 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
-// 	for (size_t i = 0; i < csc.val_count; ++i) {
-// 		csc.val[i] = uni_real_dist(rng);
-// 	}
-//
-// 	return csc;
-// }
 
 SpmmStatus_t create_sp_mat_csr(SpMatDescr_t* sp_mat_descr,
 	uint32_t                                 rows,
