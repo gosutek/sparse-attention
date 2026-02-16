@@ -1,4 +1,4 @@
-#ifndef ALLOCATOR_H
+#if !defined(ALLOCATOR_H)
 #define ALLOCATOR_H
 
 #include <stdint.h>

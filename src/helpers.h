@@ -1,4 +1,4 @@
-#ifndef HELPERS_H
+#if !defined(HELPERS_H)
 #define HELPERS_H
 
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))

@@ -129,7 +129,7 @@ inline static int32_t vm_uncommit(void* addr, const uint64_t size)
 }
 
 #else
-#	error "VIRTUAL MEMORY ALLOCATION NOT IMPLEMENTED FOR CURRENT PLATFORM"
+#error "VIRTUAL MEMORY ALLOCATION NOT IMPLEMENTED FOR CURRENT PLATFORM"
 #endif
 
 /*

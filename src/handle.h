@@ -17,11 +17,6 @@ constexpr size_t   BENCHMARKING_ROUNDS = 1;
 // TODO: Move these to each kernel's scope.
 constexpr size_t WARP_SIZE = 32;
 
-struct Context
-{
-	Arena* dev_arena;
-};
-
 struct CuSparse
 {
 	cusparseHandle_t handle;

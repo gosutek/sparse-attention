@@ -1,4 +1,4 @@
-#ifndef SPMM_H
+#if !defined(SPMM_H)
 #define SPMM_H
 
 #include <stdint.h>
