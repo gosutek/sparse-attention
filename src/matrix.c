@@ -120,36 +120,42 @@ SpmmStatus_t sp_csc_to_col_major(SpMatDescr_t sp, DnMatDescr_t dn)
 	return SPMM_STATUS_SUCCESS;
 }
 
-SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr)
+SpmmStatus_t sp_csr_to_csc(SpMatDescr_t sp_csr, SpMatDescr_t sp_csc)
 {
+	if (!sp_csr || !sp_csc) {
+		return SPMM_STATUS_NOT_INITIALIZED;
+	}
+
+	// INFO: Redudant according to man pages, test
+	sp_csc->csc.col_ptr[0] = 0;
+	for (uint32_t i = 0; i < sp_csc->nnz; ++i) {
+		// TODO: Make this less obscure
+		// I'm basically iterating col_idx and for every value, say `x`
+		// I'm incrementing col_ptr[x + 1]
+		sp_csc->csc.col_ptr[++sp_csr->csr.col_idx[i]]++;
+	}
+
+	for (uint32_t i = 1; i < sp_csc->nnz; ++i) {
+		// Here, I prefix sum the preprocessed csc.col_ptr
+		sp_csc->csc.col_ptr[i] += sp_csc->csc.col_ptr[i - 1];
+	}
+
+	// INFO: csc.col_ptr -> ready
+
+	for (uint32_t row = 0; row < sp_csr->rows; ++row) {
+		for (uint32_t i = sp_csr->csr.row_ptr[row]; i < sp_csr->csr.row_ptr[row + 1]; ++i) {
+			const uint32_t col = sp_csr->csr.col_idx[i];
+			// INFO: Here's were the work buffer of size `cols` is needed.
+
+			// const uint32_t dest_pos =
+			// sp_csr->csc.row_idx[dest_pos] = row;
+		}
+	}
+
 	return SPMM_STATUS_SUCCESS;
 }
-// SpmmStatus_t csr_to_csc(Csc::Matrix& mat, const std::vector<uint32_t>& row_ptr_vec, const std::vector<uint32_t>& col_idx_vec)
-// {
-// 	std::vector<uint32_t> col_count(mat.cols, 0);
-// 	for (size_t i = 0; i < mat.nnz; ++i) {
-// 		col_count[col_idx_vec[i]]++;
-// 	}
-//
-// 	mat.col_ptr[0] = 0;
-// 	for (size_t col = 0; col < mat.cols; ++col) {
-// 		mat.col_ptr[col + 1] = mat.col_ptr[col] + col_count[col];
-// 	}
-//
-// 	std::vector<uint32_t> cur_pos(mat.cols);
-// 	for (size_t col = 0; col < mat.cols; ++col) {
-// 		cur_pos[col] = mat.col_ptr[col];
-// 	}
-//
-// 	for (uint32_t row = 0; row < mat.rows; ++row) {
-// 		for (size_t i = row_ptr_vec[row]; i < row_ptr_vec[row + 1]; ++i) {
-// 			uint32_t col = col_idx_vec[i];
-// 			uint32_t dest_pos = cur_pos[col]++;
-// 			mat.row_idx[dest_pos] = row;
-// 		}
-// 	}
-// }
 
+// TODO: Make a COO descriptor
 /*
  * Converts mtx from COO to CSR format
  */
@@ -185,6 +191,7 @@ float measure_sparsity(void* s, uint32_t size)
 	return nz / (float)(size);
 }
 
+// TODO: Have the user pass ctx here
 SpmmStatus_t create_sp_mat_csr(SpMatDescr_t* sp_mat_descr,
 	uint32_t                                 rows,
 	uint32_t                                 cols,
@@ -197,6 +204,7 @@ SpmmStatus_t create_sp_mat_csr(SpMatDescr_t* sp_mat_descr,
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
+	// TODO: Change this to use the arena.
 	*sp_mat_descr = (SpMatDescr_t)(malloc(sizeof **sp_mat_descr));
 	if (*sp_mat_descr == NULL) {
 		return SPMM_STATUS_ALLOC_FAILED;
@@ -215,6 +223,7 @@ SpmmStatus_t create_sp_mat_csr(SpMatDescr_t* sp_mat_descr,
 	return SPMM_STATUS_SUCCESS;
 }
 
+// TODO: Have the user pass ctx here
 SpmmStatus_t create_sp_mat_csc(SpMatDescr_t* sp_mat_descr,
 	uint32_t                                 rows,
 	uint32_t                                 cols,
@@ -227,6 +236,7 @@ SpmmStatus_t create_sp_mat_csc(SpMatDescr_t* sp_mat_descr,
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
+	// TODO: Change this to use the arena.
 	*sp_mat_descr = (SpMatDescr_t)(malloc(sizeof **sp_mat_descr));
 	if (*sp_mat_descr == NULL) {
 		return SPMM_STATUS_ALLOC_FAILED;
