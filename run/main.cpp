@@ -1,68 +1,11 @@
+#include "../test/unit_tests.h"
+
 #include "spmm.h"
 
 // constexpr const char* prunning_methods[] = { "l0_regularization/", "variational_dropout/", "magnitude_pruning/", "random_pruning/" };
 // constexpr const char* sparsity_arr[] = { "0.5/", "0.6/", "0.7/", "0.8/", "0.9/", "0.95/", "0.98/" };
 // constexpr const char* custom_sparse[] = { "1024/" };
 // constexpr const char* DEFAULT_TEST_DIR = "test/dlmc/";
-
-// TODO: Move to run/
-// void generate_token_embeddings(void* dst, size_t size)
-// {
-// 	float* ptr = reinterpret_cast<float*>(dst);
-//
-// 	std::random_device                    rd;
-// 	std::minstd_rand                      rng(rd());
-// 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
-//
-// 	for (size_t i = 0; i < size; ++i) {
-// 		ptr[i] = uni_real_dist(rng);
-// 	}
-// }
-
-/*
- * WARN: This moves the filestream pointer
- */
-// TODO: Move to run/
-// DlmcHeader parse_dlmc_header(std::ifstream& file_stream)
-// {
-// 	DlmcHeader  res;
-// 	std::string token;
-// 	std::string header_line;
-// 	std::getline(file_stream, header_line);
-//
-// 	std::istringstream header_stream(header_line);
-// 	std::getline(header_stream, token, ',');
-// 	res.rows = static_cast<uint32_t>(std::stoul(token));
-//
-// 	std::getline(header_stream, token, ',');
-// 	res.cols = static_cast<uint32_t>(std::stoul(token));
-//
-// 	std::getline(header_stream, token, ',');
-// 	res.nnz = static_cast<uint32_t>(std::stoul(token));
-//
-// 	return res;
-// }
-
-/*
- * WARN: This moves the filestream pointer
- */
-// TODO: Move to run/
-// RowMajorHeader parse_row_major_header(std::ifstream& file_stream)
-// {
-// 	RowMajorHeader res;
-// 	std::string    token;
-// 	std::string    header_line;
-// 	std::getline(file_stream, header_line);
-//
-// 	std::istringstream header_stream(header_line);
-// 	std::getline(header_stream, token, ',');
-// 	res.rows = static_cast<uint32_t>(std::stoul(token));
-//
-// 	std::getline(header_stream, token, ',');
-// 	res.cols = static_cast<uint32_t>(std::stoul(token));
-//
-// 	return res;
-// }
 
 // struct Benchmark
 // {
@@ -345,8 +288,6 @@
 
 int main(void)
 {
-	ExecutionContext_t handle;
-	exec_ctx_create(&handle);
-	exec_ctx_destroy(&handle);
+	ut_run_tests();
 	return 0;
 }
