@@ -99,7 +99,7 @@ extern "C"
 
 	SpmmStatus_t sp_csr_to_row_major(SpMatDescr_t sp, DnMatDescr_t dn);
 	SpmmStatus_t sp_csc_to_col_major(SpMatDescr_t sp, DnMatDescr_t dn);
-	SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr);
+	SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr, SpMatDescr_t sp_csc);
 
 #if defined(__cplusplus)
 }

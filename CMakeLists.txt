@@ -43,7 +43,10 @@ target_include_directories(cute
   ${CMAKE_CURRENT_SOURCE_DIR}/src/cuda/kernels
 )
 
-add_executable(cute_main run/main.cpp)
+add_executable(cute_main
+  run/main.cpp
+  run/utils.cpp
+)
 
 target_link_libraries(cute_main PRIVATE cute)
 

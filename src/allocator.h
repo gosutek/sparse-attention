@@ -44,6 +44,6 @@ inline static uint32_t vm_get_page_size();
 inline static void*    vm_reserve(const uint64_t size);
 inline static int32_t  vm_release(void* ptr, const uint64_t size);
 inline static int32_t  vm_commit(void* addr, const uint64_t size);
-inline static void     vm_uncommit();
+inline static int32_t  vm_uncommit(void* addr, const uint64_t size);
 
 #endif  // ALLOCATOR_H

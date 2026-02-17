@@ -1,4 +1,7 @@
+#include <iostream>
+
 #include "../test/unit_tests.h"
+#include "utils.h"
 
 #include "spmm.h"
 
@@ -288,6 +291,25 @@
 
 int main(void)
 {
-	ut_run_tests();
+	CSR csr = parse_csr_test_case("test_data/unit/csr_to_csc/1.test");
+	std::cout << csr.rows << " " << csr.cols << " " << csr.nnz << "\n";
+
+	for (const uint32_t& k : csr.row_ptr) {
+		std::cout << k << " ";
+	}
+
+	std::cout << std::endl;
+	for (const uint32_t& k : csr.col_idx) {
+		std::cout << k << " ";
+	}
+
+	std::cout << std::endl;
+	for (const float& k : csr.val) {
+		std::cout << k << " ";
+	}
+
+	std::cout << std::endl;
+
+	// ut_run_tests();
 	return 0;
 }
