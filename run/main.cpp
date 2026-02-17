@@ -310,6 +310,27 @@ int main(void)
 
 	std::cout << std::endl;
 
+	ExecutionContext_t handle = NULL;
+	exec_ctx_create(&handle);
+
+	SpMatDescr_t lib_csr = NULL;
+	create_sp_mat_csr(handle, &lib_csr, csr.rows, csr.cols, csr.nnz, csr.row_ptr.data(), csr.col_idx.data(), csr.val.data());
+
+	CSC csc;
+	csc.rows = csr.rows;
+	csc.cols = csr.cols;
+	csc.nnz = csr.nnz;
+	csc.col_ptr.reserve(csc.cols + 1);
+	csc.row_idx.reserve(csc.nnz);
+	csc.val.reserve(csc.nnz);
+
+	SpMatDescr_t lib_csc = NULL;
+	create_sp_mat_csc(handle, &lib_csc, csc.rows, csc.cols, csc.nnz, csc.col_ptr.data(), csc.row_idx.data(), csc.val.data());
+
+	sp_csr_to_csc(handle, lib_csr, lib_csc);
+
+	exec_ctx_destroy(handle);
+
 	// ut_run_tests();
 	return 0;
 }

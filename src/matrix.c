@@ -4,7 +4,7 @@
 #include "helpers.h"
 #include "spmm.h"
 
-inline size_t sp_mat_ptr_count_get(const SpMatDescr* const sp)
+static inline size_t sp_mat_ptr_count_get(const SpMatDescr* const sp)
 {
 	switch (sp->format) {
 	case SPARSE_FORMAT_CSR:
@@ -204,21 +204,20 @@ float measure_sparsity(void* s, uint32_t size)
 }
 
 // TODO: Have the user pass ctx here
-SpmmStatus_t create_sp_mat_csr(SpMatDescr_t* sp_mat_descr,
-	uint32_t                                 rows,
-	uint32_t                                 cols,
-	uint32_t                                 nnz,
-	uint32_t*                                row_ptr,
-	uint32_t*                                col_idx,
-	float*                                   val)
+SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_descr,
+	uint32_t  rows,
+	uint32_t  cols,
+	uint32_t  nnz,
+	uint32_t* row_ptr,
+	uint32_t* col_idx,
+	float*    val)
 {
 	if (sp_mat_descr == NULL || *sp_mat_descr != NULL) {
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
 	// TODO: Change this to use the arena.
-	*sp_mat_descr = (SpMatDescr_t)(malloc(sizeof **sp_mat_descr));
-	if (*sp_mat_descr == NULL) {
+	if (mem_arena_push(ctx, sizeof **sp_mat_descr, (void**)sp_mat_descr) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
@@ -236,21 +235,19 @@ SpmmStatus_t create_sp_mat_csr(SpMatDescr_t* sp_mat_descr,
 }
 
 // TODO: Have the user pass ctx here
-SpmmStatus_t create_sp_mat_csc(SpMatDescr_t* sp_mat_descr,
-	uint32_t                                 rows,
-	uint32_t                                 cols,
-	uint32_t                                 nnz,
-	uint32_t*                                col_ptr,
-	uint32_t*                                row_idx,
-	float*                                   val)
+SpmmStatus_t create_sp_mat_csc(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_descr,
+	uint32_t  rows,
+	uint32_t  cols,
+	uint32_t  nnz,
+	uint32_t* col_ptr,
+	uint32_t* row_idx,
+	float*    val)
 {
 	if (sp_mat_descr == NULL || *sp_mat_descr != NULL) {
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
-	// TODO: Change this to use the arena.
-	*sp_mat_descr = (SpMatDescr_t)(malloc(sizeof **sp_mat_descr));
-	if (*sp_mat_descr == NULL) {
+	if (mem_arena_push(ctx, sizeof **sp_mat_descr, (void**)sp_mat_descr) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 

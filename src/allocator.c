@@ -147,13 +147,13 @@ SpmmStatus_t exec_ctx_create(ExecutionContext_t* ctx)
 	return SPMM_STATUS_SUCCESS;
 }
 
-SpmmStatus_t exec_ctx_destroy(ExecutionContext_t* ctx)
+SpmmStatus_t exec_ctx_destroy(ExecutionContext_t ctx)
 {
-	if (!*ctx) {
+	if (!ctx) {
 		return SPMM_STATUS_NOT_INITIALIZED;
 	}
-	mem_arena_destroy(*ctx);
-	if (*ctx) {
+	mem_arena_destroy(ctx);
+	if (ctx) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 	return SPMM_STATUS_SUCCESS;

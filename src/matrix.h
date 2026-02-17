@@ -45,13 +45,13 @@ typedef struct SpMatDescr
 	float* val;
 } SpMatDescr;
 
-inline size_t sp_mat_ptr_count_get(const SpMatDescr* const sp);
-inline size_t sp_mat_ptr_bytes_get(const SpMatDescr* const sp);
-inline size_t sp_mat_idx_count_get(const SpMatDescr* const sp);
-inline size_t sp_mat_idx_bytes_get(const SpMatDescr* const sp);
-inline size_t sp_mat_val_count_get(const SpMatDescr* const sp);
-inline size_t sp_mat_val_bytes_get(const SpMatDescr* const sp);
-inline size_t sp_mat_byte_size_get(const SpMatDescr* const sp);
+static inline size_t sp_mat_ptr_count_get(const SpMatDescr* const sp);
+inline size_t        sp_mat_ptr_bytes_get(const SpMatDescr* const sp);
+inline size_t        sp_mat_idx_count_get(const SpMatDescr* const sp);
+inline size_t        sp_mat_idx_bytes_get(const SpMatDescr* const sp);
+inline size_t        sp_mat_val_count_get(const SpMatDescr* const sp);
+inline size_t        sp_mat_val_bytes_get(const SpMatDescr* const sp);
+inline size_t        sp_mat_byte_size_get(const SpMatDescr* const sp);
 
 typedef struct DnMatDescr
 {

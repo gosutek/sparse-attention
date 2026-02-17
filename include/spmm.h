@@ -57,26 +57,26 @@ extern "C"
 	typedef struct MemArena* ExecutionContext_t;
 
 	SpmmStatus_t exec_ctx_create(ExecutionContext_t* handle);
-	SpmmStatus_t exec_ctx_destroy(ExecutionContext_t* handle);
+	SpmmStatus_t exec_ctx_destroy(ExecutionContext_t ctx);
 
 	struct SpMatDescr;
 	typedef struct SpMatDescr* SpMatDescr_t;
 
-	SpmmStatus_t create_sp_mat_csr(SpMatDescr_t* sp_mat_descr,
-		uint32_t                                 rows,
-		uint32_t                                 cols,
-		uint32_t                                 nnz,
-		uint32_t*                                row_ptr,
-		uint32_t*                                col_idx,
-		float*                                   val);
+	SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_descr,
+		uint32_t  rows,
+		uint32_t  cols,
+		uint32_t  nnz,
+		uint32_t* row_ptr,
+		uint32_t* col_idx,
+		float*    val);
 
-	SpmmStatus_t create_sp_mat_csc(SpMatDescr_t* sp_mat_descr,
-		uint32_t                                 rows,
-		uint32_t                                 cols,
-		uint32_t                                 nnz,
-		uint32_t*                                col_ptr,
-		uint32_t*                                row_idx,
-		float*                                   val);
+	SpmmStatus_t create_sp_mat_csc(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_descr,
+		uint32_t  rows,
+		uint32_t  cols,
+		uint32_t  nnz,
+		uint32_t* col_ptr,
+		uint32_t* row_idx,
+		float*    val);
 
 	struct DnMatDescr;
 	typedef struct DnMatDescr* DnMatDescr_t;
