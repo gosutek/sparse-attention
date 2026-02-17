@@ -185,7 +185,7 @@ typedef struct
 // std::vector<float> csr_to_row_major(const Csr::Matrix& mat);
 // std::vector<float> csc_to_col_major(const Csc::Matrix& mat);
 float        measure_sparsity(void* s, uint32_t size);
-SpmmStatus_t sp_csr_to_csc(SpMatDescr_t sp_csr, SpMatDescr_t sp_csc);
+SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr, SpMatDescr_t sp_csc);
 SpmmStatus_t sp_csc_to_csr(SpMatDescr_t sp_csc, SpMatDescr_t sp_csr);
 // size_t             calc_sparse_b_size(const size_t n, const size_t nnz);
 // DlmcHeader         parse_dlmc_header(std::ifstream& file_stream);

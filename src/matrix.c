@@ -1,4 +1,7 @@
 #include "matrix.h"
+#include "allocator.h"
+
+#include "helpers.h"
 #include "spmm.h"
 
 inline size_t sp_mat_ptr_count_get(const SpMatDescr* const sp)
@@ -120,7 +123,7 @@ SpmmStatus_t sp_csc_to_col_major(SpMatDescr_t sp, DnMatDescr_t dn)
 	return SPMM_STATUS_SUCCESS;
 }
 
-SpmmStatus_t sp_csr_to_csc(SpMatDescr_t sp_csr, SpMatDescr_t sp_csc)
+SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr, SpMatDescr_t sp_csc)
 {
 	if (!sp_csr || !sp_csc) {
 		return SPMM_STATUS_NOT_INITIALIZED;
@@ -142,15 +145,23 @@ SpmmStatus_t sp_csr_to_csc(SpMatDescr_t sp_csr, SpMatDescr_t sp_csc)
 
 	// INFO: csc.col_ptr -> ready
 
+	// INFO: Gonna need a work buffer of size sp_csr->cols, that's why we need `ctx`
+	void*          work_buffer = NULL;
+	const uint64_t req_size = sp_csr->cols * (sizeof *(sp_csc->csc.col_ptr));
+	if (mem_arena_push(ctx, req_size, &work_buffer) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_INTERNAL_ERROR;
+	}
+	memcpy(work_buffer, sp_csc->csc.col_ptr, req_size);
+
 	for (uint32_t row = 0; row < sp_csr->rows; ++row) {
 		for (uint32_t i = sp_csr->csr.row_ptr[row]; i < sp_csr->csr.row_ptr[row + 1]; ++i) {
-			const uint32_t col = sp_csr->csr.col_idx[i];
-			// INFO: Here's were the work buffer of size `cols` is needed.
-
-			// const uint32_t dest_pos =
-			// sp_csr->csc.row_idx[dest_pos] = row;
+			// TODO: Change when/if you template out the type
+			const uint32_t dest_pos = ((uint32_t*)(work_buffer))[i]++;
+			sp_csr->csc.row_idx[dest_pos] = row;
 		}
 	}
+
+	mem_arena_pop(ctx, req_size);
 
 	return SPMM_STATUS_SUCCESS;
 }

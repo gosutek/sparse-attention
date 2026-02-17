@@ -1,9 +1,6 @@
-#include <stdio.h>  // TODO: remove
-#include <sys/mman.h>
-#include <unistd.h>
-
 #include "allocator.h"
 #include "helpers.h"
+
 #include "spmm.h"
 
 /*
@@ -49,7 +46,7 @@ inline static SpmmInternalStatus_t mem_arena_destroy(MemArena* arena)
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-inline static SpmmInternalStatus_t mem_arena_push(MemArena* const arena, uint64_t req_size, const void** ptr_out)
+SpmmInternalStatus_t mem_arena_push(MemArena* const arena, const uint64_t req_size, void** ptr_out)
 {
 	const uint64_t aligned_pos = arena->pos + PADDING_POW2(arena->pos, sizeof(void*)); /* the pointer returned should be naturally aligned */
 	const uint64_t new_pos = aligned_pos + req_size;
@@ -74,7 +71,7 @@ inline static SpmmInternalStatus_t mem_arena_push(MemArena* const arena, uint64_
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-inline static void mem_arena_pop(MemArena* const arena, uint64_t size)
+void mem_arena_pop(MemArena* const arena, uint64_t size)
 {
 	// TODO: Should I null check the ptr here?
 	size = MIN(size, arena->pos - sizeof *arena); /* don't dealloc MemArena members */
@@ -138,14 +135,12 @@ inline static int32_t vm_uncommit(void* addr, const uint64_t size)
       * +------------------------------------------------------------------------------+
 */
 
-SpmmStatus_t
-	exec_ctx_create(ExecutionContext_t* ctx)
+SpmmStatus_t exec_ctx_create(ExecutionContext_t* ctx)
 {
 	if (*ctx) {
 		return SPMM_STATUS_INVALID_VALUE;
 	}
-	mem_arena_create(ctx, GIB(1));
-	printf("%lu\n", (*ctx)->mem_alloc_pos);
+	mem_arena_create(ctx, GIB(1), MIB(1));
 	if (!*ctx) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
