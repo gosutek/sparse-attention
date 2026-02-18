@@ -320,14 +320,32 @@ int main(void)
 	csc.rows = csr.rows;
 	csc.cols = csr.cols;
 	csc.nnz = csr.nnz;
-	csc.col_ptr.reserve(csc.cols + 1);
-	csc.row_idx.reserve(csc.nnz);
-	csc.val.reserve(csc.nnz);
+	csc.col_ptr.resize(csc.cols + 1);
+	csc.row_idx.resize(csc.nnz);
+	csc.val.resize(csc.nnz);
 
 	SpMatDescr_t lib_csc = NULL;
 	create_sp_mat_csc(handle, &lib_csc, csc.rows, csc.cols, csc.nnz, csc.col_ptr.data(), csc.row_idx.data(), csc.val.data());
 
 	sp_csr_to_csc(handle, lib_csr, lib_csc);
+
+	std::cout << "-------------------------" << std::endl;
+	std::cout << csc.rows << " " << csc.cols << " " << csc.nnz << "\n";
+
+	for (uint32_t i = 0; i < csc.cols + 1; ++i) {
+		std::cout << csc.col_ptr[i] << " ";
+	}
+	std::cout << std::endl;
+
+	for (const uint32_t& k : csc.row_idx) {
+		std::cout << k << " ";
+	}
+	std::cout << std::endl;
+
+	for (const float& k : csc.val) {
+		std::cout << k << " ";
+	}
+	std::cout << std::endl;
 
 	exec_ctx_destroy(handle);
 
