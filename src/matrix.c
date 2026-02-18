@@ -129,24 +129,24 @@ SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr, SpMatDes
 		return SPMM_STATUS_NOT_INITIALIZED;
 	}
 
-	// INFO: Redudant according to man pages, test
-	sp_csc->csc.col_ptr[0] = 0;
+	memset(sp_csc->csc.col_ptr, 0, (sp_csc->cols + 1) * (sizeof *(sp_csc->csc.col_ptr)));
+
 	for (uint32_t i = 0; i < sp_csc->nnz; ++i) {
 		// TODO: Make this less obscure
 		// I'm basically iterating col_idx and for every value, say `x`
 		// I'm incrementing col_ptr[x + 1]
-		sp_csc->csc.col_ptr[++sp_csr->csr.col_idx[i]]++;
+		sp_csc->csc.col_ptr[sp_csr->csr.col_idx[i] + 1]++;
 	}
 
 	for (uint32_t i = 1; i < sp_csc->nnz; ++i) {
-		// Here, I prefix sum the preprocessed csc.col_ptr
+		// Prefix sum the preprocessed csc.col_ptr
 		sp_csc->csc.col_ptr[i] += sp_csc->csc.col_ptr[i - 1];
 	}
 
 	// INFO: csc.col_ptr -> ready
 
 	void*          work_buffer = NULL;
-	const uint64_t work_buffer_bsize = sp_csr->cols * (sizeof *(sp_csc->csc.col_ptr));
+	const uint64_t work_buffer_bsize = (sp_csc->cols + 1) * (sizeof *(sp_csc->csc.col_ptr));
 	if (mem_arena_push(ctx, work_buffer_bsize, &work_buffer) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_INTERNAL_ERROR;
 	}
@@ -156,7 +156,8 @@ SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr, SpMatDes
 	for (uint32_t row = 0; row < sp_csr->rows; ++row) {
 		for (uint32_t i = sp_csr->csr.row_ptr[row]; i < sp_csr->csr.row_ptr[row + 1]; ++i) {
 			// TODO: Change when/if you template out the type
-			const uint32_t dest_pos = ((uint32_t*)(work_buffer))[i]++;
+			const uint32_t col = sp_csr->csr.col_idx[i];
+			const uint32_t dest_pos = ((uint32_t*)(work_buffer))[col]++;
 			sp_csc->csc.row_idx[dest_pos] = row;
 			sp_csc->val[dest_pos] = sp_csr->val[i];
 		}
