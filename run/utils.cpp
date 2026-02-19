@@ -34,6 +34,32 @@ CSR parse_csr_test_case(const std::filesystem::path& path)
 
 CSC parse_csc_test_case(const std::filesystem::path& path)
 {
+	CSC         csc;
+	std::string token;
+	std::string line;
+
+	std::ifstream stream = { path, std::ios_base::in };
+	stream >> csc.rows;
+	stream >> csc.cols;
+	stream >> csc.nnz;
+
+	csc.col_ptr.resize(csc.cols + 1);
+	csc.row_idx.resize(csc.nnz);
+	csc.val.resize(csc.nnz);
+
+	for (uint32_t& k : csc.col_ptr) {
+		stream >> k;
+	}
+
+	for (uint32_t& k : csc.row_idx) {
+		stream >> k;
+	}
+
+	for (float& k : csc.val) {
+		stream >> k;
+	}
+
+	return csc;
 }
 
 // void generate_token_embeddings(void* dst, size_t size)

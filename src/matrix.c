@@ -132,9 +132,6 @@ SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr, SpMatDes
 	memset(sp_csc->csc.col_ptr, 0, (sp_csc->cols + 1) * (sizeof *(sp_csc->csc.col_ptr)));
 
 	for (uint32_t i = 0; i < sp_csc->nnz; ++i) {
-		// TODO: Make this less obscure
-		// I'm basically iterating col_idx and for every value, say `x`
-		// I'm incrementing col_ptr[x + 1]
 		sp_csc->csc.col_ptr[sp_csr->csr.col_idx[i] + 1]++;
 	}
 
@@ -152,7 +149,6 @@ SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr, SpMatDes
 	}
 	memcpy(work_buffer, sp_csc->csc.col_ptr, work_buffer_bsize);
 
-	// INFO: Gonna need a work buffer of size sp_csr->cols, that's why we need `ctx`
 	for (uint32_t row = 0; row < sp_csr->rows; ++row) {
 		for (uint32_t i = sp_csr->csr.row_ptr[row]; i < sp_csr->csr.row_ptr[row + 1]; ++i) {
 			// TODO: Change when/if you template out the type
@@ -160,6 +156,47 @@ SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr, SpMatDes
 			const uint32_t dest_pos = ((uint32_t*)(work_buffer))[col]++;
 			sp_csc->csc.row_idx[dest_pos] = row;
 			sp_csc->val[dest_pos] = sp_csr->val[i];
+		}
+	}
+
+	mem_arena_pop(ctx, work_buffer_bsize);
+
+	return SPMM_STATUS_SUCCESS;
+}
+
+SpmmStatus_t sp_csc_to_csr(ExecutionContext_t ctx, SpMatDescr_t sp_csc, SpMatDescr_t sp_csr)
+{
+	if (!ctx || !sp_csr || !sp_csc) {
+		return SPMM_STATUS_NOT_INITIALIZED;
+	}
+
+	memset(sp_csr->csr.row_ptr, 0, (sp_csc->rows + 1) * (sizeof *(sp_csr->csr.row_ptr)));
+
+	for (uint32_t i = 0; i < sp_csr->nnz; ++i) {
+		sp_csr->csr.row_ptr[sp_csc->csc.row_idx[i] + 1]++;
+	}
+
+	for (uint32_t i = 1; i < sp_csr->nnz; ++i) {
+		// Prefix sum the preprocessed csc.col_ptr
+		sp_csr->csr.row_ptr[i] += sp_csr->csr.row_ptr[i - 1];
+	}
+
+	// INFO: csr.row_ptr -> ready
+
+	void*          work_buffer = NULL;
+	const uint64_t work_buffer_bsize = (sp_csr->rows + 1) * (sizeof *(sp_csr->csr.row_ptr));
+	if (mem_arena_push(ctx, work_buffer_bsize, &work_buffer) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_INTERNAL_ERROR;
+	}
+	memcpy(work_buffer, sp_csr->csr.row_ptr, work_buffer_bsize);
+
+	for (uint32_t col = 0; col < sp_csc->cols; ++col) {
+		for (uint32_t i = sp_csc->csc.col_ptr[col]; i < sp_csc->csc.col_ptr[col + 1]; ++i) {
+			// TODO: Change when/if you template out the type
+			const uint32_t row = sp_csc->csc.row_idx[i];
+			const uint32_t dest_pos = ((uint32_t*)(work_buffer))[row]++;
+			sp_csr->csr.col_idx[dest_pos] = col;
+			sp_csr->val[dest_pos] = sp_csc->val[i];
 		}
 	}
 
@@ -204,7 +241,6 @@ float measure_sparsity(void* s, uint32_t size)
 	return nz / (float)(size);
 }
 
-// TODO: Have the user pass ctx here
 SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_descr,
 	uint32_t  rows,
 	uint32_t  cols,
@@ -217,7 +253,6 @@ SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_desc
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
-	// TODO: Change this to use the arena.
 	if (mem_arena_push(ctx, sizeof **sp_mat_descr, (void**)sp_mat_descr) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
@@ -235,7 +270,6 @@ SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_desc
 	return SPMM_STATUS_SUCCESS;
 }
 
-// TODO: Have the user pass ctx here
 SpmmStatus_t create_sp_mat_csc(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_descr,
 	uint32_t  rows,
 	uint32_t  cols,
