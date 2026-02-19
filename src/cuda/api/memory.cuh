@@ -1,9 +1,30 @@
-#pragma once
+#if !defined(MEMORY_CUH)
+#define MEMORY_CUH
 
-#include <stdio.h>
+#include <stdint.h>
 
-// TODO: This *can* leak memory
-void* cuda_malloc_device(size_t b_size);
-void* cuda_malloc_host(size_t b_size);
-void  cuda_dealloc_host(void* ptr);
-void  cuda_dealloc_device(void* ptr);
+#include "../../helpers.h"
+
+typedef struct DevArena
+{
+	uint64_t size;
+
+	uint64_t pos;
+} DevArena;
+
+/*
+      * +------------------------------------------------------------------------------+
+      * |                                INTERNALS                                     |
+      * +------------------------------------------------------------------------------+
+*/
+
+SpmmInternalStatus_t mem_arena_create(DevArena** const arena, const uint64_t bsize);
+SpmmInternalStatus_t mem_arena_destroy(DevArena* arena);
+
+SpmmInternalStatus_t mem_arena_push(DevArena* const arena, const uint64_t bsize, void** ptr_out);
+void                 mem_arena_pop(DevArena* const arena, uint64_t bsize);
+void                 mem_arena_pop_at(DevArena* const arena, uint64_t pos);
+
+uint64_t mem_arena_pos_get(const DevArena* const arena);
+
+#endif  // MEMORY_CUH

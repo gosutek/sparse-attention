@@ -1,29 +1,83 @@
 #include "memory.cuh"
 
-namespace spmm
+SpmmInternalStatus_t mem_arena_create(DevArena** const arena, const uint64_t bsize)
 {
-	void* cuda_malloc_device(size_t b_size)
-	{
-		void* ptr = nullptr;
-		CUDA_CHECK(cudaMalloc(&ptr, b_size));
-		return ptr;
+	if (*arena) {
+		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 	}
 
-	void* cuda_malloc_host(size_t b_size)
-	{
-		void* ptr = nullptr;
-		CUDA_CHECK(cudaMallocHost(&ptr, b_size));
-		return ptr;
+	if (cudaMalloc(arena, bsize) != cudaSuccess) {
+		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 	}
 
-	void cuda_dealloc_host(void* ptr)
-	{
-		CUDA_CHECK(cudaFreeHost(ptr));
+	(*arena)->size = bsize;
+	(*arena)->pos = sizeof **arena;
+
+	return SPMM_INTERNAL_STATUS_SUCCESS;
+}
+
+SpmmInternalStatus_t mem_arena_destroy(DevArena* arena)
+{
+	if (!arena) {
+		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 	}
 
-	void cuda_dealloc_device(void* ptr)
-	{
-		CUDA_CHECK(cudaFree(ptr));
+	if (cudaFree(arena) != cudaSuccess) {
+		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 	}
 
-}  // namespace spmm
+	return SPMM_INTERNAL_STATUS_SUCCESS;
+}
+
+SpmmInternalStatus_t mem_arena_push(DevArena* const arena, const uint64_t bsize, void** ptr_out)
+{
+	if (!arena) {
+		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
+	}
+
+	const uint64_t pos_aligned = arena->pos + PADDING_POW2(arena->pos, sizeof(void*));
+	const uint64_t new_pos = pos_aligned + bsize;
+
+	if (new_pos > arena->size) {
+		abort();
+	}
+
+	*ptr_out = (uint8_t*)arena + pos_aligned;
+	arena->pos = new_pos;
+
+	return SPMM_INTERNAL_STATUS_SUCCESS;
+}
+
+// WARN: What if bsize isn't aligned?
+void mem_arena_pop(DevArena* const arena, uint64_t bsize)
+{
+	bsize = MIN(bsize, arena->pos - sizeof *arena);
+	arena->pos -= bsize;
+}
+
+void mem_arena_pop_at(DevArena* const arena, uint64_t pos)
+{
+}
+
+uint64_t mem_arena_pos_get(const DevArena* const arena);
+
+// namespace spmm
+// {
+// 	void* cuda_malloc_host(size_t b_size)
+// 	{
+// 		void* ptr = nullptr;
+// 		CUDA_CHECK(cudaMallocHost(&ptr, b_size));
+// 		return ptr;
+// 	}
+//
+// 	void cuda_dealloc_host(void* ptr)
+// 	{
+// 		CUDA_CHECK(cudaFreeHost(ptr));
+// 	}
+//
+// 	void cuda_dealloc_device(void* ptr)
+// 	{
+// 		CUDA_CHECK(cudaFree(ptr));
+// 	}
+//
+// }  // namespace spmm
