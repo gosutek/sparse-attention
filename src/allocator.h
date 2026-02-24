@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include "helpers.h"
+#include "memory.cuh"
 #include "spmm.h"
 
 typedef struct MemArena
@@ -18,6 +19,12 @@ typedef struct MemArena
 	uint64_t commit_pos;
 	uint64_t pos;
 } MemArena;
+
+typedef struct ExecCtx
+{
+	MemArena  host_arena;
+	DevArena* dev_arena;
+} ExecCtx;
 
 /*
       * +------------------------------------------------------------------------------+
@@ -30,20 +37,8 @@ SpmmInternalStatus_t host_mem_arena_destroy(MemArena* arena);
 
 SpmmInternalStatus_t host_mem_arena_push(MemArena* const arena, const uint64_t req_size, void** ptr_out);
 void                 host_mem_arena_pop(MemArena* const arena, uint64_t size);
-inline static void   host_mem_arena_pop_at(MemArena* const arena, uint64_t pos);
+void                 host_mem_arena_pop_at(MemArena* const arena, uint64_t pos);
 
-inline uint64_t host_mem_arena_pos_get(const MemArena* const arena);
-
-/*
-      * +------------------------------------------------------------------------------+
-      * |                             PLATFORM SPECIFIC                                |
-      * +------------------------------------------------------------------------------+
-*/
-
-inline static uint32_t vm_get_page_size();
-inline static void*    vm_reserve(const uint64_t size);
-inline static int32_t  vm_release(void* ptr, const uint64_t size);
-inline static int32_t  vm_commit(void* addr, const uint64_t size);
-inline static int32_t  vm_uncommit(void* addr, const uint64_t size);
+uint64_t host_mem_arena_pos_get(const MemArena* const arena);
 
 #endif  // ALLOCATOR_H

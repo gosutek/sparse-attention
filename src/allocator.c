@@ -5,6 +5,82 @@
 
 /*
       * +------------------------------------------------------------------------------+
+      * |                             PLATFORM SPECIFIC                                |
+      * +------------------------------------------------------------------------------+
+*/
+
+#if defined(__linux__)
+
+static uint32_t vm_get_page_size(void)
+{
+	return (uint32_t)sysconf(_SC_PAGESIZE);
+}
+
+// INFO: Mimics malloc in the sense that it returns a NULL ptr on an error instead of an error enum type
+static void* vm_reserve(const uint64_t size)
+{
+	void* ptr = mmap(NULL, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (ptr == MAP_FAILED) {
+		return NULL;
+	}
+	return ptr;
+}
+
+static int32_t vm_release(void* ptr, const uint64_t size)
+{
+	return munmap(ptr, size) == 0; /* >"It is not an error if the indicated range does not contain any mapped pages" ~ So 'ptr' can be NULL here.*/
+}
+
+static int32_t vm_commit(void* addr, const uint64_t size)
+{
+	return mprotect(addr, size, PROT_READ | PROT_WRITE) == 0;
+}
+
+static int32_t vm_uncommit(void* addr, const uint64_t size)
+{
+	int32_t ret_code = mprotect(addr, size, PROT_NONE);
+	if (ret_code != 0) {
+		return -1;
+	}
+	return madvise(addr, size, MADV_DONTNEED) == 0; /* Subsequent access will result in zero-fill-on-demand pages */
+}
+
+SpmmStatus_t exec_ctx_create(ExecutionContext_t* ctx)
+{
+	if (*ctx) {
+		return SPMM_STATUS_INVALID_VALUE;
+	}
+
+	if (host_mem_arena_create((MemArena**)(ctx), GIB(1), MIB(1)) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_ALLOC_FAILED;
+	}
+
+	if (host_mem_arena_push((MemArena*)(*ctx), sizeof(void*), (void**)&(*ctx)->dev_arena) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_ALLOC_FAILED;
+	}
+
+	return SPMM_STATUS_SUCCESS;
+}
+
+SpmmStatus_t exec_ctx_destroy(ExecutionContext_t ctx)
+{
+	if (!ctx) {
+		return SPMM_STATUS_NOT_INITIALIZED;
+	}
+
+	if (host_mem_arena_destroy((MemArena*)(ctx)) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_ALLOC_FAILED;
+	}
+
+	return SPMM_STATUS_SUCCESS;
+}
+
+#else
+#error "VIRTUAL MEMORY ALLOCATION NOT IMPLEMENTED FOR CURRENT PLATFORM"
+#endif
+
+/*
+      * +------------------------------------------------------------------------------+
       * |                                INTERNALS                                     |
       * +------------------------------------------------------------------------------+
 */
@@ -78,54 +154,14 @@ void host_mem_arena_pop(MemArena* const arena, uint64_t size)
 	arena->pos -= size;
 }
 
-inline static void host_mem_arena_pop_at(MemArena* const arena, uint64_t pos)
+void host_mem_arena_pop_at(MemArena* const arena, uint64_t pos)
 {
 	uint64_t size = pos < arena->pos ? arena->pos - pos : 0;
 	host_mem_arena_pop(arena, size);
 }
 
 // TODO: Do I need this anymore?
-inline uint64_t host_mem_arena_pos_get(const MemArena* const arena)
+uint64_t host_mem_arena_pos_get(const MemArena* const arena)
 {
 	return arena->pos;
 }
-
-#if defined(__linux__)
-
-inline static uint32_t vm_get_page_size()
-{
-	return (uint32_t)sysconf(_SC_PAGESIZE);
-}
-
-// INFO: Mimics malloc in the sense that it returns a NULL ptr on an error instead of an error enum type
-inline static void* vm_reserve(const uint64_t size)
-{
-	void* ptr = mmap(NULL, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (ptr == MAP_FAILED) {
-		return NULL;
-	}
-	return ptr;
-}
-
-inline static int32_t vm_release(void* ptr, const uint64_t size)
-{
-	return munmap(ptr, size) == 0; /* >"It is not an error if the indicated range does not contain any mapped pages" ~ So 'ptr' can be NULL here.*/
-}
-
-inline static int32_t vm_commit(void* addr, const uint64_t size)
-{
-	return mprotect(addr, size, PROT_READ | PROT_WRITE) == 0;
-}
-
-inline static int32_t vm_uncommit(void* addr, const uint64_t size)
-{
-	int32_t ret_code = mprotect(addr, size, PROT_NONE);
-	if (ret_code != 0) {
-		return -1;
-	}
-	return madvise(addr, size, MADV_DONTNEED) == 0; /* Subsequent access will result in zero-fill-on-demand pages */
-}
-
-#else
-#error "VIRTUAL MEMORY ALLOCATION NOT IMPLEMENTED FOR CURRENT PLATFORM"
-#endif

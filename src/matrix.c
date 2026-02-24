@@ -4,65 +4,6 @@
 #include "helpers.h"
 #include "spmm.h"
 
-static inline size_t sp_mat_ptr_count_get(const SpMatDescr* const sp)
-{
-	switch (sp->format) {
-	case SPARSE_FORMAT_CSR:
-		return sp->rows + 1;
-	case SPARSE_FORMAT_CSC:
-		return sp->cols + 1;
-	}
-}
-
-inline size_t sp_mat_ptr_bytes_get(const SpMatDescr* const sp)
-{
-	return sp_mat_ptr_count_get(sp) * (sizeof *(sp->csr.row_ptr));  // sizeof uint might be faster but less flexible when it comes to accepting more types
-}
-
-inline size_t sp_mat_idx_count_get(const SpMatDescr* const sp)
-{
-	return sp->nnz;
-}
-
-inline size_t sp_mat_idx_bytes_get(const SpMatDescr* const sp)
-{
-	return sp->nnz * (sizeof *(sp->csr.col_idx));
-}
-
-inline size_t sp_mat_val_count_get(const SpMatDescr* const sp)
-{
-	return sp->nnz;
-}
-
-inline size_t sp_mat_val_bytes_get(const SpMatDescr* const sp)
-{
-	return sp->nnz * (sizeof *(sp->val));
-}
-
-inline size_t sp_mat_byte_size_get(const SpMatDescr* const sp)
-{
-	return sp_mat_ptr_bytes_get(sp) + sp_mat_idx_bytes_get(sp) + sp_mat_val_bytes_get(sp);
-}
-
-inline uint64_t dn_mat_bytes_get(const DnMatDescr* const dn)
-{
-	return dn->rows * dn->cols * (sizeof *(dn->val));
-}
-
-/*
- * Calculates the size of a CSR or CSC matrix in bytes for float values
- * Accounts for non-square matrices
- * n: main dimension's size (cols for CSC, rows for CSR)
- */
-static inline size_t get_sparse_byte_size(const size_t n, const size_t nnz)
-{
-	size_t b_ptr_size = (n + 1) * sizeof(uint32_t);
-	size_t b_idx_size = nnz * sizeof(uint32_t);
-	size_t b_val_size = nnz * sizeof(float);
-
-	return b_ptr_size + b_idx_size + b_val_size;
-}
-
 static SpmmStatus_t get_max_nnz_per_row(size_t* const max_nnz_out, SpMatDescr* const sp_mat_descr)
 {
 	if (!sp_mat_descr || !max_nnz_out) {
