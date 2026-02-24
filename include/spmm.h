@@ -53,8 +53,8 @@ extern "C"
 
 	// TODO: Could decouple arena from ctx, and have a separate workspace
 	// struct that gets initialized at a different point in time
-	struct MemArena;
-	typedef struct MemArena* ExecutionContext_t;
+	struct ExecCtx;
+	typedef struct ExecCtx* ExecutionContext_t;
 
 	SpmmStatus_t exec_ctx_create(ExecutionContext_t* handle);
 	SpmmStatus_t exec_ctx_destroy(ExecutionContext_t ctx);

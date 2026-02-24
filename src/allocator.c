@@ -13,7 +13,7 @@
 //
 // INFO: COMMIT SIZE SHOULD BE PAGE-SIZE ALIGNED AND DERIVED FROM AN ALLOCATION STRATEGY SIMILAR TO VECTOR OR SOMETHING :)
 
-inline static SpmmInternalStatus_t mem_arena_create(MemArena** const arena, const uint64_t reserve_size, const uint64_t commit_size)
+SpmmInternalStatus_t host_mem_arena_create(MemArena** const arena, const uint64_t reserve_size, const uint64_t commit_size)
 {
 	// TODO: Debug print these at some point to ensure correctness.
 	const uint32_t page_size = vm_get_page_size();
@@ -38,7 +38,7 @@ inline static SpmmInternalStatus_t mem_arena_create(MemArena** const arena, cons
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-inline static SpmmInternalStatus_t mem_arena_destroy(MemArena* arena)
+SpmmInternalStatus_t host_mem_arena_destroy(MemArena* arena)
 {
 	if (!vm_release(arena, arena->reserve_size)) {
 		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
@@ -46,7 +46,7 @@ inline static SpmmInternalStatus_t mem_arena_destroy(MemArena* arena)
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-SpmmInternalStatus_t mem_arena_push(MemArena* const arena, const uint64_t req_size, void** ptr_out)
+SpmmInternalStatus_t host_mem_arena_push(MemArena* const arena, const uint64_t req_size, void** ptr_out)
 {
 	const uint64_t aligned_pos = arena->pos + PADDING_POW2(arena->pos, sizeof(void*)); /* the pointer returned should be naturally aligned */
 	const uint64_t new_pos = aligned_pos + req_size;
@@ -71,21 +71,21 @@ SpmmInternalStatus_t mem_arena_push(MemArena* const arena, const uint64_t req_si
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-void mem_arena_pop(MemArena* const arena, uint64_t size)
+void host_mem_arena_pop(MemArena* const arena, uint64_t size)
 {
 	// TODO: Should I null check the ptr here?
 	size = MIN(size, arena->pos - sizeof *arena); /* don't dealloc MemArena members */
 	arena->pos -= size;
 }
 
-inline static void mem_arena_pop_at(MemArena* const arena, uint64_t pos)
+inline static void host_mem_arena_pop_at(MemArena* const arena, uint64_t pos)
 {
 	uint64_t size = pos < arena->pos ? arena->pos - pos : 0;
-	mem_arena_pop(arena, size);
+	host_mem_arena_pop(arena, size);
 }
 
 // TODO: Do I need this anymore?
-inline uint64_t mem_arena_pos_get(const MemArena* const arena)
+inline uint64_t host_mem_arena_pos_get(const MemArena* const arena)
 {
 	return arena->pos;
 }
@@ -116,6 +116,7 @@ inline static int32_t vm_commit(void* addr, const uint64_t size)
 {
 	return mprotect(addr, size, PROT_READ | PROT_WRITE) == 0;
 }
+
 inline static int32_t vm_uncommit(void* addr, const uint64_t size)
 {
 	int32_t ret_code = mprotect(addr, size, PROT_NONE);
@@ -128,33 +129,3 @@ inline static int32_t vm_uncommit(void* addr, const uint64_t size)
 #else
 #error "VIRTUAL MEMORY ALLOCATION NOT IMPLEMENTED FOR CURRENT PLATFORM"
 #endif
-
-/*
-      * +------------------------------------------------------------------------------+
-      * |                                PUBLIC API                                    |
-      * +------------------------------------------------------------------------------+
-*/
-
-SpmmStatus_t exec_ctx_create(ExecutionContext_t* ctx)
-{
-	if (*ctx) {
-		return SPMM_STATUS_INVALID_VALUE;
-	}
-	mem_arena_create(ctx, GIB(1), MIB(1));
-	if (!*ctx) {
-		return SPMM_STATUS_ALLOC_FAILED;
-	}
-	return SPMM_STATUS_SUCCESS;
-}
-
-SpmmStatus_t exec_ctx_destroy(ExecutionContext_t ctx)
-{
-	if (!ctx) {
-		return SPMM_STATUS_NOT_INITIALIZED;
-	}
-	mem_arena_destroy(ctx);
-	if (ctx) {
-		return SPMM_STATUS_ALLOC_FAILED;
-	}
-	return SPMM_STATUS_SUCCESS;
-}

@@ -291,20 +291,21 @@
 
 int main(void)
 {
-	CSR csr = parse_csr_test_case("test_data/unit/csr_to_csc/1.test");
-	std::cout << csr.rows << " " << csr.cols << " " << csr.nnz << "\n";
+	// CSR csr = parse_csr_test_case("test_data/unit/csr_to_csc/1.test");
+	CSC csc = parse_csc_test_case("test_data/unit/csc_to_csr/1.test");
+	std::cout << csc.rows << " " << csc.cols << " " << csc.nnz << "\n";
 
-	for (const uint32_t& k : csr.row_ptr) {
+	for (const uint32_t& k : csc.col_ptr) {
 		std::cout << k << " ";
 	}
 
 	std::cout << std::endl;
-	for (const uint32_t& k : csr.col_idx) {
+	for (const uint32_t& k : csc.row_idx) {
 		std::cout << k << " ";
 	}
 
 	std::cout << std::endl;
-	for (const float& k : csr.val) {
+	for (const float& k : csc.val) {
 		std::cout << k << " ";
 	}
 
@@ -313,36 +314,39 @@ int main(void)
 	ExecutionContext_t handle = NULL;
 	exec_ctx_create(&handle);
 
-	SpMatDescr_t lib_csr = NULL;
-	create_sp_mat_csr(handle, &lib_csr, csr.rows, csr.cols, csr.nnz, csr.row_ptr.data(), csr.col_idx.data(), csr.val.data());
-
-	CSC csc;
-	csc.rows = csr.rows;
-	csc.cols = csr.cols;
-	csc.nnz = csr.nnz;
-	csc.col_ptr.resize(csc.cols + 1);
-	csc.row_idx.resize(csc.nnz);
-	csc.val.resize(csc.nnz);
-
 	SpMatDescr_t lib_csc = NULL;
 	create_sp_mat_csc(handle, &lib_csc, csc.rows, csc.cols, csc.nnz, csc.col_ptr.data(), csc.row_idx.data(), csc.val.data());
 
-	sp_csr_to_csc(handle, lib_csr, lib_csc);
+	CSR csr;
+	csr.rows = csc.rows;
+	csr.cols = csc.cols;
+	csr.nnz = csc.nnz;
+	csr.row_ptr.resize(csr.rows + 1);
+	csr.col_idx.resize(csr.nnz);
+	csr.val.resize(csr.nnz);
+
+	SpMatDescr_t lib_csr = NULL;
+	create_sp_mat_csr(handle, &lib_csr, csr.rows, csr.cols, csr.nnz, csr.row_ptr.data(), csr.col_idx.data(), csr.val.data());
+
+	if (sp_csc_to_csr(handle, lib_csc, lib_csr) != SPMM_STATUS_SUCCESS) {
+		std::cout << "Conversion failed" << std::endl;
+		return -1;
+	}
 
 	std::cout << "-------------------------" << std::endl;
-	std::cout << csc.rows << " " << csc.cols << " " << csc.nnz << "\n";
+	std::cout << csr.rows << " " << csr.cols << " " << csr.nnz << "\n";
 
-	for (uint32_t i = 0; i < csc.cols + 1; ++i) {
-		std::cout << csc.col_ptr[i] << " ";
+	for (uint32_t i = 0; i < csr.rows + 1; ++i) {
+		std::cout << csr.row_ptr[i] << " ";
 	}
 	std::cout << std::endl;
 
-	for (const uint32_t& k : csc.row_idx) {
+	for (const uint32_t& k : csr.col_idx) {
 		std::cout << k << " ";
 	}
 	std::cout << std::endl;
 
-	for (const float& k : csc.val) {
+	for (const float& k : csr.val) {
 		std::cout << k << " ";
 	}
 	std::cout << std::endl;

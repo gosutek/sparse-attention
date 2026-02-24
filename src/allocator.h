@@ -25,14 +25,14 @@ typedef struct MemArena
       * +------------------------------------------------------------------------------+
 */
 
-inline static SpmmInternalStatus_t mem_arena_create(MemArena** const arena, const uint64_t reserve_size, const uint64_t commit_size);
-inline static SpmmInternalStatus_t mem_arena_destroy(MemArena* arena);
+SpmmInternalStatus_t host_mem_arena_create(MemArena** const arena, const uint64_t reserve_size, const uint64_t commit_size);
+SpmmInternalStatus_t host_mem_arena_destroy(MemArena* arena);
 
-SpmmInternalStatus_t mem_arena_push(MemArena* const arena, const uint64_t req_size, void** ptr_out);
-void                 mem_arena_pop(MemArena* const arena, uint64_t size);
-inline static void   mem_arena_pop_at(MemArena* const arena, uint64_t pos);
+SpmmInternalStatus_t host_mem_arena_push(MemArena* const arena, const uint64_t req_size, void** ptr_out);
+void                 host_mem_arena_pop(MemArena* const arena, uint64_t size);
+inline static void   host_mem_arena_pop_at(MemArena* const arena, uint64_t pos);
 
-inline uint64_t mem_arena_pos_get(const MemArena* const arena);
+inline uint64_t host_mem_arena_pos_get(const MemArena* const arena);
 
 /*
       * +------------------------------------------------------------------------------+

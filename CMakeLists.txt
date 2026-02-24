@@ -11,6 +11,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_library(cute STATIC
   src/matrix.c
   src/allocator.c
+  src/context.c
 )
 
 target_compile_options(cute PRIVATE
