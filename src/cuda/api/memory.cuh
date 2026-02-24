@@ -18,8 +18,8 @@ typedef struct DevArena
       * +------------------------------------------------------------------------------+
 */
 
-SpmmInternalStatus_t mem_arena_create(DevArena** const arena, const uint64_t bsize);
-SpmmInternalStatus_t mem_arena_destroy(DevArena* arena);
+SpmmInternalStatus_t dev_mem_arena_create(DevArena** const arena, const uint64_t bsize);
+SpmmInternalStatus_t dev_mem_arena_destroy(DevArena* arena);
 
 SpmmInternalStatus_t mem_arena_push(DevArena* const arena, const uint64_t bsize, void** ptr_out);
 void                 mem_arena_pop(DevArena* const arena, uint64_t bsize);
