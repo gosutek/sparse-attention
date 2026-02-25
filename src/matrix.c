@@ -85,7 +85,7 @@ SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr, SpMatDes
 
 	void*          work_buffer = NULL;
 	const uint64_t work_buffer_bsize = (sp_csc->cols + 1) * (sizeof *(sp_csc->csc.col_ptr));
-	if (host_mem_arena_push((MemArena*)ctx, work_buffer_bsize, &work_buffer) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (mem_arena_host_push((MemArena*)ctx, work_buffer_bsize, &work_buffer) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_INTERNAL_ERROR;
 	}
 	memcpy(work_buffer, sp_csc->csc.col_ptr, work_buffer_bsize);
@@ -100,7 +100,7 @@ SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr, SpMatDes
 		}
 	}
 
-	host_mem_arena_pop((MemArena*)ctx, work_buffer_bsize);
+	mem_arena_host_pop((MemArena*)ctx, work_buffer_bsize);
 
 	return SPMM_STATUS_SUCCESS;
 }
@@ -126,7 +126,7 @@ SpmmStatus_t sp_csc_to_csr(ExecutionContext_t ctx, SpMatDescr_t sp_csc, SpMatDes
 
 	void*          work_buffer = NULL;
 	const uint64_t work_buffer_bsize = (sp_csr->rows + 1) * (sizeof *(sp_csr->csr.row_ptr));
-	if (host_mem_arena_push((MemArena*)ctx, work_buffer_bsize, &work_buffer) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (mem_arena_host_push((MemArena*)ctx, work_buffer_bsize, &work_buffer) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_INTERNAL_ERROR;
 	}
 	memcpy(work_buffer, sp_csr->csr.row_ptr, work_buffer_bsize);
@@ -141,7 +141,7 @@ SpmmStatus_t sp_csc_to_csr(ExecutionContext_t ctx, SpMatDescr_t sp_csc, SpMatDes
 		}
 	}
 
-	host_mem_arena_pop((MemArena*)ctx, work_buffer_bsize);
+	mem_arena_host_pop((MemArena*)ctx, work_buffer_bsize);
 
 	return SPMM_STATUS_SUCCESS;
 }
@@ -194,7 +194,7 @@ SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_desc
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
-	if (host_mem_arena_push((MemArena*)ctx, sizeof **sp_mat_descr, (void**)sp_mat_descr) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (mem_arena_host_push((MemArena*)ctx, sizeof **sp_mat_descr, (void**)sp_mat_descr) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
@@ -223,7 +223,7 @@ SpmmStatus_t create_sp_mat_csc(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_desc
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
-	if (host_mem_arena_push((MemArena*)(ctx), sizeof **sp_mat_descr, (void**)sp_mat_descr) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (mem_arena_host_push((MemArena*)(ctx), sizeof **sp_mat_descr, (void**)sp_mat_descr) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 

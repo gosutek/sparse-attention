@@ -51,11 +51,11 @@ SpmmStatus_t exec_ctx_create(ExecutionContext_t* ctx)
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
-	if (host_mem_arena_create((MemArena**)(ctx), GIB(1), MIB(1)) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (mem_arena_host_create((MemArena**)(ctx), GIB(1), MIB(1)) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
-	if (host_mem_arena_push((MemArena*)(*ctx), sizeof(void*), (void**)&(*ctx)->dev_arena) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (mem_arena_host_push((MemArena*)(*ctx), sizeof(void*), (void**)&(*ctx)->dev_arena) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
@@ -68,7 +68,7 @@ SpmmStatus_t exec_ctx_destroy(ExecutionContext_t ctx)
 		return SPMM_STATUS_NOT_INITIALIZED;
 	}
 
-	if (host_mem_arena_destroy((MemArena*)(ctx)) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (mem_arena_host_destroy((MemArena*)(ctx)) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
@@ -89,7 +89,7 @@ SpmmStatus_t exec_ctx_destroy(ExecutionContext_t ctx)
 //
 // INFO: COMMIT SIZE SHOULD BE PAGE-SIZE ALIGNED AND DERIVED FROM AN ALLOCATION STRATEGY SIMILAR TO VECTOR OR SOMETHING :)
 
-SpmmInternalStatus_t host_mem_arena_create(MemArena** const arena, const uint64_t reserve_size, const uint64_t commit_size)
+SpmmInternalStatus_t mem_arena_host_create(MemArena** const arena, const uint64_t reserve_size, const uint64_t commit_size)
 {
 	// TODO: Debug print these at some point to ensure correctness.
 	const uint32_t page_size = vm_get_page_size();
@@ -114,7 +114,7 @@ SpmmInternalStatus_t host_mem_arena_create(MemArena** const arena, const uint64_
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-SpmmInternalStatus_t host_mem_arena_destroy(MemArena* arena)
+SpmmInternalStatus_t mem_arena_host_destroy(MemArena* arena)
 {
 	if (!vm_release(arena, arena->reserve_size)) {
 		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
@@ -122,7 +122,7 @@ SpmmInternalStatus_t host_mem_arena_destroy(MemArena* arena)
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-SpmmInternalStatus_t host_mem_arena_push(MemArena* const arena, const uint64_t req_size, void** ptr_out)
+SpmmInternalStatus_t mem_arena_host_push(MemArena* const arena, const uint64_t req_size, void** ptr_out)
 {
 	const uint64_t aligned_pos = arena->pos + PADDING_POW2(arena->pos, sizeof(void*)); /* the pointer returned should be naturally aligned */
 	const uint64_t new_pos = aligned_pos + req_size;
@@ -147,21 +147,21 @@ SpmmInternalStatus_t host_mem_arena_push(MemArena* const arena, const uint64_t r
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-void host_mem_arena_pop(MemArena* const arena, uint64_t size)
+void mem_arena_host_pop(MemArena* const arena, uint64_t size)
 {
 	// TODO: Should I null check the ptr here?
 	size = MIN(size, arena->pos - sizeof *arena); /* don't dealloc MemArena members */
 	arena->pos -= size;
 }
 
-void host_mem_arena_pop_at(MemArena* const arena, uint64_t pos)
+void mem_arena_host_pop_at(MemArena* const arena, uint64_t pos)
 {
 	uint64_t size = pos < arena->pos ? arena->pos - pos : 0;
-	host_mem_arena_pop(arena, size);
+	mem_arena_host_pop(arena, size);
 }
 
 // TODO: Do I need this anymore?
-uint64_t host_mem_arena_pos_get(const MemArena* const arena)
+uint64_t mem_arena_host_pos_get(const MemArena* const arena)
 {
 	return arena->pos;
 }
