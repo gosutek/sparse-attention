@@ -1,6 +1,6 @@
-#include "memory.cuh"
+#include "allocator.cuh"
 
-SpmmInternalStatus_t dev_mem_arena_create(DevArena** const arena, const uint64_t bsize)
+SpmmInternalStatus_t mem_arena_dev_create(DevArena** const arena, const uint64_t bsize)
 {
 	if (*arena) {
 		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
@@ -16,7 +16,7 @@ SpmmInternalStatus_t dev_mem_arena_create(DevArena** const arena, const uint64_t
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-SpmmInternalStatus_t dev_mem_arena_destroy(DevArena* arena)
+SpmmInternalStatus_t mem_arena_dev_destroy(DevArena* arena)
 {
 	if (!arena) {
 		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
@@ -29,7 +29,7 @@ SpmmInternalStatus_t dev_mem_arena_destroy(DevArena* arena)
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-SpmmInternalStatus_t mem_arena_push(DevArena* const arena, const uint64_t bsize, void** ptr_out)
+SpmmInternalStatus_t mem_arena_dev_push(DevArena* const arena, const uint64_t bsize, void** ptr_out)
 {
 	if (!arena) {
 		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
@@ -49,35 +49,19 @@ SpmmInternalStatus_t mem_arena_push(DevArena* const arena, const uint64_t bsize,
 }
 
 // WARN: What if bsize isn't aligned?
-void mem_arena_pop(DevArena* const arena, uint64_t bsize)
+void mem_arena_dev_pop(DevArena* const arena, uint64_t bsize)
 {
 	bsize = MIN(bsize, arena->pos - sizeof *arena);
 	arena->pos -= bsize;
 }
 
-void mem_arena_pop_at(DevArena* const arena, uint64_t pos)
+void mem_arena_dev_pop_at(DevArena* const arena, uint64_t pos)
 {
+	uint64_t size = pos < arena->pos ? arena->pos - pos : 0;
+	mem_arena_dev_pop(arena, size);
 }
 
-uint64_t mem_arena_pos_get(const DevArena* const arena);
-
-// namespace spmm
-// {
-// 	void* cuda_malloc_host(size_t b_size)
-// 	{
-// 		void* ptr = nullptr;
-// 		CUDA_CHECK(cudaMallocHost(&ptr, b_size));
-// 		return ptr;
-// 	}
-//
-// 	void cuda_dealloc_host(void* ptr)
-// 	{
-// 		CUDA_CHECK(cudaFreeHost(ptr));
-// 	}
-//
-// 	void cuda_dealloc_device(void* ptr)
-// 	{
-// 		CUDA_CHECK(cudaFree(ptr));
-// 	}
-//
-// }  // namespace spmm
+uint64_t mem_arena_dev_pos_get(const DevArena* const arena)
+{
+	return arena->pos;
+}
