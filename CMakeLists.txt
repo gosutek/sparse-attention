@@ -1,16 +1,42 @@
 cmake_minimum_required(VERSION 3.18)
-project(cute LANGUAGES C CXX)
+
+project(cute LANGUAGES C CXX CUDA)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_CUDA_STANDARD 17)
+set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_INCLUDES 0)
+set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_LIBRARIES 0)
+set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_OBJECTS 0)
 
 add_library(cute STATIC
   src/matrix.c
   src/allocator.c
+
+  src/cuda/wrapper.cu
+  src/cuda/api/cuda_allocator.cu
+)
+
+target_include_directories(cute
+  PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+  PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/cuda/api
+)
+
+set_target_properties(cute PROPERTIES
+  CUDA_SEPERABLE_COMPILATION ON
+  CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
 target_compile_options(cute PRIVATE
@@ -32,15 +58,9 @@ target_compile_options(cute PRIVATE
     -Wundef
     -Wswitch-enum
     >
-)
-
-target_include_directories(cute
-  PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<INSTALL_INTERFACE:include>
-  PRIVATE
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/cuda/api
-  ${CMAKE_CURRENT_SOURCE_DIR}/src/cuda/kernels
+  $<$<COMPILE_LANGUAGE:CUDA>:
+    -Xcompiler=-Wall,-Wextra
+  >
 )
 
 add_executable(cute_main
@@ -49,6 +69,10 @@ add_executable(cute_main
 )
 
 target_link_libraries(cute_main PRIVATE cute)
+
+target_include_directories(cute_main PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/run
+)
 
 target_compile_options(cute_main PRIVATE
   $<$<COMPILE_LANGUAGE:CXX>:
@@ -62,11 +86,11 @@ option(MEM_DEBUG "Enable sanitizers" OFF)
 
 if (MEM_DEBUG)
   target_compile_options(cute_main PRIVATE
-  -fsanitize=address,undefined
-  -fno-omit-frame-pointer
-  -g
+    -fsanitize=address,undefined
+    -fno-omit-frame-pointer
+    -g
   )
   target_link_options(cute_main PRIVATE
-  -fsanitize=address,undefined
+    -fsanitize=address,undefined
   )
 endif()

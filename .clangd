@@ -1,0 +1,19 @@
+CompileFlags:
+  Remove:
+    - "-forward-unknown-to-host-compiler"
+    - "--generate-code*"
+    - "--options-file"
+    - "-Xcompiler*"
+    - "--expt-relaxed-constexpr"
+
+---
+
+If:
+  PathMatch: ".*\\.cu"
+CompileFlags:
+  Add:
+    - "-Wno-unknown-cuda-version"
+    - "-x"
+    - "cuda"
+  Remove:
+    - "-std=c++*"

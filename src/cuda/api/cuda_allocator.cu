@@ -1,4 +1,4 @@
-#include "allocator.cuh"
+#include "cuda_allocator.cuh"
 
 SpmmInternalStatus_t mem_arena_dev_create(DevArena** const arena, const uint64_t bsize)
 {

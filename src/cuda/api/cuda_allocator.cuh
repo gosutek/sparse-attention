@@ -1,5 +1,5 @@
-#if !defined(MEMORY_CUH)
-#define MEMORY_CUH
+#if !defined(CUDA_ALLOCATOR_CUH)
+#define CUDA_ALLOCATOR_CUH
 
 #include <stdint.h>
 
@@ -21,4 +21,4 @@ void                 mem_arena_dev_pop_at(DevArena* const arena, uint64_t pos);
 
 uint64_t mem_arena_dev_pos_get(const DevArena* const arena);
 
-#endif  // MEMORY_CUH
+#endif  // CUDA_ALLOCATOR_CUH

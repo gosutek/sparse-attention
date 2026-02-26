@@ -1,0 +1,28 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "debug-san",
+      "binaryDir": "${sourceDir}/build/debug-san",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "MEM_DEBUG": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "MEM_DEBUG": "OFF"
+      }
+    },
+    {
+      "name": "release",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ]
+}

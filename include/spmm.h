@@ -102,6 +102,14 @@ extern "C"
 	SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr, SpMatDescr_t sp_csc);
 	SpmmStatus_t sp_csc_to_csr(ExecutionContext_t ctx, SpMatDescr_t sp_csc, SpMatDescr_t sp_csr);
 
+	/*
+    * +------------------------------------------------------------------------------+
+    * |                                  CUDA OPS                                    |
+    * +------------------------------------------------------------------------------+
+  */
+
+	SpmmStatus_t spmm(ExecutionContext_t ctx, SpMatDescr_t sp, DnMatDescr_t dn);
+
 #if defined(__cplusplus)
 }
 #endif
