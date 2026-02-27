@@ -118,6 +118,7 @@ SpmmInternalStatus_t mem_arena_host_destroy(MemArena* arena)
 	if (!vm_release(arena, arena->reserve_size)) {
 		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 	}
+	arena = NULL;
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
