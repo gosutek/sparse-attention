@@ -28,8 +28,8 @@ extern "C"
 
 	typedef struct ExecCtx
 	{
-		MemArena  host_arena;
-		DevArena* dev_arena;
+		MemArena host_arena;
+		DevArena dev_arena;
 	} ExecCtx;
 
 	/*

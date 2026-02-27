@@ -1,30 +1,31 @@
 #include "cuda_allocator.cuh"
 
-SpmmInternalStatus_t mem_arena_dev_create(DevArena** const arena, const uint64_t bsize)
+SpmmInternalStatus_t mem_arena_dev_create(DevArena* arena, const uint64_t bsize)
 {
-	if (*arena) {
+	if (arena) {
 		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 	}
 
-	if (cudaMalloc(arena, bsize) != cudaSuccess) {
+	if (cudaMalloc(&arena->d_ptr, bsize) != cudaSuccess) {
 		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 	}
 
-	(*arena)->size = bsize;
-	(*arena)->pos = sizeof **arena;
+	arena->size = bsize;
+	arena->pos = sizeof *arena;
 
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
 SpmmInternalStatus_t mem_arena_dev_destroy(DevArena* arena)
 {
-	if (!arena) {
+	if (!arena->d_ptr) {
 		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 	}
 
-	if (cudaFree(arena) != cudaSuccess) {
+	if (cudaFree(arena->d_ptr) != cudaSuccess) {
 		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 	}
+	arena->d_ptr = nullptr;
 
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }

@@ -7,12 +7,13 @@
 
 typedef struct DevArena
 {
-	uint64_t size;
+	uint8_t* d_ptr;
 
+	uint64_t size;
 	uint64_t pos;
 } DevArena;
 
-SpmmInternalStatus_t mem_arena_dev_create(DevArena** const arena, const uint64_t bsize);
+SpmmInternalStatus_t mem_arena_dev_create(DevArena* const arena, const uint64_t bsize);
 SpmmInternalStatus_t mem_arena_dev_destroy(DevArena* arena);
 
 SpmmInternalStatus_t mem_arena_dev_push(DevArena* const arena, const uint64_t bsize, void** ptr_out);
