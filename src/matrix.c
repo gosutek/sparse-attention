@@ -240,17 +240,16 @@ SpmmStatus_t create_sp_mat_csc(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_desc
 	return SPMM_STATUS_SUCCESS;
 }
 
-SpmmStatus_t create_dn_mat_row_major(DnMatDescr_t* dn_mat_descr,
-	uint32_t                                       rows,
-	uint32_t                                       cols,
-	float*                                         val)
+SpmmStatus_t create_dn_mat_row_major(ExecutionContext_t ctx, DnMatDescr_t* dn_mat_descr,
+	uint32_t rows,
+	uint32_t cols,
+	float*   val)
 {
 	if (dn_mat_descr == NULL || *dn_mat_descr != NULL) {
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
-	*dn_mat_descr = (DnMatDescr_t)(malloc(sizeof **dn_mat_descr));
-	if (*dn_mat_descr == NULL) {
+	if (mem_arena_host_push((MemArena*)(ctx), sizeof **dn_mat_descr, (void**)dn_mat_descr) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
@@ -264,17 +263,17 @@ SpmmStatus_t create_dn_mat_row_major(DnMatDescr_t* dn_mat_descr,
 	return SPMM_STATUS_SUCCESS;
 }
 
-SpmmStatus_t create_dn_mat_col_major(DnMatDescr_t* dn_mat_descr,
-	uint32_t                                       rows,
-	uint32_t                                       cols,
-	float*                                         val)
+// TODO: Change this to use the Arena
+SpmmStatus_t create_dn_mat_col_major(ExecutionContext_t ctx, DnMatDescr_t* dn_mat_descr,
+	uint32_t rows,
+	uint32_t cols,
+	float*   val)
 {
 	if (dn_mat_descr == NULL || *dn_mat_descr != NULL) {
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
-	*dn_mat_descr = (DnMatDescr_t)(malloc(sizeof **dn_mat_descr));
-	if (*dn_mat_descr == NULL) {
+	if (mem_arena_host_push((MemArena*)(ctx), sizeof **dn_mat_descr, (void**)dn_mat_descr) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 

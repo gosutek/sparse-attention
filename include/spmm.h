@@ -81,15 +81,15 @@ extern "C"
 	struct DnMatDescr;
 	typedef struct DnMatDescr* DnMatDescr_t;
 
-	SpmmStatus_t create_dn_mat_row_major(DnMatDescr_t* dn_mat_descr,
-		uint32_t                                       rows,
-		uint32_t                                       cols,
-		float*                                         val);
+	SpmmStatus_t create_dn_mat_row_major(ExecutionContext_t ctx, DnMatDescr_t* dn_mat_descr,
+		uint32_t rows,
+		uint32_t cols,
+		float*   val);
 
-	SpmmStatus_t create_dn_mat_col_major(DnMatDescr_t* dn_mat_descr,
-		uint32_t                                       rows,
-		uint32_t                                       cols,
-		float*                                         val);
+	SpmmStatus_t create_dn_mat_col_major(ExecutionContext_t ctx, DnMatDescr_t* dn_mat_descr,
+		uint32_t rows,
+		uint32_t cols,
+		float*   val);
 
 	/*
     * +------------------------------------------------------------------------------+
