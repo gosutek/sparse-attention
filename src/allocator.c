@@ -1,7 +1,5 @@
 #include "allocator.h"
 
-#include "spmm.h"
-
 /*
       * +------------------------------------------------------------------------------+
       * |                             PLATFORM SPECIFIC                                |
@@ -67,8 +65,12 @@ SpmmStatus_t exec_ctx_destroy(ExecutionContext_t ctx)
 		return SPMM_STATUS_NOT_INITIALIZED;
 	}
 
+	if (ctx->dev_arena.d_ptr && mem_arena_dev_destroy(&ctx->dev_arena) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_INTERNAL_ERROR;
+	}
+
 	if (mem_arena_host_destroy((MemArena*)(ctx)) != SPMM_INTERNAL_STATUS_SUCCESS) {
-		return SPMM_STATUS_ALLOC_FAILED;
+		return SPMM_STATUS_INTERNAL_ERROR;
 	}
 
 	return SPMM_STATUS_SUCCESS;
