@@ -1,4 +1,5 @@
 #include "allocator.h"
+#include "cuda/kernels/spmm_csr.cuh"
 #include "cuda_allocator.cuh"
 #include "helpers.h"
 #include "matrix.h"
@@ -6,7 +7,6 @@
 
 // TODO: Maybe copy to a contiguous mem block in host first then in dev
 // for further optimization
-
 static SpmmInternalStatus_t _d_sp_copy(DevArena* const arena, SpMatDescr* const dst, const SpMatDescr* const src)
 {
 	uint8_t* d_ptr = arena->d_ptr;
@@ -86,15 +86,17 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn)
 	SpMatDescr d_sp;
 	_d_sp_copy(&ctx->dev_arena, &d_sp, h_sp);
 
-	DnMatDescr d_dn;
-	_d_dn_copy(&ctx->dev_arena, &d_dn, h_dn);
+	// DnMatDescr d_dn;
+	// _d_dn_copy(&ctx->dev_arena, &d_dn, h_dn);
+	//
+	// const uint64_t res_bsize = spmm_res_mat_bytes_get(h_sp, h_dn);
+	// float*         res_ptr = nullptr;
+	//
+	// if (mem_arena_dev_push(&ctx->dev_arena, res_bsize, reinterpret_cast<void**>(&res_ptr)) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	// 	return SPMM_STATUS_INTERNAL_ERROR;
+	// }
 
-	const uint64_t res_bsize = spmm_res_mat_bytes_get(h_sp, h_dn);
-	uint8_t*       res_ptr = nullptr;
-
-	if (mem_arena_dev_push(&ctx->dev_arena, res_bsize, reinterpret_cast<void**>(&res_ptr)) != SPMM_INTERNAL_STATUS_SUCCESS) {
-		return SPMM_STATUS_INTERNAL_ERROR;
-	}
+	// _k_spmm_naive_elemwise_gmem_csr<<<, >>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, res_ptr);
 
 	return SPMM_STATUS_SUCCESS;
 }

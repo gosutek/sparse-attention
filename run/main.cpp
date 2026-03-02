@@ -292,66 +292,24 @@
 int main(void)
 {
 	CSR csr = parse_csr_dlmc("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_k.smtx");
-	std::cout << csr.rows << " " << csr.cols << " " << csr.nnz << "\n";
 
-	for (const uint32_t& k : csr.row_ptr) {
-		std::cout << k << " ";
-	}
+	ExecutionContext_t handle = NULL;
+	exec_ctx_create(&handle);
 
-	std::cout << std::endl;
-	for (const uint32_t& k : csr.col_idx) {
-		std::cout << k << " ";
-	}
+	SpMatDescr_t lib_csr = NULL;
+	// WARN: Passing .data() is bad cause the vector might reallocate
+	create_sp_mat_csr(handle, &lib_csr, csr.rows, csr.cols, csr.nnz, csr.row_ptr.data(), csr.col_idx.data(), csr.val.data());
 
-	std::cout << std::endl;
-	// for (const float& k : csr.val) {
-	// 	std::cout << k << " ";
-	// }
+	std::vector<float> dn_buffer;
+	gen_synth_weights_vec(dn_buffer, csr.cols * csr.cols);
 
-	// std::cout << std::endl;
+	DnMatDescr_t lib_dn = NULL;
+	// WARN: Passing .data() is bad cause the vector might reallocate
+	create_dn_mat_col_major(handle, &lib_dn, csr.cols, csr.cols, dn_buffer.data());
 
-	// ExecutionContext_t handle = NULL;
-	// exec_ctx_create(&handle);
-	//
-	// SpMatDescr_t lib_csc = NULL;
-	// create_sp_mat_csc(handle, &lib_csc, csc.rows, csc.cols, csc.nnz, csc.col_ptr.data(), csc.row_idx.data(), csc.val.data());
-	//
-	// CSR csr;
-	// csr.rows = csc.rows;
-	// csr.cols = csc.cols;
-	// csr.nnz = csc.nnz;
-	// csr.row_ptr.resize(csr.rows + 1);
-	// csr.col_idx.resize(csr.nnz);
-	// csr.val.resize(csr.nnz);
-	//
-	// SpMatDescr_t lib_csr = NULL;
-	// create_sp_mat_csr(handle, &lib_csr, csr.rows, csr.cols, csr.nnz, csr.row_ptr.data(), csr.col_idx.data(), csr.val.data());
-	//
-	// if (sp_csc_to_csr(handle, lib_csc, lib_csr) != SPMM_STATUS_SUCCESS) {
-	// 	std::cout << "Conversion failed" << std::endl;
-	// 	return -1;
-	// }
-	//
-	// std::cout << "-------------------------" << std::endl;
-	// std::cout << csr.rows << " " << csr.cols << " " << csr.nnz << "\n";
-	//
-	// for (uint32_t i = 0; i < csr.rows + 1; ++i) {
-	// 	std::cout << csr.row_ptr[i] << " ";
-	// }
-	// std::cout << std::endl;
-	//
-	// for (const uint32_t& k : csr.col_idx) {
-	// 	std::cout << k << " ";
-	// }
-	// std::cout << std::endl;
-	//
-	// for (const float& k : csr.val) {
-	// 	std::cout << k << " ";
-	// }
-	// std::cout << std::endl;
-	//
-	// exec_ctx_destroy(handle);
+	spmm(handle, lib_csr, lib_dn);
 
-	// ut_run_tests();
+	exec_ctx_destroy(handle);
+
 	return 0;
 }
