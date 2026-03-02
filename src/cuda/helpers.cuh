@@ -1,15 +1,13 @@
-#include "helpers.cuh"
+#pragma once
+
+#include <cstdint>
 
 __device__ inline bool is_aligned(const void* addr, const size_t alignment_bytes)
 {
 	return (reinterpret_cast<uintptr_t>(addr) & (alignment_bytes - 1)) == 0;
 }
 
-/*
- * This aligns relative to @param base
- */
-// NOTE: is relative align necessary?
-__device__ inline uintptr_t align(const void* base, const void* addr, const size_t alignment_bytes)
+__device__ inline uint8_t align(const void* base, const void* addr, const size_t alignment_bytes)
 {
 	const uintptr_t offset = reinterpret_cast<uintptr_t>(addr) - reinterpret_cast<uintptr_t>(base);
 	const uintptr_t aligned_offset = (reinterpret_cast<uintptr_t>(offset) + (alignment_bytes - 1)) & ~size_t(alignment_bytes - 1);
