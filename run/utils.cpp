@@ -1,6 +1,34 @@
 #include "utils.h"
 
-#include <iostream>
+template <typename T>
+static inline void _gen_synth_weights_buffer(void* dst, size_t size)
+{
+	T* ptr = reinterpret_cast<T*>(dst);
+
+	// INFO: think this is bad, declaring them in each function
+	// instead of passing(??)
+	std::random_device                    rd;
+	std::minstd_rand                      rng(rd());
+	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+
+	for (size_t i = 0; i < size; ++i) {
+		ptr[i] = uni_real_dist(rng);
+	}
+}
+
+template <typename T>
+static inline void _gen_synth_weights_vec(std::vector<T>& vec)
+{
+	// INFO: think this is bad, declaring them in each function
+	// instead of passing(??)
+	std::random_device                    rd;
+	std::minstd_rand                      rng(rd());
+	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+
+	for (T& e : vec) {
+		e = uni_real_dist(rng);
+	}
+}
 
 CSR parse_csr_test_case(const std::filesystem::path& path)
 {
@@ -62,19 +90,6 @@ CSC parse_csc_test_case(const std::filesystem::path& path)
 	return csc;
 }
 
-// void generate_token_embeddings(void* dst, size_t size)
-// {
-// 	float* ptr = reinterpret_cast<float*>(dst);
-//
-// 	std::random_device                    rd;
-// 	std::minstd_rand                      rng(rd());
-// 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
-//
-// 	for (size_t i = 0; i < size; ++i) {
-// 		ptr[i] = uni_real_dist(rng);
-// 	}
-// }
-//
 // /*
 //  * WARN: This moves the filestream pointer
 //  */
