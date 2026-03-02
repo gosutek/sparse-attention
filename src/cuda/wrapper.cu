@@ -49,6 +49,8 @@ static SpmmInternalStatus_t _d_sp_copy(DevArena* const arena, SpMatDescr* const 
 	}
 	cudaMemcpy(d_ptr, src->val, val_bsize, cudaMemcpyHostToDevice);
 	dst->val = reinterpret_cast<float*>(d_ptr);
+
+	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
 static SpmmInternalStatus_t _d_dn_copy(DevArena* const arena, DnMatDescr* dst, DnMatDescr* src)
@@ -94,5 +96,5 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn)
 		return SPMM_STATUS_INTERNAL_ERROR;
 	}
 
-	// SPMM
+	return SPMM_STATUS_SUCCESS;
 }
