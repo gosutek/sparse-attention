@@ -3,7 +3,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 #include <random>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -43,6 +45,7 @@ struct CSC
 
 CSR parse_csr_test_case(const std::filesystem::path& path);
 CSC parse_csc_test_case(const std::filesystem::path& path);
+CSR parse_csr_dlmc(const std::filesystem::path& filepath);
 // void           generate_token_embeddings(void* dst, size_t size);
 // DlmcHeader     parse_dlmc_header(std::ifstream& file_stream);
 // RowMajorHeader parse_row_major_header(std::ifstream& file_stream);

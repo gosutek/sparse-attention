@@ -60,6 +60,53 @@ CSR parse_csr_test_case(const std::filesystem::path& path)
 	return csr;
 }
 
+CSR parse_csr_dlmc(const std::filesystem::path& filepath)
+{
+	std::ifstream file_stream(filepath, std::ios_base::in);
+
+	if (!file_stream) {
+		// TODO: Remove exceptions
+		throw std::runtime_error("Failed to open file stream for filepath: " + filepath.stem().string());
+	}
+
+	CSR csr;
+
+	std::string token;
+	std::string line;
+	std::getline(file_stream, line);
+
+	std::istringstream line_stream(line);
+	std::getline(line_stream, token, ',');
+
+	csr.rows = static_cast<uint32_t>(std::stoul(token));
+
+	std::getline(line_stream, token, ',');
+	csr.cols = static_cast<uint32_t>(std::stoul(token));
+
+	std::getline(line_stream, token, ',');
+	csr.nnz = static_cast<uint32_t>(std::stoul(token));
+
+	csr.row_ptr.resize(csr.rows + 1);
+	csr.col_idx.resize(csr.nnz);
+	csr.val.resize(csr.nnz);
+
+	for (uint32_t& k : csr.row_ptr) {
+		file_stream >> k;
+	}
+
+	for (uint32_t& k : csr.col_idx) {
+		file_stream >> k;
+	}
+
+	for (float& k : csr.val) {
+		file_stream >> k;
+	}
+
+	_gen_synth_weights_vec<float>(csr.val);
+
+	return csr;
+}
+
 CSC parse_csc_test_case(const std::filesystem::path& path)
 {
 	CSC         csc;
@@ -131,46 +178,6 @@ CSC parse_csc_test_case(const std::filesystem::path& path)
 // 	res.cols = static_cast<uint32_t>(std::stoul(token));
 //
 // 	return res;
-// }
-//
-// Csr::Matrix parse_dlmc(void* dst, const std::filesystem::path& filepath)
-// {
-// 	std::ifstream file_stream(filepath, std::ios_base::in);
-//
-// 	if (!file_stream) {
-// 		// TODO: Remove exceptions
-// 		throw std::runtime_error("Failed to open file stream for filepath: " + filepath.stem().string());
-// 	}
-//
-// 	DlmcHeader header = parse_dlmc_header(file_stream);
-//
-// 	Csr::Matrix csr;
-// 	Csr::init(csr, header.rows, header.cols, header.nnz);
-// 	Csr::partition(csr, reinterpret_cast<uintptr_t>(dst));
-//
-// 	std::string line, token;
-// 	std::getline(file_stream, line);
-// 	std::istringstream row_ptr_stream(line);
-// 	for (size_t i = 0; i < csr.row_ptr_count; ++i) {
-// 		row_ptr_stream >> token;
-// 		csr.row_ptr[i] = static_cast<uint32_t>(std::stoi(token));
-// 	}
-//
-// 	std::getline(file_stream, line);
-// 	std::istringstream col_idx_stream(line);
-// 	for (size_t i = 0; i < csr.col_idx_count; ++i) {
-// 		col_idx_stream >> token;
-// 		csr.col_idx[i] = static_cast<uint32_t>(std::stoi(token));
-// 	}
-//
-// 	std::random_device                    rd;
-// 	std::minstd_rand                      rng(rd());
-// 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
-// 	for (size_t i = 0; i < csr.val_count; ++i) {
-// 		csr.val[i] = uni_real_dist(rng);
-// 	}
-//
-// 	return csr;
 // }
 //
 // Csc::Matrix parse_csc_dlmc(void* dst, const std::filesystem::path& filepath)
