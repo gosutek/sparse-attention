@@ -51,3 +51,34 @@ CSR parse_csr_dlmc(const std::filesystem::path& filepath);
 // RowMajorHeader parse_row_major_header(std::ifstream& file_stream);
 // Csr::Matrix    parse_dlmc(void* dst, const std::filesystem::path& filepath);
 // Csc::Matrix    parse_csc_dlmc(void* dst, const std::filesystem::path& filepath);
+
+template <typename T>
+void gen_synth_weights_buffer(void* dst, uint64_t size)
+{
+	T* ptr = reinterpret_cast<T*>(dst);
+
+	// INFO: think this is bad, declaring them in each function
+	// instead of passing(??)
+	std::random_device                    rd;
+	std::minstd_rand                      rng(rd());
+	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+
+	for (size_t i = 0; i < size; ++i) {
+		ptr[i] = uni_real_dist(rng);
+	}
+}
+
+template <typename T>
+void gen_synth_weights_vec(std::vector<T>& vec, uint64_t size)
+{
+	vec.reserve(size);
+	// INFO: think this is bad, declaring them in each function
+	// instead of passing(??)
+	std::random_device                    rd;
+	std::minstd_rand                      rng(rd());
+	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+
+	for (uint32_t i = 0; i < size; ++i) {
+		vec.push_back(uni_real_dist(rng));
+	}
+}
