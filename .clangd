@@ -1,5 +1,8 @@
 CompileFlags:
   Remove:
+    - "-gencode*"
+    - "--threads*"
+    - "-G"
     - "-forward-unknown-to-host-compiler"
     - "--generate-code*"
     - "--options-file"

@@ -1,5 +1,6 @@
 #include <iostream>
 
+#include "../src/helpers.h"
 #include "../test/unit_tests.h"
 #include "utils.h"
 
@@ -307,7 +308,7 @@ int main(void)
 	// WARN: Passing .data() is bad cause the vector might reallocate
 	create_dn_mat_col_major(handle, &lib_dn, csr.cols, csr.cols, dn_buffer.data());
 
-	spmm(handle, lib_csr, lib_dn);
+	SPMM_CHECK(spmm(handle, lib_csr, lib_dn));
 
 	exec_ctx_destroy(handle);
 

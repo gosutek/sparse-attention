@@ -62,6 +62,8 @@ target_compile_options(cute PRIVATE
     >
   $<$<COMPILE_LANGUAGE:CUDA>:
     -Xcompiler=-Wall,-Wextra
+    -gencode arch=compute_89,code=sm_89
+    --threads 2
   >
 )
 

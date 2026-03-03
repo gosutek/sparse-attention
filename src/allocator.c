@@ -56,6 +56,8 @@ SpmmStatus_t exec_ctx_create(ExecutionContext_t* ctx)
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
+	(*ctx)->dev_arena.d_ptr = NULL;
+
 	return SPMM_STATUS_SUCCESS;
 }
 

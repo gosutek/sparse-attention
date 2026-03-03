@@ -109,7 +109,6 @@ extern "C"
   */
 
 	SpmmStatus_t spmm(ExecutionContext_t ctx, SpMatDescr_t sp, DnMatDescr_t dn);
-
 #if defined(__cplusplus)
 }
 #endif

@@ -78,8 +78,8 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn)
 		return SPMM_STATUS_NOT_INITIALIZED;
 	}
 
-	if (!ctx->dev_arena.d_ptr) {
-		mem_arena_dev_create(&ctx->dev_arena, GIB(1));
+	if (!ctx->dev_arena.d_ptr && mem_arena_dev_create(&ctx->dev_arena, GIB(1)) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_INTERNAL_ERROR;
 	}
 
 	// TODO: Error check these two

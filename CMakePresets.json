@@ -6,7 +6,9 @@
       "binaryDir": "${sourceDir}/build/debug-san",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "MEM_DEBUG": "ON"
+        "MEM_DEBUG": "ON",
+        "CMAKE_CUDA_FLAGS_DEBUG": "-g -G -O0",
+        "CMAKE_CXX_FLAGS_DEBUG": "-g -O0"
       }
     },
     {
@@ -14,7 +16,9 @@
       "binaryDir": "${sourceDir}/build/debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "MEM_DEBUG": "OFF"
+        "MEM_DEBUG": "OFF",
+        "CMAKE_CUDA_FLAGS_DEBUG": "-g -G -O0",
+        "CMAKE_CXX_FLAGS_DEBUG": "-g -O0"
       }
     },
     {

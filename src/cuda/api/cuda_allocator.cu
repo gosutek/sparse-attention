@@ -7,7 +7,7 @@ extern "C"
 
 	SpmmInternalStatus_t mem_arena_dev_create(DevArena* arena, const uint64_t bsize)
 	{
-		if (arena) {
+		if (arena->d_ptr) {
 			return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 		}
 
