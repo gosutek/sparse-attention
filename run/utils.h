@@ -46,11 +46,47 @@ struct CSC
 CSR parse_csr_test_case(const std::filesystem::path& path);
 CSC parse_csc_test_case(const std::filesystem::path& path);
 CSR parse_csr_dlmc(const std::filesystem::path& filepath);
-// void           generate_token_embeddings(void* dst, size_t size);
-// DlmcHeader     parse_dlmc_header(std::ifstream& file_stream);
-// RowMajorHeader parse_row_major_header(std::ifstream& file_stream);
-// Csr::Matrix    parse_dlmc(void* dst, const std::filesystem::path& filepath);
-// Csc::Matrix    parse_csc_dlmc(void* dst, const std::filesystem::path& filepath);
+
+bool verify_res(const float* const actual, const float* const expected, size_t n);
+
+/*
+ * Adapted from:
+ * https://github.com/pytorch/pytorch/blob/0d2c383a0607853a3e23de11b0da43a870492c4d/torch/testing/_comparison.py#L610
+ */
+inline bool float_compare(const float a, const float b)
+{
+	if (std::isnan(a) || std::isnan(b)) {
+		return false;
+	}
+	if (a == b) {
+		return true;
+	}
+
+	double abs_diff = std::fabs(a - b);
+	if (abs_diff > 0.01) {
+		return false;
+	}
+
+	return true;
+}
+
+// bool verify_res(const float* const actual, const float* const expected, size_t n)
+// {
+//   if
+// 	double diff = 0.0;
+// 	for (size_t i = 0; i < n; ++i) {
+// 		diff = std::fabs(actual[i] - expected[i]);
+// 		// std::cout << std::format(
+// 		// 	"Actual: {}, Expected: {}, Diff: {}, Pos: {}\n", actual[i], expected[i], diff, i);
+// 		if (std::isnan(diff) || diff > 0.01) {
+// 			std::cout << std::format(
+// 				"Values diverge -> Actual: {}, Expected: {} (Diff {:.4f}), pos: {:d}\n",
+// 				actual[i], expected[i], diff, i);
+// 			return false;
+// 		}
+// 	}
+// 	return true;
+// }
 
 template <typename T>
 void gen_synth_weights_buffer(void* dst, uint64_t size)
