@@ -52,7 +52,7 @@ SpmmStatus_t exec_ctx_create(ExecutionContext_t* ctx)
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
-	if (mem_arena_host_push((MemArena*)(*ctx), sizeof(void*), (void**)&(*ctx)->dev_arena) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (mem_arena_host_push((MemArena*)(*ctx), sizeof(*ctx)->dev_arena, (void**)&(*ctx)->dev_arena) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
