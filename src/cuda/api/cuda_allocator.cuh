@@ -1,6 +1,7 @@
 #if !defined(CUDA_ALLOCATOR_CUH)
 #define CUDA_ALLOCATOR_CUH
 
+#include <iostream>
 #include <stdint.h>
 
 #include "helpers.h"

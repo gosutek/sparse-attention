@@ -11,9 +11,7 @@ extern "C"
 			return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 		}
 
-		if (cudaMalloc(&arena->d_ptr, bsize) != cudaSuccess) {
-			return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
-		}
+		CUDA_CHECK(cudaMalloc(&arena->d_ptr, bsize));
 
 		arena->size = bsize;
 		arena->pos = sizeof *arena;
