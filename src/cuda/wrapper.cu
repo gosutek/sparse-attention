@@ -9,14 +9,14 @@
 // for further optimization
 static SpmmInternalStatus_t _d_sp_copy(DevArena* const arena, SpMatDescr* const dst, const SpMatDescr* const src)
 {
-	uint8_t* d_ptr = arena->d_ptr;
+	uint8_t* d_ptr = NULL;
 
 	const uint64_t sp_bsize = sp_mat_byte_size_get(src);
 	if (mem_arena_dev_push(arena, sp_bsize, reinterpret_cast<void**>(&d_ptr)) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 	}
 
-	const uint64_t ptr_bsize = sp_mat_ptr_count_get(src);
+	const uint64_t ptr_bsize = sp_mat_ptr_bytes_get(src);
 	const uint64_t idx_bsize = sp_mat_idx_bytes_get(src);
 	const uint64_t val_bsize = sp_mat_val_bytes_get(src);
 
@@ -55,7 +55,7 @@ static SpmmInternalStatus_t _d_sp_copy(DevArena* const arena, SpMatDescr* const 
 
 static SpmmInternalStatus_t _d_dn_copy(DevArena* const arena, DnMatDescr* dst, DnMatDescr* src)
 {
-	uint8_t* d_ptr = arena->d_ptr;
+	uint8_t* d_ptr = arena->_d_ptr;
 
 	const uint64_t dn_bsize = dn_mat_bytes_get(src);
 	if (mem_arena_dev_push(arena, dn_bsize, reinterpret_cast<void**>(&d_ptr)) != SPMM_INTERNAL_STATUS_SUCCESS) {
@@ -78,7 +78,7 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn)
 		return SPMM_STATUS_NOT_INITIALIZED;
 	}
 
-	if (!ctx->dev_arena.d_ptr && mem_arena_dev_create(&ctx->dev_arena, GIB(1)) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (!ctx->dev_arena._d_ptr && mem_arena_dev_create(&ctx->dev_arena, GIB(1)) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_INTERNAL_ERROR;
 	}
 
@@ -106,7 +106,7 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn)
 	dim3 grid(CEIL_DIVI(res_cols, BK), CEIL_DIVI(res_rows, BM));
 	dim3 block(BK, BM);
 
-	// _k_spmm_naive_elemwise_gmem_csr<<<grid, block>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, res_ptr);
+	_k_spmm_naive_elemwise_gmem_csr<<<grid, block>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, res_ptr);
 
 	return SPMM_STATUS_SUCCESS;
 }

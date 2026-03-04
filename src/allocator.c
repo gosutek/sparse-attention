@@ -56,7 +56,7 @@ SpmmStatus_t exec_ctx_create(ExecutionContext_t* ctx)
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
-	(*ctx)->dev_arena.d_ptr = NULL;
+	(*ctx)->dev_arena._d_ptr = NULL;
 
 	return SPMM_STATUS_SUCCESS;
 }
@@ -67,7 +67,7 @@ SpmmStatus_t exec_ctx_destroy(ExecutionContext_t ctx)
 		return SPMM_STATUS_NOT_INITIALIZED;
 	}
 
-	if (ctx->dev_arena.d_ptr && mem_arena_dev_destroy(&ctx->dev_arena) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (ctx->dev_arena._d_ptr && mem_arena_dev_destroy(&ctx->dev_arena) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_INTERNAL_ERROR;
 	}
 

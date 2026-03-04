@@ -1,7 +1,6 @@
 #if !defined(CUDA_ALLOCATOR_CUH)
 #define CUDA_ALLOCATOR_CUH
 
-#include <iostream>
 #include <stdint.h>
 
 #include "helpers.h"
@@ -13,7 +12,7 @@ extern "C"
 
 	typedef struct DevArena
 	{
-		uint8_t* d_ptr;
+		uint8_t* _d_ptr;
 
 		uint64_t size;
 		uint64_t pos;

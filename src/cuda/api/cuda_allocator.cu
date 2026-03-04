@@ -1,5 +1,7 @@
 #include "cuda_allocator.cuh"
 
+#include <iostream>
+
 #if defined(__cplusplus)
 extern "C"
 {
@@ -7,11 +9,11 @@ extern "C"
 
 	SpmmInternalStatus_t mem_arena_dev_create(DevArena* arena, const uint64_t bsize)
 	{
-		if (arena->d_ptr) {
+		if (arena->_d_ptr) {
 			return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 		}
 
-		CUDA_CHECK(cudaMalloc(&arena->d_ptr, bsize));
+		CUDA_CHECK(cudaMalloc(&arena->_d_ptr, bsize));
 
 		arena->size = bsize;
 		arena->pos = sizeof *arena;
@@ -21,14 +23,14 @@ extern "C"
 
 	SpmmInternalStatus_t mem_arena_dev_destroy(DevArena* arena)
 	{
-		if (!arena->d_ptr) {
+		if (!arena->_d_ptr) {
 			return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 		}
 
-		if (cudaFree(arena->d_ptr) != cudaSuccess) {
+		if (cudaFree(arena->_d_ptr) != cudaSuccess) {
 			return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 		}
-		arena->d_ptr = nullptr;
+		arena->_d_ptr = nullptr;
 
 		return SPMM_INTERNAL_STATUS_SUCCESS;
 	}
@@ -46,7 +48,7 @@ extern "C"
 			abort();
 		}
 
-		*ptr_out = (uint8_t*)arena + pos_aligned;
+		*ptr_out = arena->_d_ptr + pos_aligned;
 		arena->pos = new_pos;
 
 		return SPMM_INTERNAL_STATUS_SUCCESS;
