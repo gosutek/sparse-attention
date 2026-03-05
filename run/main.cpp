@@ -308,7 +308,11 @@ int main(void)
 	// WARN: Passing .data() is bad cause the vector might reallocate
 	create_dn_mat_col_major(handle, &lib_dn, csr.cols, csr.cols, dn_buffer.data());
 
-	SPMM_CHECK(spmm(handle, lib_csr, lib_dn));
+	DnMatDescr_t       lib_res = NULL;
+	std::vector<float> res_buffer(csr.rows * csr.cols, 0);
+	create_dn_mat_row_major(handle, &lib_res, csr.rows, csr.cols, res_buffer.data());
+
+	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res));
 
 	exec_ctx_destroy(handle);
 

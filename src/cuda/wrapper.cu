@@ -72,7 +72,7 @@ static SpmmInternalStatus_t _d_dn_copy(DevArena* const arena, DnMatDescr* dst, D
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn)
+SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr_t h_res)
 {
 	if (!ctx) {
 		return SPMM_STATUS_NOT_INITIALIZED;
@@ -89,12 +89,18 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn)
 	DnMatDescr d_dn;
 	_d_dn_copy(&ctx->dev_arena, &d_dn, h_dn);
 
-	const uint64_t res_bsize = spmm_res_mat_bytes_get(h_sp, h_dn);
-	float*         res_ptr = nullptr;
+	DnMatDescr d_res = {
+		.format = DENSE_FORMAT_ROW_MAJOR,
+		.rows = d_sp.rows,
+		.cols = d_dn.cols,
+		.val = nullptr
+	};
+	const uint64_t res_bsize = dn_mat_bytes_get(&d_res);
 
-	if (mem_arena_dev_push(&ctx->dev_arena, res_bsize, reinterpret_cast<void**>(&res_ptr)) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (mem_arena_dev_push(&ctx->dev_arena, res_bsize, reinterpret_cast<void**>(&d_res.val)) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_INTERNAL_ERROR;
 	}
+	// d_res.val now points to device memory
 
 	constexpr size_t BM = 8;
 	constexpr size_t BK = BM;
@@ -106,7 +112,9 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn)
 	dim3 grid(CEIL_DIVI(res_cols, BK), CEIL_DIVI(res_rows, BM));
 	dim3 block(BK, BM);
 
-	_k_spmm_naive_elemwise_gmem_csr<<<grid, block>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, res_ptr);
+	_k_spmm_naive_elemwise_gmem_csr<<<grid, block>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, d_res.val);
+
+	CUDA_CHECK(cudaMemcpy(h_res->val, d_res.val, res_bsize, cudaMemcpyDeviceToHost));
 
 	return SPMM_STATUS_SUCCESS;
 }
