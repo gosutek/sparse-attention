@@ -55,7 +55,7 @@ static SpmmInternalStatus_t _d_sp_copy(DevArena* const arena, SpMatDescr* const 
 
 static SpmmInternalStatus_t _d_dn_copy(DevArena* const arena, DnMatDescr* dst, DnMatDescr* src)
 {
-	uint8_t* d_ptr = arena->_d_ptr;
+	uint8_t* d_ptr = NULL;
 
 	const uint64_t dn_bsize = dn_mat_bytes_get(src);
 	if (mem_arena_dev_push(arena, dn_bsize, reinterpret_cast<void**>(&d_ptr)) != SPMM_INTERNAL_STATUS_SUCCESS) {

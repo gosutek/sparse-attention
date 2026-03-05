@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+constexpr const double tol = 1e-4;
+
 /*
       * +------------------------------------------------------------------------------+
       * |                                 STRUCTS                                      |
@@ -53,7 +55,7 @@ bool verify_res(const float* const actual, const float* const expected, size_t n
  * Adapted from:
  * https://github.com/pytorch/pytorch/blob/0d2c383a0607853a3e23de11b0da43a870492c4d/torch/testing/_comparison.py#L610
  */
-inline bool float_compare(const float a, const float b)
+inline bool comparef(const float a, const float b)
 {
 	if (std::isnan(a) || std::isnan(b)) {
 		return false;
@@ -63,11 +65,11 @@ inline bool float_compare(const float a, const float b)
 	}
 
 	double abs_diff = std::fabs(a - b);
-	if (abs_diff > 0.01) {
-		return false;
+	if (std::isfinite(abs_diff) && abs_diff <= tol) {
+		return true;
 	}
 
-	return true;
+	return false;
 }
 
 // bool verify_res(const float* const actual, const float* const expected, size_t n)

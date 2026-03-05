@@ -107,6 +107,7 @@ extern "C"
 		return dn->rows * dn->cols * (sizeof *(dn->val));
 	}
 
+	// INFO: Probably useless, can just use dn_mat_bytes_get
 	static inline uint64_t spmm_res_mat_bytes_get(const SpMatDescr* const sp, const DnMatDescr* const dn)
 	{
 		return sp->rows * dn->cols * (sizeof *(sp->val));

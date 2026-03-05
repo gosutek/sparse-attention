@@ -302,7 +302,7 @@ int main(void)
 	create_sp_mat_csr(handle, &lib_csr, csr.rows, csr.cols, csr.nnz, csr.row_ptr.data(), csr.col_idx.data(), csr.val.data());
 
 	std::vector<float> dn_buffer;
-	gen_synth_weights_vec(dn_buffer, csr.cols * csr.cols);
+	gen_synth_weights_vec<float>(dn_buffer, csr.cols * csr.cols);
 
 	DnMatDescr_t lib_dn = NULL;
 	// WARN: Passing .data() is bad cause the vector might reallocate
