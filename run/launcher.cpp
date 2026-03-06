@@ -1,4 +1,3 @@
-#include "launcher.h"
 
 void run_mhsa(MHSA<CSC, CSR>& mhsa)
 {

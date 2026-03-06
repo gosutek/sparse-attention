@@ -290,9 +290,27 @@
 // 	return res;
 // }
 
+[[maybe_unused]] static std::vector<float> host_spmm_rm_cm(const std::vector<float>& a, const std::vector<float>& b, size_t m, size_t k, size_t n)
+{
+	std::vector<float> res;
+	res.reserve(m * n);
+
+	for (size_t a_row = 0; a_row < m; ++a_row) {
+		for (size_t b_col = 0; b_col < n; ++b_col) {
+			float acc = 0;
+			for (size_t i = 0; i < k; ++i) {
+				acc += a[a_row * k + i] * b[b_col * k + i];
+			}
+			res.push_back(acc);
+		}
+	}
+
+	return res;
+}
+
 int main(void)
 {
-	CSR csr = parse_csr_dlmc("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_k.smtx");
+	CSR csr = parse_csr_dlmc("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_v.smtx");
 
 	ExecutionContext_t handle = NULL;
 	exec_ctx_create(&handle);
@@ -313,6 +331,17 @@ int main(void)
 	create_dn_mat_row_major(handle, &lib_res, csr.rows, csr.cols, res_buffer.data());
 
 	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res));
+
+	DnMatDescr_t       lib_sp_rm = NULL;
+	std::vector<float> sp_rm_buffer(csr.rows * csr.cols, 0);
+	create_dn_mat_row_major(handle, &lib_sp_rm, csr.rows, csr.cols, sp_rm_buffer.data());
+	sp_csr_to_row_major(lib_csr, lib_sp_rm);
+
+	const auto expected = host_spmm_rm_cm(sp_rm_buffer, dn_buffer, csr.rows, csr.cols, csr.cols);
+
+	for (uint32_t i = 0; i < csr.rows * csr.cols; ++i) {
+		comparef(res_buffer[i], expected[i]);
+	}
 
 	exec_ctx_destroy(handle);
 

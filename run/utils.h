@@ -58,6 +58,7 @@ bool verify_res(const float* const actual, const float* const expected, size_t n
 inline bool comparef(const float a, const float b)
 {
 	if (std::isnan(a) || std::isnan(b)) {
+		std::cout << "isnan: " << a << " or " << b << std::endl;
 		return false;
 	}
 	if (a == b) {
@@ -69,6 +70,7 @@ inline bool comparef(const float a, const float b)
 		return true;
 	}
 
+	std::cout << "Not close: " << a << " | " << b << std::endl;
 	return false;
 }
 
