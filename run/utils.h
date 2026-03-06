@@ -109,7 +109,7 @@ void gen_synth_weights_buffer(void* dst, uint64_t size)
 template <typename T>
 void gen_synth_weights_vec(std::vector<T>& vec, uint64_t size)
 {
-	vec.reserve(size);
+	vec.resize(size);
 	// INFO: think this is bad, declaring them in each function
 	// instead of passing(??)
 	std::random_device                    rd;
@@ -117,6 +117,6 @@ void gen_synth_weights_vec(std::vector<T>& vec, uint64_t size)
 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
 
 	for (uint32_t i = 0; i < size; ++i) {
-		vec.push_back(uni_real_dist(rng));
+		vec[i] = uni_real_dist(rng);
 	}
 }
