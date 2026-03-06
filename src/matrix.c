@@ -30,7 +30,7 @@ SpmmStatus_t sp_csr_to_row_major(SpMatDescr_t sp, DnMatDescr_t dn)
 	}
 
 	// INFO: Will need to change when you template out types
-	memset(&(dn->val), 0, sp->rows * sp->cols * (sizeof(float)));
+	memset(dn->val, 0, sp->rows * sp->cols * (sizeof(float)));
 
 	for (size_t i = 0; i < sp->rows; ++i) {
 		const uint32_t* const row_ptr = sp->csr.row_ptr;
@@ -52,7 +52,7 @@ SpmmStatus_t sp_csc_to_col_major(SpMatDescr_t sp, DnMatDescr_t dn)
 	}
 
 	// INFO: Will need to change when you template out types
-	memset(&(dn->val), 0, sp->rows * sp->cols * (sizeof(float)));
+	memset(dn->val, 0, sp->rows * sp->cols * (sizeof(float)));
 
 	for (size_t i = 0; i < sp->cols; ++i) {
 		const uint32_t* const col_ptr = sp->csc.col_ptr;
