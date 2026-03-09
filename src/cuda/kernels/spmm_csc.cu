@@ -1,52 +1,5 @@
 #include "spmm_csc.cuh"
 
-__global__ void spmm_naive_elemwise_csc_gmem(
-	const float* __restrict__ a,
-	const uint32_t* __restrict__ col_ptr,
-	const uint32_t* __restrict__ row_idx,
-	const float* __restrict__ val,
-	const size_t m,
-	const size_t k,
-	const size_t n,
-	float* __restrict__ res)
-{
-	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
-	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
-
-	float acc = 0.0f;
-	for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {  // 1 LDG
-		acc += get_elem_rm(a, k, y, row_idx[i]) * val[i];   // 2 LDG
-	}
-	set_elem_rm(res, n, y, x, acc);
-}
-
-__global__ void spmm_naive_elemwise_csc_smem(
-	const float* __restrict__ a,
-	const uint32_t* __restrict__ col_ptr,
-	const uint32_t* __restrict__ row_idx,
-	const float* __restrict__ val,
-	const size_t m,
-	const size_t k,
-	const size_t n,
-	float* __restrict__ res)
-{
-	uint32_t x = threadIdx.x;
-	uint32_t y = blockIdx.x;
-
-	float acc = 0.0f;
-
-	__shared__ float x_row_smem[MAT_SIZE];
-
-	x_row_smem[x] = get_elem_rm(a, k, y, x);
-	__syncthreads();
-
-	for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
-		acc += x_row_smem[row_idx[i]] * val[i];
-	}
-
-	set_elem_rm(res, n, y, x, acc);
-}
-
 template <const size_t N_THREADS>
 __global__ void spmm_coalesced_nnzwise_csc(
 	const float* __restrict__ a,

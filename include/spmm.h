@@ -10,7 +10,7 @@ extern "C"
 
 	/*
     * +------------------------------------------------------------------------------+
-    * |                             RETURN CODE ENUMS                                |
+    * |                                  ENUMS                                      |
     * +------------------------------------------------------------------------------+
   */
 
@@ -29,6 +29,22 @@ extern "C"
 		SPMM_STATUS_NOT_SUPPORTED = 10,
 		SPMM_STATUS_INSUFFICIENT_RESOURCES = 11
 	} SpmmStatus_t;
+
+	typedef enum
+	{
+		SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK = 0,
+		SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM = 1,
+		SPMM_KERNEL_TYPE_NNZWISE_COALESCED = 2,
+		SPMM_KERNEL_TYPE_NNZWISE_COALESCED_NO_SMEM = 3,
+		SPMM_KERNEL_TYPE_NNZWISE_VECTORIZED = 4,
+		SPMM_KERNEL_TYPE_NNZWISE_FINAL = 5,
+	} SpmmKernelType_t;
+
+	typedef enum
+	{
+		SPMM_KERNEL_INVERT = 0,
+		SPMM_KERNEL_NO_INVERT = 1,
+	} SpmmInvert_t;
 
 	/*
     * +------------------------------------------------------------------------------+
@@ -108,7 +124,7 @@ extern "C"
     * +------------------------------------------------------------------------------+
   */
 
-	SpmmStatus_t spmm(ExecutionContext_t ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr_t h_res);
+	SpmmStatus_t spmm(ExecutionContext_t ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr_t h_res, SpmmKernelType_t kernel_type, SpmmInvert_t invert);
 #if defined(__cplusplus)
 }
 #endif

@@ -1,5 +1,5 @@
 #include "allocator.h"
-#include "cuda/kernels/spmm_csr.cuh"
+#include "cuda/kernels/spmm.cuh"
 #include "cuda_allocator.cuh"
 #include "helpers.h"
 #include "matrix.h"
@@ -72,7 +72,7 @@ static SpmmInternalStatus_t _d_dn_copy(DevArena* const arena, DnMatDescr* dst, D
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr_t h_res)
+SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr_t h_res, SpmmKernelType_t kernel_type, SpmmInvert_t invert)
 {
 	if (!ctx) {
 		return SPMM_STATUS_NOT_INITIALIZED;
@@ -102,17 +102,38 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 	}
 	// d_res.val now points to device memory
 
-	constexpr size_t BM = 8;
-	constexpr size_t BK = BM;
+	switch (kernel_type) {
+	case SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK:
+		{
+			constexpr size_t BM = 8;
+			constexpr size_t BK = BM;
 
-	const uint32_t res_rows = h_sp->rows;
-	const uint32_t res_cols = h_dn->cols;
+			const uint32_t res_rows = h_sp->rows;
+			const uint32_t res_cols = h_dn->cols;
 
-	static_assert(BM <= 32);  // otherwise threads per block exceed max
-	dim3 grid(CEIL_DIVI(res_cols, BK), CEIL_DIVI(res_rows, BM));
-	dim3 block(BK, BM);
+			static_assert(BM <= 32);  // otherwise threads per block exceed max
+			dim3 grid(CEIL_DIVI(res_cols, BK), CEIL_DIVI(res_rows, BM));
+			dim3 block(BK, BM);
 
-	_k_spmm_naive_elemwise_gmem_csr<<<grid, block>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, d_res.val);
+			if (invert == SPMM_KERNEL_NO_INVERT) {
+				_k_spmm_naive_elemwise_gmem<<<grid, block>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, d_res.val);
+			} else {
+				_k_ispmm_naive_elemwise_gmem<<<grid, block>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_sp.rows, d_sp.cols, d_dn.cols, d_res.val);
+			}
+
+			break;
+		}
+	case SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM:
+		break;
+	case SPMM_KERNEL_TYPE_NNZWISE_COALESCED:
+		break;
+	case SPMM_KERNEL_TYPE_NNZWISE_COALESCED_NO_SMEM:
+		break;
+	case SPMM_KERNEL_TYPE_NNZWISE_VECTORIZED:
+		break;
+	case SPMM_KERNEL_TYPE_NNZWISE_FINAL:
+		break;
+	}
 
 	CUDA_CHECK(cudaMemcpy(h_res->val, d_res.val, res_bsize, cudaMemcpyDeviceToHost));
 
