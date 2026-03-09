@@ -151,7 +151,7 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 
 	CUDA_CHECK(cudaMemcpy(h_res->val, d_res.val, res_bsize, cudaMemcpyDeviceToHost));
 
-	// TODO: Pop d_res here!!!
+	mem_arena_dev_pop(&ctx->dev_arena, res_bsize);
 
 	return SPMM_STATUS_SUCCESS;
 }
