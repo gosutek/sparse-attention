@@ -76,7 +76,7 @@ SpmmStatus_t sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr, SpMatDes
 		sp_csc->csc.col_ptr[sp_csr->csr.col_idx[i] + 1]++;
 	}
 
-	for (uint32_t i = 1; i < sp_csc->nnz; ++i) {
+	for (uint32_t i = 1; i < sp_csc->cols + 1; ++i) {
 		// Prefix sum the preprocessed csc.col_ptr
 		sp_csc->csc.col_ptr[i] += sp_csc->csc.col_ptr[i - 1];
 	}
