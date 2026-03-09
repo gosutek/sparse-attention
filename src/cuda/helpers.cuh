@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+constexpr uint8_t _CONSTANTS_WARP_SIZE = 8;
+
 __device__ inline bool is_aligned(const void* addr, const size_t alignment_bytes)
 {
 	return (reinterpret_cast<uintptr_t>(addr) & (alignment_bytes - 1)) == 0;

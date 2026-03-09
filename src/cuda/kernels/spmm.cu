@@ -1,5 +1,10 @@
 #include "spmm.cuh"
-#include <sys/types.h>
+
+/*
+  * +------------------------------------------------------------------------------+
+  * |                    SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK                     |
+  * +------------------------------------------------------------------------------+
+*/
 
 __global__ void _k_spmm_naive_elemwise_gmem(
 	const uint32_t* __restrict__ row_ptr,
@@ -40,6 +45,12 @@ __global__ void _k_ispmm_naive_elemwise_gmem(
 	}
 	set_elem_rm(res, n, y, x, acc);
 }
+
+/*
+  * +------------------------------------------------------------------------------+
+  * |                    SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM                      |
+  * +------------------------------------------------------------------------------+
+*/
 
 __global__ void _k_spmm_naive_elemwise_smem(
 	const uint32_t* __restrict__ row_ptr,
@@ -93,4 +104,65 @@ __global__ void _k_ispmm_naive_elemwise_smem(
 	}
 
 	set_elem_rm(res, n, r, c, acc);
+}
+
+/*
+  * +------------------------------------------------------------------------------+
+  * |                    SPMM_KERNEL_TYPE_NNZWISE_COALESCED                        |
+  * +------------------------------------------------------------------------------+
+*/
+
+template <const uint64_t THREAD_CNT>
+__global__ void _k_ispmm_coalesced_nnzwise(
+	const float* __restrict__ dn,
+	const uint32_t* __restrict__ col_ptr,
+	const uint32_t* __restrict__ row_idx,
+	const float* __restrict__ val,
+	const uint32_t m,
+	const uint32_t k,
+	const uint32_t n,
+	float* __restrict__ res)
+{
+	extern __shared__ float dn_row_smem[];
+
+	for (uint32_t i = threadIdx.x; i < k; i += blockDim.x) {
+		dn_row_smem[i] = get_elem_rm(dn, k, blockIdx.y, i);
+	}
+	__syncthreads();
+
+	float acc = 0.0f;
+	for (uint32_t i = col_ptr[blockIdx.x] + threadIdx.x; i < col_ptr[blockIdx.x + 1]; i += blockDim.x) {
+		acc += dn_row_smem[row_idx[i]] * val[i];
+	}
+	__syncwarp();
+
+	for (uint32_t i = _CONSTANTS_WARP_SIZE / 2; i > 0; i /= 2) {
+		acc += __shfl_xor_sync(0xffffffff, acc, i, _CONSTANTS_WARP_SIZE);
+	}
+
+	uint32_t lane_id = threadIdx.x & 0x1f;
+	uint32_t warp_id = threadIdx.x / _CONSTANTS_WARP_SIZE;
+
+	constexpr uint32_t WARP_CNT = THREAD_CNT / _CONSTANTS_WARP_SIZE;
+	__shared__ float   warp_sums[WARP_CNT];
+
+	if (lane_id == 0) {
+		warp_sums[warp_id] = acc;
+	}
+
+	__syncthreads();
+
+	if (warp_id == 0) {
+		float acc = warp_sums[lane_id];
+
+		constexpr uint32_t mask = 0xff;
+
+		for (size_t i = WARP_CNT / 2; i > 0; i /= 2) {
+			acc += __shfl_xor_sync(mask, acc, i, _CONSTANTS_WARP_SIZE);
+		}
+
+		if (lane_id == 0) {
+			set_elem_rm(res, n, blockIdx.y, blockIdx.x, acc);
+		}
+	}
 }
