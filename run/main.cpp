@@ -349,6 +349,12 @@ int main(void)
 		comparef(res_buffer[i], expected[i]);
 	}
 
+	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM, SPMM_KERNEL_NO_INVERT));
+
+	for (uint32_t i = 0; i < csr.rows * csr.cols; ++i) {
+		comparef(res_buffer[i], expected[i]);
+	}
+
 	SPMM_CHECK(spmm(handle, lib_csc, lib_dn, lib_res, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_INVERT));
 	DnMatDescr_t       lib_sp_cm = NULL;
 	std::vector<float> sp_cm_buffer(csc.rows * csc.cols, 0);

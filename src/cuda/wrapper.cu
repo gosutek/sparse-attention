@@ -126,7 +126,10 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 	case SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM:
 		{
 			if (invert == SPMM_KERNEL_NO_INVERT) {
-				// _k_spmm_naive_elemwise_smem(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_sp.cols, d_res.val);
+				const dim3     grid(d_dn.cols);
+				const dim3     block(d_sp.rows);
+				const uint64_t smem_bsize = d_sp.rows * sizeof *d_sp.val;
+				_k_spmm_naive_elemwise_smem<<<grid, block, smem_bsize>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_sp.cols, d_res.val);
 			} else {
 				const dim3     grid(d_dn.rows);
 				const dim3     block(d_sp.cols);
