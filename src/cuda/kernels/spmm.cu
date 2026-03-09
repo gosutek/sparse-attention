@@ -61,37 +61,37 @@ __global__ void _k_ispmm_naive_elemwise_gmem(
 // 	dn_col_smem[x] = get_elem_rm(a, k, y, x);
 // 	__syncthreads();
 //
-//   for (uint32_t i = row_ptr[])
-// 	for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
-// 		acc += x_row_smem[row_idx[i]] * val[i];
-// 	}
+// 	for (uint32_t i = row_ptr[])
+// 		for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
+// 			acc += x_row_smem[row_idx[i]] * val[i];
+// 		}
 //
 // 	set_elem_rm(res, n, y, x, acc);
 // }
-//
-// __global__ void _k_ispmm_naive_elemwise_smem(
-// 	const float* __restrict__ dn,
-// 	const uint32_t* __restrict__ col_ptr,
-// 	const uint32_t* __restrict__ row_idx,
-// 	const float* __restrict__ val,
-// 	const uint32_t m,
-// 	const uint32_t k,
-// 	const uint32_t n,
-// 	float* __restrict__ res)
-// {
-// 	uint32_t x = threadIdx.x;
-// 	uint32_t y = blockIdx.x;
-//
-// 	float acc = 0.0f;
-//
-// 	extern __shared__ float x_row_smem[];
-//
-// 	x_row_smem[x] = get_elem_rm(dn, k, y, x);
-// 	__syncthreads();
-//
-// 	for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
-// 		acc += x_row_smem[row_idx[i]] * val[i];
-// 	}
-//
-// 	set_elem_rm(res, n, y, x, acc);
-// }
+
+__global__ void _k_ispmm_naive_elemwise_smem(
+	const float* __restrict__ dn,
+	const uint32_t* __restrict__ col_ptr,
+	const uint32_t* __restrict__ row_idx,
+	const float* __restrict__ val,
+	const uint32_t m,
+	const uint32_t k,
+	const uint32_t n,
+	float* __restrict__ res)
+{
+	uint32_t x = threadIdx.x;
+	uint32_t y = blockIdx.x;
+
+	float acc = 0.0f;
+
+	extern __shared__ float x_row_smem[];
+
+	x_row_smem[x] = get_elem_rm(dn, k, y, x);
+	__syncthreads();
+
+	for (size_t i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {
+		acc += x_row_smem[row_idx[i]] * val[i];
+	}
+
+	set_elem_rm(res, n, y, x, acc);
+}

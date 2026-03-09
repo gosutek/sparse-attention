@@ -105,8 +105,8 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 	switch (kernel_type) {
 	case SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK:
 		{
-			constexpr size_t BM = 8;
-			constexpr size_t BK = BM;
+			constexpr uint32_t BM = 8;
+			constexpr uint32_t BK = BM;
 
 			const uint32_t res_rows = h_sp->rows;
 			const uint32_t res_cols = h_dn->cols;
@@ -118,24 +118,40 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 			if (invert == SPMM_KERNEL_NO_INVERT) {
 				_k_spmm_naive_elemwise_gmem<<<grid, block>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, d_res.val);
 			} else {
-				_k_ispmm_naive_elemwise_gmem<<<grid, block>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_sp.rows, d_sp.cols, d_dn.cols, d_res.val);
+				_k_ispmm_naive_elemwise_gmem<<<grid, block>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
 			}
 
 			break;
 		}
 	case SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM:
-		break;
+		{
+			if (invert == SPMM_KERNEL_NO_INVERT) {
+				// _k_spmm_naive_elemwise_smem(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_sp.cols, d_res.val);
+			} else {
+				const dim3     grid(d_dn.rows);
+				const dim3     block(d_sp.cols);
+				const uint64_t smem_bsize = d_dn.cols * sizeof *d_sp.val;
+				_k_ispmm_naive_elemwise_smem<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
+			}
+			break;
+		}
 	case SPMM_KERNEL_TYPE_NNZWISE_COALESCED:
+		return SPMM_STATUS_INTERNAL_ERROR;
 		break;
 	case SPMM_KERNEL_TYPE_NNZWISE_COALESCED_NO_SMEM:
+		return SPMM_STATUS_INTERNAL_ERROR;
 		break;
 	case SPMM_KERNEL_TYPE_NNZWISE_VECTORIZED:
+		return SPMM_STATUS_INTERNAL_ERROR;
 		break;
 	case SPMM_KERNEL_TYPE_NNZWISE_FINAL:
+		return SPMM_STATUS_INTERNAL_ERROR;
 		break;
 	}
 
 	CUDA_CHECK(cudaMemcpy(h_res->val, d_res.val, res_bsize, cudaMemcpyDeviceToHost));
+
+	// TODO: Pop d_res here!!!
 
 	return SPMM_STATUS_SUCCESS;
 }
