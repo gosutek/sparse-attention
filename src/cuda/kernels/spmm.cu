@@ -113,6 +113,63 @@ __global__ void _k_ispmm_naive_elemwise_smem(
   * +------------------------------------------------------------------------------+
 */
 
+__global__ void _k_spmm_coalesced_nnzwise(
+	const uint32_t* __restrict__ row_ptr,
+	const uint32_t* __restrict__ col_idx,
+	const float* __restrict__ val,
+	const float* __restrict__ dn,
+	const uint32_t m,
+	const uint32_t k,
+	const uint32_t n,
+	float* __restrict__ res)
+{
+	extern __shared__ float smem[];
+	float*                  dn_row_smem = smem;
+	float*                  warp_sums = smem + k;  // INFO: This is aligned to float (fosu)
+
+	for (uint32_t i = threadIdx.x; i < k; i += blockDim.x) {
+		dn_row_smem[i] = get_elem_rm(dn, k, blockIdx.y, i);
+	}
+	__syncthreads();
+
+	float acc = 0.0f;
+	for (uint32_t i = col_ptr[blockIdx.x] + threadIdx.x; i < col_ptr[blockIdx.x + 1]; i += blockDim.x) {
+		acc += dn_row_smem[row_idx[i]] * val[i];
+	}
+	__syncwarp();
+
+	for (uint32_t i = _CONSTANTS_WARP_SIZE / 2; i > 0; i /= 2) {
+		acc += __shfl_xor_sync(0xffffffff, acc, i, _CONSTANTS_WARP_SIZE);
+	}
+	// "acc" now contains the sum across all threads of the warp
+
+	uint32_t lane_id = threadIdx.x & (_CONSTANTS_WARP_SIZE - 1);
+	uint32_t warp_id = threadIdx.x / _CONSTANTS_WARP_SIZE;
+
+	if (lane_id == 0) {
+		warp_sums[warp_id] = acc;
+	}
+	// "warp_sums" now contains the sums across all warps
+
+	__syncthreads();
+
+	const uint32_t warp_cnt = blockDim.x / _CONSTANTS_WARP_SIZE;
+
+	if (warp_id == 0 && lane_id < warp_cnt) {
+		float acc = warp_sums[lane_id];
+
+		const uint32_t mask = (1u << warp_cnt) - 1;
+
+		for (uint32_t i = warp_cnt / 2; i > 0; i /= 2) {
+			acc += __shfl_xor_sync(mask, acc, i, _CONSTANTS_WARP_SIZE);
+		}
+
+		if (lane_id == 0) {
+			set_elem_rm(res, n, blockIdx.y, blockIdx.x, acc);
+		}
+	}
+}
+
 __global__ void _k_ispmm_coalesced_nnzwise(
 	const float* __restrict__ dn,
 	const uint32_t* __restrict__ col_ptr,
