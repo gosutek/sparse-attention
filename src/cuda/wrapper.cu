@@ -1,4 +1,5 @@
 #include "allocator.h"
+#include "cuda/helpers.cuh"
 #include "cuda/kernels/spmm.cuh"
 #include "cuda_allocator.cuh"
 #include "helpers.h"
@@ -133,13 +134,21 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 			} else {
 				const dim3     grid(d_dn.rows);
 				const dim3     block(d_sp.cols);
-				const uint64_t smem_bsize = d_dn.cols * sizeof *d_sp.val;
+				const uint64_t smem_bsize = d_dn.cols * sizeof *d_dn.val;
 				_k_ispmm_naive_elemwise_smem<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
 			}
 			break;
 		}
 	case SPMM_KERNEL_TYPE_NNZWISE_COALESCED:
-		return SPMM_STATUS_INTERNAL_ERROR;
+		if (invert == SPMM_KERNEL_NO_INVERT) {
+		} else {
+			const dim3 grid(d_sp.cols, d_dn.rows);
+			const dim3 block(64);
+
+			const uint64_t smem_bsize = (d_dn.cols + block.x /*thread_cnt*/ / _CONSTANTS_WARP_SIZE) * sizeof *d_dn.val;
+
+			_k_ispmm_coalesced_nnzwise<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
+		}
 		break;
 	case SPMM_KERNEL_TYPE_NNZWISE_COALESCED_NO_SMEM:
 		return SPMM_STATUS_INTERNAL_ERROR;
