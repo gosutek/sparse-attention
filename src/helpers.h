@@ -8,6 +8,8 @@
 #define GIB(n) ((uint64_t)(n) << 30)
 #define MIB(n) ((uint64_t)(n) << 20)
 #define KIB(n) ((uint64_t)(n) << 10)
+#define LOWER_BITS_MASK(n) (((1u) << (n)) - 1)
+#define MOD_POW2(n, p) ((n) & ((p) - 1))
 
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \

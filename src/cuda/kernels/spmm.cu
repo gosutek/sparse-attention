@@ -1,4 +1,3 @@
-#include "cuda/helpers.cuh"
 #include "spmm.cuh"
 
 /*
@@ -143,7 +142,7 @@ __global__ void _k_spmm_coalesced_nnzwise(
 	}
 	// "acc" now contains the sum across all threads of the warp
 
-	uint32_t lane_id = threadIdx.x & (_CONSTANTS_WARP_SIZE - 1);
+	uint32_t lane_id = MOD_POW2(threadIdx.x, _CONSTANTS_WARP_SIZE);
 	uint32_t warp_id = threadIdx.x / _CONSTANTS_WARP_SIZE;
 
 	if (lane_id == 0) {
@@ -156,9 +155,10 @@ __global__ void _k_spmm_coalesced_nnzwise(
 	const uint32_t warp_cnt = blockDim.x / _CONSTANTS_WARP_SIZE;
 
 	if (warp_id == 0 && lane_id < warp_cnt) {
+		// WARN: some threads point to garbage, should be fine as they don't contribute due to 'mask'
 		float acc = warp_sums[lane_id];
 
-		const uint32_t mask = (1u << warp_cnt) - 1;
+		const uint32_t mask = LOWER_BITS_MASK(warp_cnt);
 
 		for (uint32_t i = warp_cnt / 2; i > 0; i /= 2) {
 			acc += __shfl_xor_sync(mask, acc, i, _CONSTANTS_WARP_SIZE);
@@ -213,9 +213,10 @@ __global__ void _k_ispmm_coalesced_nnzwise(
 	const uint32_t warp_cnt = blockDim.x / _CONSTANTS_WARP_SIZE;
 
 	if (warp_id == 0 && lane_id < warp_cnt) {
+		// WARN: some threads point to garbage, should be fine as they don't contribute due to 'mask'
 		float acc = warp_sums[lane_id];
 
-		const uint32_t mask = (1u << warp_cnt) - 1;
+		const uint32_t mask = LOWER_BITS_MASK(warp_cnt);
 
 		for (uint32_t i = warp_cnt / 2; i > 0; i /= 2) {
 			acc += __shfl_xor_sync(mask, acc, i, _CONSTANTS_WARP_SIZE);
@@ -233,7 +234,6 @@ __global__ void _k_ispmm_coalesced_nnzwise(
   * +------------------------------------------------------------------------------+
 */
 
-template <const uint32_t THREAD_CNT>
 __global__ void _k_ispmm_coalesced_nnzwise_no_smem(
 	const float* __restrict__ dn,
 	const uint32_t* __restrict__ col_ptr,
@@ -254,11 +254,11 @@ __global__ void _k_ispmm_coalesced_nnzwise_no_smem(
 		acc += __shfl_xor_sync(0xffffffff, acc, i, _CONSTANTS_WARP_SIZE);
 	}
 
-	uint32_t lane_id = threadIdx.x & 0x1f;
-	uint32_t warp_id = threadIdx.x / _CONSTANTS_WARP_SIZE;
+	const uint32_t lane_id = MOD_POW2(threadIdx.x, _CONSTANTS_WARP_SIZE);
+	const uint32_t warp_id = threadIdx.x / _CONSTANTS_WARP_SIZE;
 
-	constexpr uint32_t WARP_CNT = THREAD_CNT / _CONSTANTS_WARP_SIZE;
-	__shared__ float   warp_sums[WARP_CNT];
+	const uint32_t          warp_cnt = blockDim.x / _CONSTANTS_WARP_SIZE;
+	extern __shared__ float warp_sums[];
 
 	if (lane_id == 0) {
 		warp_sums[warp_id] = acc;
@@ -267,12 +267,12 @@ __global__ void _k_ispmm_coalesced_nnzwise_no_smem(
 	__syncthreads();
 
 	if (warp_id == 0) {
-		// WARN: some threads point to garbage
+		// WARN: some threads point to garbage, should be fine as they don't contribute due to 'mask'
 		float acc = warp_sums[lane_id];
 
-		constexpr uint32_t mask = 0xFF;
+		const uint32_t mask = LOWER_BITS_MASK(warp_cnt);
 
-		for (size_t i = WARP_CNT / 2; i > 0; i /= 2) {
+		for (size_t i = warp_cnt / 2; i > 0; i /= 2) {
 			acc += __shfl_xor_sync(mask, acc, i, _CONSTANTS_WARP_SIZE);
 		}
 
