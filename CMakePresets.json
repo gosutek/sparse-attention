@@ -8,7 +8,8 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "MEM_DEBUG": "ON",
         "CMAKE_CUDA_FLAGS_DEBUG": "-g -G -O0",
-        "CMAKE_CXX_FLAGS_DEBUG": "-g -O0"
+        "CMAKE_CXX_FLAGS_DEBUG": "-g -O0",
+        "CMAKE_CUDA_ARCHITECTURES": "89"
       }
     },
     {
@@ -18,7 +19,8 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "MEM_DEBUG": "OFF",
         "CMAKE_CUDA_FLAGS_DEBUG": "-g -G -O0",
-        "CMAKE_CXX_FLAGS_DEBUG": "-g -O0"
+        "CMAKE_CXX_FLAGS_DEBUG": "-g -O0",
+        "CMAKE_CUDA_ARCHITECTURES": "89"
       }
     },
     {
