@@ -169,6 +169,34 @@ __global__ void _k_ispmm_coalesced_nnzwise(
 		}
 	}
 }
+
+/*
+  * +------------------------------------------------------------------------------+
+  * |                SPMM_KERNEL_TYPE_NNZWISE_COALESCED_NO_SMEM                    |
+  * +------------------------------------------------------------------------------+
+*/
+
+template <const uint32_t THREAD_CNT>
+__global__ void _k_ispmm_coalesced_nnzwise_no_smem(
+	const float* __restrict__ dn,
+	const uint32_t* __restrict__ col_ptr,
+	const uint32_t* __restrict__ row_idx,
+	const float* __restrict__ val,
+	const size_t m,
+	const size_t k,
+	const size_t n,
+	float* __restrict__ res)
+{
+	float acc = 0.0f;
+	for (size_t i = col_ptr[blockIdx.x] + threadIdx.x; i < col_ptr[blockIdx.x + 1]; i += blockDim.x) {
+		acc += get_elem_rm(dn, k, blockIdx.y, row_idx[i]) * val[i];
+	}
+	__syncwarp();
+
+	for (size_t i = _CONSTANTS_WARP_SIZE / 2; i > 0; i /= 2) {
+		acc += __shfl_xor_sync(0xffffffff, acc, i, _CONSTANTS_WARP_SIZE);
+	}
+
 	uint32_t lane_id = threadIdx.x & 0x1f;
 	uint32_t warp_id = threadIdx.x / _CONSTANTS_WARP_SIZE;
 
@@ -182,9 +210,10 @@ __global__ void _k_ispmm_coalesced_nnzwise(
 	__syncthreads();
 
 	if (warp_id == 0) {
+		// WARN: some threads point to garbage
 		float acc = warp_sums[lane_id];
 
-		constexpr uint32_t mask = 0xff;
+		constexpr uint32_t mask = 0xFF;
 
 		for (size_t i = WARP_CNT / 2; i > 0; i /= 2) {
 			acc += __shfl_xor_sync(mask, acc, i, _CONSTANTS_WARP_SIZE);

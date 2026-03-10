@@ -51,3 +51,14 @@ __global__ void _k_ispmm_coalesced_nnzwise(
 	const uint32_t k,
 	const uint32_t n,
 	float* __restrict__ res);
+
+template <const uint32_t THREAD_CNT>
+__global__ void _k_ispmm_coalesced_nnzwise_no_smem(
+	const float* __restrict__ dn,
+	const uint32_t* __restrict__ col_ptr,
+	const uint32_t* __restrict__ row_idx,
+	const float* __restrict__ val,
+	const size_t m,
+	const size_t k,
+	const size_t n,
+	float* __restrict__ res);
