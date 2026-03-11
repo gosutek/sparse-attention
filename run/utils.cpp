@@ -1,5 +1,23 @@
 #include "utils.h"
 
+Dense parse_dn_test_case(const std::filesystem::path& path)
+{
+	Dense       rm;
+	std::string token;
+	std::string line;
+
+	std::ifstream stream = { path, std::ios_base::in };
+	stream >> rm.rows;
+	stream >> rm.cols;
+
+	rm.val.resize(rm.rows * rm.cols);
+
+	for (float& k : rm.val) {
+		stream >> k;
+	}
+	return rm;
+}
+
 CSR parse_csr_test_case(const std::filesystem::path& path)
 {
 	CSR         csr;

@@ -18,6 +18,14 @@ constexpr const double RTOL = 1e-3;
       * +------------------------------------------------------------------------------+
 */
 
+struct Dense
+{
+	uint32_t rows;
+	uint32_t cols;
+
+	std::vector<float> val{};
+};
+
 struct CSR
 {
 	uint32_t rows;
@@ -46,9 +54,10 @@ struct CSC
       * +------------------------------------------------------------------------------+
 */
 
-CSR parse_csr_test_case(const std::filesystem::path& path);
-CSC parse_csc_test_case(const std::filesystem::path& path);
-CSR parse_csr_dlmc(const std::filesystem::path& filepath);
+Dense parse_dn_test_case(const std::filesystem::path& path);
+CSR   parse_csr_test_case(const std::filesystem::path& path);
+CSC   parse_csc_test_case(const std::filesystem::path& path);
+CSR   parse_csr_dlmc(const std::filesystem::path& filepath);
 
 bool verify_res(const float* const actual, const float* const expected, size_t n);
 
@@ -69,6 +78,28 @@ inline bool comparef(const float a, const float b)
 	const double abs_diff = std::fabs(a - b);
 	const double tol = ATOL + RTOL * std::fabs(static_cast<double>(b));
 	if (std::isfinite(abs_diff) && abs_diff <= tol) {
+		return true;
+	}
+
+	std::cout << "Not close: " << a << " | " << b << std::endl;
+	return false;
+}
+
+inline bool comparef_test_case(const float a, const float b)
+{
+	if (std::isnan(a) || std::isnan(b)) {
+		std::cout << "isnan: " << a << " or " << b << std::endl;
+		return false;
+	}
+	if (a == b) {
+		std::cout << "Exact: " << a << " | " << b << std::endl;
+		return true;
+	}
+
+	const double abs_diff = std::fabs(a - b);
+	const double tol = ATOL + RTOL * std::fabs(static_cast<double>(b));
+	if (std::isfinite(abs_diff) && abs_diff <= tol) {
+		std::cout << "Tolerance: " << a << " | " << b << std::endl;
 		return true;
 	}
 

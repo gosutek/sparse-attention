@@ -290,7 +290,7 @@
 // 	return res;
 // }
 
-[[maybe_unused]] static std::vector<float> host_spmm_rm_cm(const std::vector<float>& a, const std::vector<float>& b, size_t m, size_t k, size_t n)
+static std::vector<float> host_spmm_rm_cm(const std::vector<float>& a, const std::vector<float>& b, size_t m, size_t k, size_t n)
 {
 	std::vector<float> res;
 	res.reserve(m * n);
@@ -311,6 +311,7 @@
 int main(void)
 {
 	CSR csr = parse_csr_dlmc("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_v.smtx");
+	// CSR csr = parse_csr_test_case("test_data/spmm/sp.cute");
 
 	ExecutionContext_t handle = NULL;
 	SPMM_CHECK(exec_ctx_create(&handle));
@@ -319,24 +320,20 @@ int main(void)
 	// WARN: Passing .data() is bad cause the vector might reallocate
 	SPMM_CHECK(create_sp_mat_csr(handle, &lib_csr, csr.rows, csr.cols, csr.nnz, csr.row_ptr.data(), csr.col_idx.data(), csr.val.data()));
 
-	// This shouldn't deep copy any of the vectors
-	CSC          csc = { csr.rows, csr.cols, csr.nnz, std::vector<uint32_t>(csr.cols + 1), std::vector<uint32_t>(csr.nnz), std::vector<float>(csr.nnz) };
-	SpMatDescr_t lib_csc = NULL;
-	SPMM_CHECK(create_sp_mat_csc(handle, &lib_csc, csc.rows, csc.cols, csc.nnz, csc.col_ptr.data(), csc.row_idx.data(), csc.val.data()));
-	sp_csr_to_csc(handle, lib_csr, lib_csc);
-
 	std::vector<float> dn_buffer;
 	gen_synth_weights_vec<float>(dn_buffer, csr.cols * csr.cols);
+	// Dense cm = parse_dn_test_case("test_data/spmm/dn.cute");
 
 	DnMatDescr_t lib_dn = NULL;
 	// WARN: Passing .data() is bad cause the vector might reallocate
 	SPMM_CHECK(create_dn_mat_col_major(handle, &lib_dn, csr.cols, csr.cols, dn_buffer.data()));
+	// SPMM_CHECK(create_dn_mat_col_major(handle, &lib_dn, csr.cols, csr.cols, cm.val.data()));
 
 	DnMatDescr_t       lib_res = NULL;
 	std::vector<float> res_buffer(csr.rows * csr.cols, 0);
 	SPMM_CHECK(create_dn_mat_row_major(handle, &lib_res, csr.rows, csr.cols, res_buffer.data()));
 
-	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_NO_INVERT));
+	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_NNZWISE_COALESCED, SPMM_KERNEL_NO_INVERT));
 
 	DnMatDescr_t       lib_sp_rm = NULL;
 	std::vector<float> sp_rm_buffer(csr.rows * csr.cols, 0);
@@ -348,36 +345,26 @@ int main(void)
 	for (uint32_t i = 0; i < csr.rows * csr.cols; ++i) {
 		comparef(res_buffer[i], expected[i]);
 	}
+	std::fill(res_buffer.begin(), res_buffer.end(), 0.0f);
 
-	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM, SPMM_KERNEL_NO_INVERT));
-
-	for (uint32_t i = 0; i < csr.rows * csr.cols; ++i) {
-		comparef(res_buffer[i], expected[i]);
-	}
-
-	SPMM_CHECK(spmm(handle, lib_csc, lib_dn, lib_res, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_INVERT));
-	DnMatDescr_t       lib_sp_cm = NULL;
-	std::vector<float> sp_cm_buffer(csc.rows * csc.cols, 0);
-	SPMM_CHECK(create_dn_mat_col_major(handle, &lib_sp_cm, csc.rows, csc.cols, sp_cm_buffer.data()));
-	SPMM_CHECK(sp_csc_to_col_major(lib_csc, lib_sp_cm));
-
-	expected = host_spmm_rm_cm(dn_buffer, sp_cm_buffer, csc.rows, csc.cols, csc.cols);
-
-	for (uint32_t i = 0; i < csc.rows * csc.cols; ++i) {
-		comparef(res_buffer[i], expected[i]);
-	}
-
-	SPMM_CHECK(spmm(handle, lib_csc, lib_dn, lib_res, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM, SPMM_KERNEL_INVERT));
-
-	for (uint32_t i = 0; i < csc.rows * csc.cols; ++i) {
-		comparef(res_buffer[i], expected[i]);
-	}
-
-	SPMM_CHECK(spmm(handle, lib_csc, lib_dn, lib_res, SPMM_KERNEL_TYPE_NNZWISE_COALESCED, SPMM_KERNEL_INVERT));
-
-	for (uint32_t i = 0; i < csc.rows * csc.cols; ++i) {
-		comparef(res_buffer[i], expected[i]);
-	}
+	// This shouldn't deep copy any of the vectors
+	// CSC          csc = { csr.rows, csr.cols, csr.nnz, std::vector<uint32_t>(csr.cols + 1), std::vector<uint32_t>(csr.nnz), std::vector<float>(csr.nnz) };
+	// SpMatDescr_t lib_csc = NULL;
+	// SPMM_CHECK(create_sp_mat_csc(handle, &lib_csc, csc.rows, csc.cols, csc.nnz, csc.col_ptr.data(), csc.row_idx.data(), csc.val.data()));
+	// sp_csr_to_csc(handle, lib_csr, lib_csc);
+	//
+	// SPMM_CHECK(spmm(handle, lib_csc, lib_dn, lib_res, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_INVERT));
+	// DnMatDescr_t       lib_sp_cm = NULL;
+	// std::vector<float> sp_cm_buffer(csc.rows * csc.cols, 0);
+	// SPMM_CHECK(create_dn_mat_col_major(handle, &lib_sp_cm, csc.rows, csc.cols, sp_cm_buffer.data()));
+	// SPMM_CHECK(sp_csc_to_col_major(lib_csc, lib_sp_cm));
+	//
+	// expected = host_spmm_rm_cm(dn_buffer, sp_cm_buffer, csc.rows, csc.cols, csc.cols);
+	//
+	// for (uint32_t i = 0; i < csc.rows * csc.cols; ++i) {
+	// 	comparef(res_buffer[i], expected[i]);
+	// }
+	// std::fill(res_buffer.begin(), res_buffer.end(), 0.0f);
 
 	SPMM_CHECK(exec_ctx_destroy(handle));
 
