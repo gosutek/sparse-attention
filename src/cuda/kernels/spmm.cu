@@ -264,7 +264,7 @@ __global__ void _k_ispmm_coalesced_nnzwise_no_smem(
 
 	__syncthreads();
 
-	if (warp_id == 0) {
+	if (warp_id == 0 && lane_id < warp_cnt) {
 		// WARN: some threads point to garbage, should be fine as they don't contribute due to 'mask'
 		float acc = warp_sums[lane_id];
 

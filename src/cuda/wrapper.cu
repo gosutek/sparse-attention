@@ -162,8 +162,18 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 			break;
 		}
 	case SPMM_KERNEL_TYPE_NNZWISE_COALESCED_NO_SMEM:
-		return SPMM_STATUS_INTERNAL_ERROR;
-		break;
+		{
+			if (invert == SPMM_KERNEL_NO_INVERT) {
+				const dim3 grid(1);
+				const dim3 block(64);
+			} else {
+				const dim3 grid(d_sp.cols, d_dn.rows);
+				const dim3 block(64);
+
+				_k_ispmm_coalesced_nnzwise_no_smem<<<grid, block>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
+			}
+			break;
+		}
 	case SPMM_KERNEL_TYPE_NNZWISE_VECTORIZED:
 		return SPMM_STATUS_INTERNAL_ERROR;
 		break;
