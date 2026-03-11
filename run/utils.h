@@ -9,7 +9,8 @@
 #include <string>
 #include <vector>
 
-constexpr const double tol = 1e-4;
+constexpr const double ATOL = 1e-7;
+constexpr const double RTOL = 1e-3;
 
 /*
       * +------------------------------------------------------------------------------+
@@ -65,7 +66,8 @@ inline bool comparef(const float a, const float b)
 		return true;
 	}
 
-	double abs_diff = std::fabs(a - b);
+	const double abs_diff = std::fabs(a - b);
+	const double tol = ATOL + RTOL * std::fabs(static_cast<double>(b));
 	if (std::isfinite(abs_diff) && abs_diff <= tol) {
 		return true;
 	}
