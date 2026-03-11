@@ -140,16 +140,24 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 			break;
 		}
 	case SPMM_KERNEL_TYPE_NNZWISE_COALESCED:
-		if (invert == SPMM_KERNEL_NO_INVERT) {
-		} else {
-			const dim3 grid(d_sp.cols, d_dn.rows);
-			const dim3 block(64);
+		{
+			if (invert == SPMM_KERNEL_NO_INVERT) {
+				const dim3 grid(d_dn.cols, d_sp.rows);
+				const dim3 block(64);
 
-			const uint64_t smem_bsize = (d_dn.cols + block.x /*thread_cnt*/ / _CONSTANTS_WARP_SIZE) * sizeof *d_dn.val;
+				const uint64_t smem_bsize = (d_dn.rows + block.x / _CONSTANTS_WARP_SIZE) * sizeof *d_dn.val;
 
-			_k_ispmm_coalesced_nnzwise<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
+				_k_spmm_coalesced_nnzwise<<<grid, block, smem_bsize>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, d_res.val);
+			} else {
+				const dim3 grid(d_sp.cols, d_dn.rows);
+				const dim3 block(64);
+
+				const uint64_t smem_bsize = (d_dn.cols + block.x /*thread_cnt*/ / _CONSTANTS_WARP_SIZE) * sizeof *d_dn.val;
+
+				_k_ispmm_coalesced_nnzwise<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
+			}
+			break;
 		}
-		break;
 	case SPMM_KERNEL_TYPE_NNZWISE_COALESCED_NO_SMEM:
 		return SPMM_STATUS_INTERNAL_ERROR;
 		break;
