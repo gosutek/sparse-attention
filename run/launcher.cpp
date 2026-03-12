@@ -1,109 +1,3 @@
-
-void run_mhsa(MHSA<CSC, CSR>& mhsa)
-{
-	DevMHSA      d = prepare_mhsa(mhsa);
-	const size_t m = mhsa.config.input_sequence_size;
-	const size_t n = d.w_q.cols;
-
-	// One thread per element of the output
-	// One thread block per 32x32 submatrix of the output
-	// (32x512)*(512x512)=(32x512)
-	dim3 spmm_block_gm(32, 32);
-	dim3 spmm_grid_gm(
-		(n + spmm_block_gm.x - 1) / spmm_block_gm.x,
-		(m + spmm_block_gm.y - 1) / spmm_block_gm.y);
-
-	// One thread per element of the output.
-	// One thread block stretched across a row of the output
-	// (32x512)*(512x512)=(32x512)
-	dim3 spmm_block_sm(512);
-	dim3 spmm_grid_sm(32);
-
-	// One thread per element of the output.
-	// One thread block stretched across a row of the output
-	// (32x512)*(512x32)=(32x32)
-	dim3 gemm_block_sm(32);
-	dim3 gemm_grid_sm(32);
-
-	// One thread per element of the output.
-	// One thread block per 32x32 submatrix of the output
-	// (32x32)
-	dim3 softmax_block(32, 32);
-	dim3 softmax_grid(
-		(m + softmax_block.x - 1) / softmax_block.x,
-		(m + softmax_block.y - 1) / softmax_block.y);  // This should actually be equal to (1,1) i.e. one block
-
-	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<spmm_grid_sm, spmm_block_sm>>>(d.x, d.w_q.col_ptr, d.w_q.row_idx, d.w_q.val, mhsa.config.input_sequence_size, d.w_q.rows, d.w_q.cols, d.q_res);
-	spmm_csc<KernelType::SharedMemory, OutputFormat::RM><<<spmm_grid_sm, spmm_block_sm>>>(d.x, d.w_k.col_ptr, d.w_k.row_idx, d.w_k.val, mhsa.config.input_sequence_size, d.w_k.rows, d.w_k.cols, d.k_res);
-	spmm_csc<KernelType::SharedMemory, OutputFormat::CM><<<spmm_grid_sm, spmm_block_sm>>>(d.x, d.w_v.col_ptr, d.w_v.row_idx, d.w_v.val, mhsa.config.input_sequence_size, d.w_v.rows, d.w_v.cols, d.v_res);
-
-	CUDA_CHECK(cudaDeviceSynchronize());
-
-	gemm<<<gemm_grid_sm, gemm_block_sm>>>(d.q_res, d.k_res, mhsa.config.input_sequence_size, d.w_q.rows, mhsa.config.input_sequence_size, d.gemm_res);
-
-	CUDA_CHECK(cudaDeviceSynchronize());
-
-	softmax<<<softmax_grid, softmax_block>>>(d.gemm_res, mhsa.config.input_sequence_size, mhsa.config.input_sequence_size, d.softmax_acc, d.attention);
-
-	CUDA_CHECK(cudaDeviceSynchronize());
-
-	// TODO: can this be async?
-	// TODO: THIS NEEDS TO WRITE TO PAGE-LOCKED MEMORY NOT SOME RANDOM ALLOCATED MEMORY
-	//
-	// CUDA_CHECK(cudaMemcpy(res, q_res, sizeof(f32) * kv_size, cudaMemcpyDeviceToHost));
-}
-void prepare_mhsa(MHSA<CSC, CSR>& mhsa)
-{
-	// mhsa_load_host_csc(mhsa, mhsa.config, mhsa.dlmc, mhsa.weights);
-
-	// TODO: Find a better name
-	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;  // k OR v's size
-	size_t gemm_res_size = mhsa.config.input_sequence_size * mhsa.config.input_sequence_size;
-
-	size_t res_b_size = sizeof(f32) * (kv_size * 4 + gemm_res_size * 2 + 1);  // Q, K, V, gemm result, f32 acc for softmax, Attention matrix, Final Result
-
-	mhsa.dev = cuda_malloc_device(mhsa.b_size + res_b_size);
-	CUDA_CHECK(cudaMemcpy(mhsa.dev, mhsa.host, mhsa.b_size, cudaMemcpyHostToDevice));
-
-	/*
-      * +---+-----+-----+-----+-----+------+---+---+---+------+-----+---+--------------+
-      * | x | w_q | w_k | w_v | w_o | mask | Q | K | V | QK^T | ACC | A | Final Result |
-      * +---+-----+-----+-----+-----+------+---+---+---+------+-----+---+--------------+
-      * +-------------HOST-----------------+----------------DEVICE---------------------+
-   */
-
-	res.x = reinterpret_cast<f32*>(mhsa.dev);
-	size_t b_x_size = sizeof(f32) * kv_size;
-
-	char* ptr = reinterpret_cast<char*>(res.x) + b_x_size;
-
-	// TODO: This call copy assignment operator of CSC
-	// check if the custom one does what you want
-	res.w_q = mhsa.weights.w_q[0];
-	res.w_q.partition(ptr);
-	ptr += res.w_q.b_size;
-
-	res.w_k = mhsa.weights.w_k[0];
-	res.w_k.partition(ptr);
-	ptr += res.w_k.b_size;
-
-	res.w_v = mhsa.weights.w_v[0];
-	res.w_v.partition(ptr);
-	ptr += res.w_v.b_size;
-
-	res.w_o = mhsa.weights.w_o[0];
-	res.w_o.partition(ptr);
-	ptr += res.w_o.b_size;
-
-	res.q_res = reinterpret_cast<f32*>(ptr);
-	res.k_res = res.q_res + kv_size;
-	res.v_res = res.k_res + kv_size;
-	res.gemm_res = res.v_res + kv_size;
-	res.softmax_acc = res.gemm_res + gemm_res_size;
-	res.attention = res.softmax_acc + 1;
-
-	return res;
-}
 void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse)
 {
 	CUSPARSE_CHECK(cusparseCreateCsc(&cusparse.sparse,
@@ -415,105 +309,6 @@ bool warmup_spmm_csc(SPMM<CSC>& spmm, const u32 size_idx, void (*run_kernel)(SPM
 	return verify_res(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size);
 }
 
-void run_spmm_naive_elemwise_gmem(SPMM<CSR>& spmm, const u32 idx)
-{
-	const size_t m = spmm.dev.s.rows;
-	const size_t k = spmm.dev.s.cols;
-	const size_t n = BENCH_DIMS[idx];
-
-	constexpr size_t BM = 8;
-	constexpr size_t BK = BM;
-
-	assert(BM <= 32);  // otherwise threads per block exceed max
-	dim3 grid(CEIL_DIV(MAT_SIZE, BK), CEIL_DIV(m, BM));
-	dim3 block(BK, BM);
-
-	spmm_naive_elemwise_gmem<<<grid, block>>>(spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val, spmm.dev.d[idx], m, k, n, spmm.dev.r[idx]);
-}
-
-void run_spmm_naive_elemwise_csc_gmem(SPMM<CSC>& spmm, const u32 idx)
-{
-	const size_t m = BENCH_DIMS[idx];
-	const size_t k = spmm.dev.s.rows;
-	const size_t n = spmm.dev.s.cols;
-
-	constexpr size_t BN = 8;
-	constexpr size_t BK = BN;
-
-	assert(BN <= 32);  // otherwise threads per block exceed max
-	dim3 grid(CEIL_DIV(MAT_SIZE, BN), CEIL_DIV(m, BK));
-	dim3 block(BN, BK);
-
-	spmm_naive_elemwise_csc_gmem<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
-}
-
-void run_spmm_naive_elemwise_csc_smem(SPMM<CSC>& spmm, const u32 idx)
-{
-	const size_t m = BENCH_DIMS[idx];
-	const size_t k = spmm.dev.s.rows;
-	const size_t n = spmm.dev.s.cols;
-
-	dim3 grid(m);
-	dim3 block(n);
-
-	spmm_naive_elemwise_csc_smem<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
-}
-
-void run_spmm_coalesced_elemwise_csr(SPMM<CSR>& spmm, const u32 idx)
-{
-	const size_t m = BENCH_DIMS[idx];
-	const size_t k = spmm.dev.s.rows;
-	const size_t n = spmm.dev.s.cols;
-
-	dim3 grid(MAT_SIZE);
-	dim3 block(128);
-
-	spmm_coalesced_elemwise_csr<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
-}
-
-// void run_spmm_blocktiling_elemwise_csr(SPMM<CSR>& spmm, const u32 idx)
-// {
-// 	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
-// 	const size_t k = spmm.dev.s.rows;
-// 	const size_t n = spmm.dev.s.cols;
-//
-// 	constexpr size_t BN = 256;
-// 	constexpr size_t TN = 4;
-//
-// 	dim3 grid(m, n / BN);
-// 	dim3 block(CEIL_DIV(BN, TN));
-//
-// 	spmm_blocktiling_elemwise_csr<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
-// }
-
-void run_spmm_coalesced_nnzwise(SPMM<CSC>& spmm, const u32 idx)
-{
-	const size_t m = BENCH_DIMS[idx];
-	const size_t k = spmm.dev.s.rows;
-	const size_t n = spmm.dev.s.cols;
-
-	constexpr size_t n_threads = 64;
-
-	dim3 grid(n, m);
-	dim3 block(n_threads);
-
-	spmm_coalesced_nnzwise<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
-}
-
-void run_spmm_coalesced_nnzwise_no_smem(SPMM<CSC>& spmm, const u32 idx)
-{
-	const size_t m = BENCH_DIMS[idx];
-	const size_t k = spmm.dev.s.rows;
-	const size_t n = spmm.dev.s.cols;
-
-	constexpr size_t n_threads = 64;
-
-	dim3 grid(n, m);
-	dim3 block(n_threads);
-
-	spmm_coalesced_nnzwise_no_smem<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
-}
-
 void run_spmm_coalesced_nnzwise_last(SPMM<CSC>& spmm, const u32 idx)
 {
 	const size_t m = BENCH_DIMS[idx];
@@ -527,21 +322,6 @@ void run_spmm_coalesced_nnzwise_last(SPMM<CSC>& spmm, const u32 idx)
 	dim3 block(n_threads);
 
 	spmm_coalesced_nnzwise_last<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, bn, spmm.dev.r[idx]);
-}
-
-void run_spmm_vectorized_nnzwise_regs(SPMM<CSC>& spmm, const u32 idx)
-{
-	const size_t m = BENCH_DIMS[idx];
-	const size_t k = spmm.dev.s.rows;
-	const size_t n = spmm.dev.s.cols;
-
-	constexpr size_t n_threads = 32;
-	constexpr size_t BK = 512;
-
-	dim3 grid(n, m, CEIL_DIV(MAT_SIZE, BK));
-	dim3 block(n_threads);
-
-	spmm_vectorized_nnzwise_regs<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
 
 std::vector<f32> read_row_major_from_rm(const std::filesystem::path& filepath, size_t size)
@@ -565,7 +345,7 @@ std::vector<f32> read_row_major_from_rm(const std::filesystem::path& filepath, s
 
 std::vector<std::filesystem::path> collect_rec_input(const std::filesystem::path& path)
 {
-	u32                                            n_unknown_extention_files{};
+	u32                                                 n_unknown_extention_files{};
 	std::vector<std::filesystem::path>                  input_files;
 	const std::filesystem::recursive_directory_iterator rec_dir_iter(path);
 
