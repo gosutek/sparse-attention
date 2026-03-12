@@ -326,7 +326,7 @@ static void launch_dlmc(const ExecutionContext_t handle, const std::filesystem::
 	std::vector<float> res_buffer(csr.rows * csr.cols, 0);
 	SPMM_CHECK(create_dn_mat_row_major(handle, &lib_res, csr.rows, csr.cols, res_buffer.data()));
 
-	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_NNZWISE_COALESCED, SPMM_KERNEL_NO_INVERT));
+	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_NNZWISE_COALESCED_NO_SMEM, SPMM_KERNEL_NO_INVERT));
 
 	DnMatDescr_t       lib_sp_rm = NULL;
 	std::vector<float> sp_rm_buffer(csr.rows * csr.cols, 0);
@@ -376,7 +376,7 @@ static void launch_test_cases(const ExecutionContext_t handle, const std::filesy
 	std::vector<float> res_buffer(csr.rows * csr.cols, 0);
 	SPMM_CHECK(create_dn_mat_row_major(handle, &lib_res, csr.rows, csr.cols, res_buffer.data()));
 
-	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_NNZWISE_COALESCED, SPMM_KERNEL_NO_INVERT));
+	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_NNZWISE_COALESCED_NO_SMEM, SPMM_KERNEL_NO_INVERT));
 
 	DnMatDescr_t       lib_sp_rm = NULL;
 	std::vector<float> sp_rm_buffer(csr.rows * csr.cols, 0);
@@ -413,8 +413,8 @@ int main(void)
 	ExecutionContext_t handle = NULL;
 	SPMM_CHECK(exec_ctx_create(&handle));
 
-	launch_dlmc(handle, "run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_v.smtx");
-	// launch_test_cases(handle, "test_data/spmm/sp.cute", "test_data/spmm/dn.cute");
+	// launch_dlmc(handle, "run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_v.smtx");
+	launch_test_cases(handle, "test_data/spmm/sp.cute", "test_data/spmm/dn.cute");
 
 	SPMM_CHECK(exec_ctx_destroy(handle));
 

@@ -232,6 +232,54 @@ __global__ void _k_ispmm_coalesced_nnzwise(
   * +------------------------------------------------------------------------------+
 */
 
+__global__ void _k_spmm_coalesced_nnzwise_no_smem(
+	const uint32_t* __restrict__ row_ptr,
+	const uint32_t* __restrict__ col_idx,
+	const float* __restrict__ val,
+	const float* __restrict__ dn,
+	const size_t m,
+	const size_t k,
+	const size_t n,
+	float* __restrict__ res)
+{
+	float acc = 0.0f;
+	for (size_t i = row_ptr[blockIdx.y] + threadIdx.x; i < row_ptr[blockIdx.y + 1]; i += blockDim.x) {
+		acc += get_elem_cm(dn, k, col_idx[i], blockIdx.x) * val[i];
+	}
+	__syncwarp();
+
+	for (size_t i = _CONSTANTS_WARP_SIZE / 2; i > 0; i /= 2) {
+		acc += __shfl_xor_sync(0xffffffff, acc, i, _CONSTANTS_WARP_SIZE);
+	}
+
+	const uint32_t lane_id = MOD_POW2(threadIdx.x, _CONSTANTS_WARP_SIZE);
+	const uint32_t warp_id = threadIdx.x / _CONSTANTS_WARP_SIZE;
+
+	const uint32_t          warp_cnt = blockDim.x / _CONSTANTS_WARP_SIZE;
+	extern __shared__ float warp_sums[];
+
+	if (lane_id == 0) {
+		warp_sums[warp_id] = acc;
+	}
+
+	__syncthreads();
+
+	if (warp_id == 0 && lane_id < warp_cnt) {
+		// WARN: some threads point to garbage, should be fine as they don't contribute due to 'mask'
+		float acc = warp_sums[lane_id];
+
+		const uint32_t mask = LOWER_BITS_MASK(warp_cnt);
+
+		for (size_t i = warp_cnt / 2; i > 0; i /= 2) {
+			acc += __shfl_xor_sync(mask, acc, i, _CONSTANTS_WARP_SIZE);
+		}
+
+		if (lane_id == 0) {
+			set_elem_rm(res, n, blockIdx.y, blockIdx.x, acc);
+		}
+	}
+}
+
 __global__ void _k_ispmm_coalesced_nnzwise_no_smem(
 	const float* __restrict__ dn,
 	const uint32_t* __restrict__ col_ptr,
