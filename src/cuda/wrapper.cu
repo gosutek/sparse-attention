@@ -177,8 +177,20 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 			break;
 		}
 	case SPMM_KERNEL_TYPE_NNZWISE_VECTORIZED:
-		return SPMM_STATUS_INTERNAL_ERROR;
-		break;
+		{
+			const dim3     block(64);
+			const uint64_t smem_bsize = (block.x / _CONSTANTS_WARP_SIZE) * sizeof *d_dn.val;
+			if (invert == SPMM_KERNEL_NO_INVERT) {
+				// TODO: Pass smem_bsize
+				return SPMM_STATUS_INTERNAL_ERROR;
+			} else {
+				constexpr uint32_t BK = 512;
+				const dim3         grid(d_sp.cols, d_dn.rows, CEIL_DIVI(d_dn.cols, BK));
+
+				_k_ispmm_vectorized_nnzwise_regs<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
+			}
+			break;
+		}
 	case SPMM_KERNEL_TYPE_NNZWISE_FINAL:
 		return SPMM_STATUS_INTERNAL_ERROR;
 		break;
