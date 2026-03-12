@@ -14,18 +14,18 @@ extern "C"
 	{
 		uint8_t* _d_ptr;
 
-		uint64_t size;
-		uint64_t pos;
+		u64 size;
+		u64 pos;
 	} DevArena;
 
-	SpmmInternalStatus_t mem_arena_dev_create(DevArena* const arena, const uint64_t bsize);
+	SpmmInternalStatus_t mem_arena_dev_create(DevArena* const arena, const u64 bsize);
 	SpmmInternalStatus_t mem_arena_dev_destroy(DevArena* arena);
 
-	SpmmInternalStatus_t mem_arena_dev_push(DevArena* const arena, const uint64_t bsize, void** ptr_out);
-	void                 mem_arena_dev_pop(DevArena* const arena, uint64_t bsize);
-	void                 mem_arena_dev_pop_at(DevArena* const arena, uint64_t pos);
+	SpmmInternalStatus_t mem_arena_dev_push(DevArena* const arena, const u64 bsize, void** ptr_out);
+	void                 mem_arena_dev_pop(DevArena* const arena, u64 bsize);
+	void                 mem_arena_dev_pop_at(DevArena* const arena, u64 pos);
 
-	uint64_t mem_arena_dev_pos_get(const DevArena* const arena);
+	u64 mem_arena_dev_pos_get(const DevArena* const arena);
 
 #if defined(__cplusplus)
 }

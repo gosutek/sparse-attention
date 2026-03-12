@@ -9,8 +9,10 @@
 #include <string>
 #include <vector>
 
-constexpr const double ATOL = 1e-7;
-constexpr const double RTOL = 1e-3;
+#include "../src/helpers.h"
+
+constexpr const f64 ATOL = 1e-7;
+constexpr const f64 RTOL = 1e-3;
 
 /*
       * +------------------------------------------------------------------------------+
@@ -20,32 +22,32 @@ constexpr const double RTOL = 1e-3;
 
 struct Dense
 {
-	uint32_t rows;
-	uint32_t cols;
+	u32 rows;
+	u32 cols;
 
-	std::vector<float> val{};
+	std::vector<f32> val{};
 };
 
 struct CSR
 {
-	uint32_t rows;
-	uint32_t cols;
-	uint32_t nnz;
+	u32 rows;
+	u32 cols;
+	u32 nnz;
 
-	std::vector<uint32_t> row_ptr{};
-	std::vector<uint32_t> col_idx{};
-	std::vector<float>    val{};
+	std::vector<u32> row_ptr{};
+	std::vector<u32> col_idx{};
+	std::vector<f32> val{};
 };
 
 struct CSC
 {
-	uint32_t rows;
-	uint32_t cols;
-	uint32_t nnz;
+	u32 rows;
+	u32 cols;
+	u32 nnz;
 
-	std::vector<uint32_t> col_ptr;
-	std::vector<uint32_t> row_idx;
-	std::vector<float>    val;
+	std::vector<u32> col_ptr;
+	std::vector<u32> row_idx;
+	std::vector<f32> val;
 };
 
 /*
@@ -59,13 +61,13 @@ CSR   parse_csr_test_case(const std::filesystem::path& path);
 CSC   parse_csc_test_case(const std::filesystem::path& path);
 CSR   parse_csr_dlmc(const std::filesystem::path& filepath);
 
-bool verify_res(const float* const actual, const float* const expected, size_t n);
+bool verify_res(const f32* const actual, const f32* const expected, size_t n);
 
 /*
  * Adapted from:
  * https://github.com/pytorch/pytorch/blob/0d2c383a0607853a3e23de11b0da43a870492c4d/torch/testing/_comparison.py#L610
  */
-inline bool comparef(const float a, const float b)
+inline bool comparef(const f32 a, const f32 b)
 {
 	if (std::isnan(a) || std::isnan(b)) {
 		std::cout << "isnan: " << a << " or " << b << std::endl;
@@ -75,8 +77,8 @@ inline bool comparef(const float a, const float b)
 		return true;
 	}
 
-	const double abs_diff = std::fabs(a - b);
-	const double tol = ATOL + RTOL * std::fabs(static_cast<double>(b));
+	const f64 abs_diff = std::fabs(a - b);
+	const f64 tol = ATOL + RTOL * std::fabs(static_cast<f64>(b));
 	if (std::isfinite(abs_diff) && abs_diff <= tol) {
 		return true;
 	}
@@ -85,7 +87,7 @@ inline bool comparef(const float a, const float b)
 	return false;
 }
 
-inline bool comparef_test_case(const float a, const float b)
+inline bool comparef_test_case(const f32 a, const f32 b)
 {
 	if (std::isnan(a) || std::isnan(b)) {
 		std::cout << "isnan: " << a << " or " << b << std::endl;
@@ -96,8 +98,8 @@ inline bool comparef_test_case(const float a, const float b)
 		return true;
 	}
 
-	const double abs_diff = std::fabs(a - b);
-	const double tol = ATOL + RTOL * std::fabs(static_cast<double>(b));
+	const f64 abs_diff = std::fabs(a - b);
+	const f64 tol = ATOL + RTOL * std::fabs(static_cast<f64>(b));
 	if (std::isfinite(abs_diff) && abs_diff <= tol) {
 		std::cout << "Tolerance: " << a << " | " << b << std::endl;
 		return true;
@@ -107,10 +109,10 @@ inline bool comparef_test_case(const float a, const float b)
 	return false;
 }
 
-// bool verify_res(const float* const actual, const float* const expected, size_t n)
+// bool verify_res(const f32* const actual, const f32* const expected, size_t n)
 // {
 //   if
-// 	double diff = 0.0;
+// 	f64 diff = 0.0;
 // 	for (size_t i = 0; i < n; ++i) {
 // 		diff = std::fabs(actual[i] - expected[i]);
 // 		// std::cout << std::format(
@@ -126,15 +128,15 @@ inline bool comparef_test_case(const float a, const float b)
 // }
 
 template <typename T>
-void gen_synth_weights_buffer(void* dst, uint64_t size)
+void gen_synth_weights_buffer(void* dst, u64 size)
 {
 	T* ptr = reinterpret_cast<T*>(dst);
 
 	// INFO: think this is bad, declaring them in each function
 	// instead of passing(??)
-	std::random_device                    rd;
-	std::minstd_rand                      rng(rd());
-	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+	std::random_device                  rd;
+	std::minstd_rand                    rng(rd());
+	std::uniform_real_distribution<f32> uni_real_dist(0.0f, 1.0f);
 
 	for (size_t i = 0; i < size; ++i) {
 		ptr[i] = uni_real_dist(rng);
@@ -142,16 +144,16 @@ void gen_synth_weights_buffer(void* dst, uint64_t size)
 }
 
 template <typename T>
-void gen_synth_weights_vec(std::vector<T>& vec, uint64_t size)
+void gen_synth_weights_vec(std::vector<T>& vec, u64 size)
 {
 	vec.resize(size);
 	// INFO: think this is bad, declaring them in each function
 	// instead of passing(??)
-	std::random_device                    rd;
-	std::minstd_rand                      rng(rd());
-	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+	std::random_device                  rd;
+	std::minstd_rand                    rng(rd());
+	std::uniform_real_distribution<f32> uni_real_dist(0.0f, 1.0f);
 
-	for (uint32_t i = 0; i < size; ++i) {
+	for (u32 i = 0; i < size; ++i) {
 		vec[i] = uni_real_dist(rng);
 	}
 }

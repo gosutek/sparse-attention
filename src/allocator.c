@@ -8,13 +8,13 @@
 
 #if defined(__linux__)
 
-static uint32_t vm_get_page_size(void)
+static u32 vm_get_page_size(void)
 {
-	return (uint32_t)sysconf(_SC_PAGESIZE);
+	return (u32)sysconf(_SC_PAGESIZE);
 }
 
 // INFO: Mimics malloc in the sense that it returns a NULL ptr on an error instead of an error enum type
-static void* vm_reserve(const uint64_t size)
+static void* vm_reserve(const u64 size)
 {
 	void* ptr = mmap(NULL, size, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (ptr == MAP_FAILED) {
@@ -23,19 +23,19 @@ static void* vm_reserve(const uint64_t size)
 	return ptr;
 }
 
-static int32_t vm_release(void* ptr, const uint64_t size)
+static i32 vm_release(void* ptr, const u64 size)
 {
 	return munmap(ptr, size) == 0; /* >"It is not an error if the indicated range does not contain any mapped pages" ~ So 'ptr' can be NULL here.*/
 }
 
-static int32_t vm_commit(void* addr, const uint64_t size)
+static i32 vm_commit(void* addr, const u64 size)
 {
 	return mprotect(addr, size, PROT_READ | PROT_WRITE) == 0;
 }
 
-static int32_t vm_uncommit(void* addr, const uint64_t size)
+static i32 vm_uncommit(void* addr, const u64 size)
 {
-	int32_t ret_code = mprotect(addr, size, PROT_NONE);
+	i32 ret_code = mprotect(addr, size, PROT_NONE);
 	if (ret_code != 0) {
 		return -1;
 	}
@@ -92,12 +92,12 @@ SpmmStatus_t exec_ctx_destroy(ExecutionContext_t ctx)
 //
 // INFO: COMMIT SIZE SHOULD BE PAGE-SIZE ALIGNED AND DERIVED FROM AN ALLOCATION STRATEGY SIMILAR TO VECTOR OR SOMETHING :)
 
-SpmmInternalStatus_t mem_arena_host_create(MemArena** const arena, const uint64_t reserve_size, const uint64_t commit_size)
+SpmmInternalStatus_t mem_arena_host_create(MemArena** const arena, const u64 reserve_size, const u64 commit_size)
 {
 	// TODO: Debug print these at some point to ensure correctness.
-	const uint32_t page_size = vm_get_page_size();
-	const uint64_t pa_reserve_size = reserve_size + PADDING_POW2(reserve_size, page_size);
-	const uint64_t pa_commit_size = commit_size + PADDING_POW2(commit_size, page_size);
+	const u32 page_size = vm_get_page_size();
+	const u64 pa_reserve_size = reserve_size + PADDING_POW2(reserve_size, page_size);
+	const u64 pa_commit_size = commit_size + PADDING_POW2(commit_size, page_size);
 
 	*arena = (MemArena*)vm_reserve(reserve_size);
 	if (!(*arena)) {
@@ -126,15 +126,15 @@ SpmmInternalStatus_t mem_arena_host_destroy(MemArena* arena)
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-SpmmInternalStatus_t mem_arena_host_push(MemArena* const arena, const uint64_t req_size, void** ptr_out)
+SpmmInternalStatus_t mem_arena_host_push(MemArena* const arena, const u64 req_size, void** ptr_out)
 {
-	const uint64_t aligned_pos = arena->pos + PADDING_POW2(arena->pos, sizeof(void*)); /* the pointer returned should be naturally aligned */
-	const uint64_t new_pos = aligned_pos + req_size;
+	const u64 aligned_pos = arena->pos + PADDING_POW2(arena->pos, sizeof(void*)); /* the pointer returned should be naturally aligned */
+	const u64 new_pos = aligned_pos + req_size;
 
 	if (new_pos > arena->reserve_size) {
 		abort();
 	} else if (new_pos > arena->commit_pos) {
-		const uint64_t commit_size = CEIL_DIVI(new_pos, arena->commit_size);
+		const u64 commit_size = CEIL_DIVI(new_pos, arena->commit_size);
 		if (commit_size > arena->reserve_size) {
 			abort();
 		}
@@ -151,21 +151,21 @@ SpmmInternalStatus_t mem_arena_host_push(MemArena* const arena, const uint64_t r
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-void mem_arena_host_pop(MemArena* const arena, uint64_t size)
+void mem_arena_host_pop(MemArena* const arena, u64 size)
 {
 	// TODO: Should I null check the ptr here?
 	size = MIN(size, arena->pos - sizeof *arena); /* don't dealloc MemArena members */
 	arena->pos -= size;
 }
 
-void mem_arena_host_pop_at(MemArena* const arena, uint64_t pos)
+void mem_arena_host_pop_at(MemArena* const arena, u64 pos)
 {
-	uint64_t size = pos < arena->pos ? arena->pos - pos : 0;
+	u64 size = pos < arena->pos ? arena->pos - pos : 0;
 	mem_arena_host_pop(arena, size);
 }
 
 // TODO: Do I need this anymore?
-uint64_t mem_arena_host_pos_get(const MemArena* const arena)
+u64 mem_arena_host_pos_get(const MemArena* const arena)
 {
 	return arena->pos;
 }

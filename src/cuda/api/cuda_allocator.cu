@@ -7,7 +7,7 @@ extern "C"
 {
 #endif
 
-	SpmmInternalStatus_t mem_arena_dev_create(DevArena* arena, const uint64_t bsize)
+	SpmmInternalStatus_t mem_arena_dev_create(DevArena* arena, const u64 bsize)
 	{
 		if (arena->_d_ptr) {
 			return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
@@ -35,14 +35,14 @@ extern "C"
 		return SPMM_INTERNAL_STATUS_SUCCESS;
 	}
 
-	SpmmInternalStatus_t mem_arena_dev_push(DevArena* const arena, const uint64_t bsize, void** ptr_out)
+	SpmmInternalStatus_t mem_arena_dev_push(DevArena* const arena, const u64 bsize, void** ptr_out)
 	{
 		if (!arena) {
 			return SPMM_INTERNAL_STATUS_MEMOP_FAIL;
 		}
 
-		const uint64_t pos_aligned = arena->pos + PADDING_POW2(arena->pos, sizeof(void*));
-		const uint64_t new_pos = pos_aligned + bsize;
+		const u64 pos_aligned = arena->pos + PADDING_POW2(arena->pos, sizeof(void*));
+		const u64 new_pos = pos_aligned + bsize;
 
 		if (new_pos > arena->size) {
 			abort();
@@ -55,19 +55,19 @@ extern "C"
 	}
 
 	// WARN: What if bsize isn't aligned?
-	void mem_arena_dev_pop(DevArena* const arena, uint64_t bsize)
+	void mem_arena_dev_pop(DevArena* const arena, u64 bsize)
 	{
 		bsize = MIN(bsize, arena->pos - sizeof *arena);
 		arena->pos -= bsize;
 	}
 
-	void mem_arena_dev_pop_at(DevArena* const arena, uint64_t pos)
+	void mem_arena_dev_pop_at(DevArena* const arena, u64 pos)
 	{
-		uint64_t size = pos < arena->pos ? arena->pos - pos : 0;
+		u64 size = pos < arena->pos ? arena->pos - pos : 0;
 		mem_arena_dev_pop(arena, size);
 	}
 
-	uint64_t mem_arena_dev_pos_get(const DevArena* const arena)
+	u64 mem_arena_dev_pos_get(const DevArena* const arena)
 	{
 		return arena->pos;
 	}

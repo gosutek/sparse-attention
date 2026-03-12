@@ -19,11 +19,11 @@ extern "C"
 
 	typedef struct MemArena
 	{
-		uint64_t reserve_size;
-		uint64_t commit_size;
+		u64 reserve_size;
+		u64 commit_size;
 
-		uint64_t commit_pos;
-		uint64_t pos;
+		u64 commit_pos;
+		u64 pos;
 	} MemArena;
 
 	typedef struct ExecCtx
@@ -38,14 +38,14 @@ extern "C"
       * +------------------------------------------------------------------------------+
 */
 
-	SpmmInternalStatus_t mem_arena_host_create(MemArena** const arena, const uint64_t reserve_size, const uint64_t commit_size);
+	SpmmInternalStatus_t mem_arena_host_create(MemArena** const arena, const u64 reserve_size, const u64 commit_size);
 	SpmmInternalStatus_t mem_arena_host_destroy(MemArena* arena);
 
-	SpmmInternalStatus_t mem_arena_host_push(MemArena* const arena, const uint64_t req_size, void** ptr_out);
-	void                 mem_arena_host_pop(MemArena* const arena, uint64_t size);
-	void                 mem_arena_host_pop_at(MemArena* const arena, uint64_t pos);
+	SpmmInternalStatus_t mem_arena_host_push(MemArena* const arena, const u64 req_size, void** ptr_out);
+	void                 mem_arena_host_pop(MemArena* const arena, u64 size);
+	void                 mem_arena_host_pop_at(MemArena* const arena, u64 pos);
 
-	uint64_t mem_arena_host_pos_get(const MemArena* const arena);
+	u64 mem_arena_host_pos_get(const MemArena* const arena);
 
 #if defined(__cplusplus)
 }

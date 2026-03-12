@@ -1,11 +1,14 @@
 #if !defined(MATRIX_H)
 #define MATRIX_H
 
+#include "spmm.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "spmm.h"
+#include "allocator.h"
+#include "helpers.h"
 
 #if defined(__cplusplus)
 extern "C"
@@ -28,26 +31,26 @@ extern "C"
 	{
 		SparseFormat_t format;
 
-		uint32_t rows;
-		uint32_t cols;
-		uint32_t nnz;
+		u32 rows;
+		u32 cols;
+		u32 nnz;
 
 		union
 		{
 			struct
 			{
-				uint32_t* row_ptr;
-				uint32_t* col_idx;
+				u32* row_ptr;
+				u32* col_idx;
 			} csr;
 
 			struct
 			{
-				uint32_t* col_ptr;
-				uint32_t* row_idx;
+				u32* col_ptr;
+				u32* row_idx;
 			} csc;
 		};
 
-		float* val;
+		f32* val;
 	} SpMatDescr;
 
 	static inline size_t sp_mat_ptr_count_get(const SpMatDescr* const sp)
@@ -96,47 +99,47 @@ extern "C"
 	{
 		DenseFormat_t format;
 
-		uint32_t rows;
-		uint32_t cols;
+		u32 rows;
+		u32 cols;
 
-		float* val;
+		f32* val;
 	} DnMatDescr;
 
-	static inline uint64_t dn_mat_bytes_get(const DnMatDescr* const dn)
+	static inline u64 dn_mat_bytes_get(const DnMatDescr* const dn)
 	{
 		return dn->rows * dn->cols * (sizeof *(dn->val));
 	}
 
 	// INFO: Probably useless, can just use dn_mat_bytes_get
-	static inline uint64_t spmm_res_mat_bytes_get(const SpMatDescr* const sp, const DnMatDescr* const dn)
+	static inline u64 spmm_res_mat_bytes_get(const SpMatDescr* const sp, const DnMatDescr* const dn)
 	{
 		return sp->rows * dn->cols * (sizeof *(sp->val));
 	}
 
 	typedef struct
 	{
-		uint32_t rows;
-		uint32_t cols;
-		uint32_t nnz;
+		u32 rows;
+		u32 cols;
+		u32 nnz;
 	} DlmcHeader;
 
 	typedef struct
 	{
-		uint32_t rows;
-		uint32_t cols;
+		u32 rows;
+		u32 cols;
 	} RowMajorHeader;
 
 	// namespace Csr
 	// {
 	// 	struct Matrix
 	// 	{
-	// 		uint32_t rows;
-	// 		uint32_t cols;
-	// 		uint32_t nnz;
+	// 		u32 rows;
+	// 		u32 cols;
+	// 		u32 nnz;
 	//
-	// 		uint32_t* row_ptr;
-	// 		uint32_t* col_idx;
-	// 		float*    val;
+	// 		u32* row_ptr;
+	// 		u32* col_idx;
+	// 		f32*    val;
 	//
 	// 		size_t row_ptr_count;
 	// 		size_t col_idx_count;
@@ -148,7 +151,7 @@ extern "C"
 	// 		size_t total_bytes;
 	// 	};
 	//
-	// 	inline void init(Matrix& mat, uint32_t rows, uint32_t cols, uint32_t nnz)
+	// 	inline void init(Matrix& mat, u32 rows, u32 cols, u32 nnz)
 	// 	{
 	// 		mat.rows = rows;
 	// 		mat.cols = cols;
@@ -158,9 +161,9 @@ extern "C"
 	// 		mat.col_idx_count = nnz;
 	// 		mat.val_count = nnz;
 	//
-	// 		mat.row_ptr_bytes = (rows + 1) * sizeof(uint32_t);
-	// 		mat.col_idx_bytes = nnz * sizeof(uint32_t);
-	// 		mat.val_bytes = nnz * sizeof(float);
+	// 		mat.row_ptr_bytes = (rows + 1) * sizeof(u32);
+	// 		mat.col_idx_bytes = nnz * sizeof(u32);
+	// 		mat.val_bytes = nnz * sizeof(f32);
 	// 		mat.total_bytes = mat.row_ptr_bytes + mat.col_idx_bytes + mat.val_bytes;
 	//
 	// 		mat.row_ptr = nullptr;
@@ -170,13 +173,13 @@ extern "C"
 	//
 	// 	inline void partition(Matrix& mat, uintptr_t base_ptr)
 	// 	{
-	// 		mat.row_ptr = reinterpret_cast<uint32_t*>(base_ptr);
+	// 		mat.row_ptr = reinterpret_cast<u32*>(base_ptr);
 	//
 	// 		base_ptr += mat.row_ptr_bytes;
-	// 		mat.col_idx = reinterpret_cast<uint32_t*>(base_ptr);
+	// 		mat.col_idx = reinterpret_cast<u32*>(base_ptr);
 	//
 	// 		base_ptr += mat.col_idx_bytes;
-	// 		mat.val = reinterpret_cast<float*>(base_ptr);
+	// 		mat.val = reinterpret_cast<f32*>(base_ptr);
 	// 	}
 	// }  // namespace Csr
 	//
@@ -184,13 +187,13 @@ extern "C"
 	// {
 	// 	struct Matrix
 	// 	{
-	// 		uint32_t rows;
-	// 		uint32_t cols;
-	// 		uint32_t nnz;
+	// 		u32 rows;
+	// 		u32 cols;
+	// 		u32 nnz;
 	//
-	// 		uint32_t* col_ptr;
-	// 		uint32_t* row_idx;
-	// 		float*    val;
+	// 		u32* col_ptr;
+	// 		u32* row_idx;
+	// 		f32*    val;
 	//
 	// 		size_t col_ptr_count;
 	// 		size_t row_idx_count;
@@ -202,7 +205,7 @@ extern "C"
 	// 		size_t total_bytes;
 	// 	};
 	//
-	// 	inline void init(Matrix& mat, uint32_t rows, uint32_t cols, uint32_t nnz)
+	// 	inline void init(Matrix& mat, u32 rows, u32 cols, u32 nnz)
 	// 	{
 	// 		mat.rows = rows;
 	// 		mat.cols = cols;
@@ -212,27 +215,27 @@ extern "C"
 	// 		mat.row_idx_count = nnz;
 	// 		mat.val_count = nnz;
 	//
-	// 		mat.col_ptr_bytes = (cols + 1) * sizeof(uint32_t);
-	// 		mat.row_idx_bytes = nnz * sizeof(uint32_t);
-	// 		mat.val_bytes = nnz * sizeof(float);
+	// 		mat.col_ptr_bytes = (cols + 1) * sizeof(u32);
+	// 		mat.row_idx_bytes = nnz * sizeof(u32);
+	// 		mat.val_bytes = nnz * sizeof(f32);
 	// 		mat.total_bytes = mat.col_ptr_bytes + mat.row_idx_bytes + mat.val_bytes;
 	// 	}
 	//
 	// 	inline void partition(Matrix& mat, uintptr_t base_ptr)
 	// 	{
-	// 		mat.col_ptr = reinterpret_cast<uint32_t*>(base_ptr);
+	// 		mat.col_ptr = reinterpret_cast<u32*>(base_ptr);
 	//
 	// 		base_ptr += mat.col_ptr_bytes;
-	// 		mat.row_idx = reinterpret_cast<uint32_t*>(base_ptr);
+	// 		mat.row_idx = reinterpret_cast<u32*>(base_ptr);
 	//
 	// 		base_ptr += mat.row_idx_bytes;
-	// 		mat.val = reinterpret_cast<float*>(base_ptr);
+	// 		mat.val = reinterpret_cast<f32*>(base_ptr);
 	// 	}
 	// }  // namespace Csc
 
-	// std::vector<float> csr_to_row_major(const Csr::Matrix& mat);
-	// std::vector<float> csc_to_col_major(const Csc::Matrix& mat);
-	float measure_sparsity(void* s, uint32_t size);
+	// std::vector<f32> csr_to_row_major(const Csr::Matrix& mat);
+	// std::vector<f32> csc_to_col_major(const Csc::Matrix& mat);
+	f32 measure_sparsity(void* s, u32 size);
 	// size_t             calc_sparse_b_size(const size_t n, const size_t nnz);
 	// DlmcHeader         parse_dlmc_header(std::ifstream& file_stream);
 	// RowMajorHeader     parse_row_major_header(std::ifstream& file_stream);

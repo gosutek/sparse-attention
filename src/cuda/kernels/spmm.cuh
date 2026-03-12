@@ -4,91 +4,101 @@
 #include "helpers.h"
 
 __global__ void _k_spmm_naive_elemwise_gmem(
-	const uint32_t* __restrict__ row_ptr,
-	const uint32_t* __restrict__ col_idx,
-	const float* __restrict__ val,
-	const float* __restrict__ dn,
-	const uint32_t m,
-	const uint32_t k,
-	const uint32_t n,
-	float* __restrict__ res);
+	const u32* __restrict__ row_ptr,
+	const u32* __restrict__ col_idx,
+	const f32* __restrict__ val,
+	const f32* __restrict__ dn,
+	const u32 m,
+	const u32 k,
+	const u32 n,
+	f32* __restrict__ res);
 
 __global__ void _k_ispmm_naive_elemwise_gmem(
-	const float* __restrict__ dn,
-	const uint32_t* __restrict__ col_ptr,
-	const uint32_t* __restrict__ row_idx,
-	const float* __restrict__ val,
-	const uint32_t m,
-	const uint32_t k,
-	const uint32_t n,
-	float* __restrict__ res);
+	const f32* __restrict__ dn,
+	const u32* __restrict__ col_ptr,
+	const u32* __restrict__ row_idx,
+	const f32* __restrict__ val,
+	const u32 m,
+	const u32 k,
+	const u32 n,
+	f32* __restrict__ res);
 
 __global__ void _k_spmm_naive_elemwise_smem(
-	const uint32_t* __restrict__ row_ptr,
-	const uint32_t* __restrict__ col_idx,
-	const float* __restrict__ val,
-	const float* __restrict__ dn,
-	const uint32_t m,
-	const uint32_t k,
-	const uint32_t n,
-	float* __restrict__ res);
+	const u32* __restrict__ row_ptr,
+	const u32* __restrict__ col_idx,
+	const f32* __restrict__ val,
+	const f32* __restrict__ dn,
+	const u32 m,
+	const u32 k,
+	const u32 n,
+	f32* __restrict__ res);
 
 __global__ void _k_ispmm_naive_elemwise_smem(
-	const float* __restrict__ dn,
-	const uint32_t* __restrict__ col_ptr,
-	const uint32_t* __restrict__ row_idx,
-	const float* __restrict__ val,
-	const uint32_t m,
-	const uint32_t k,
-	const uint32_t n,
-	float* __restrict__ res);
+	const f32* __restrict__ dn,
+	const u32* __restrict__ col_ptr,
+	const u32* __restrict__ row_idx,
+	const f32* __restrict__ val,
+	const u32 m,
+	const u32 k,
+	const u32 n,
+	f32* __restrict__ res);
 
 __global__ void _k_spmm_coalesced_nnzwise(
-	const uint32_t* __restrict__ row_ptr,
-	const uint32_t* __restrict__ col_idx,
-	const float* __restrict__ val,
-	const float* __restrict__ dn,
-	const uint32_t m,
-	const uint32_t k,
-	const uint32_t n,
-	float* __restrict__ res);
+	const u32* __restrict__ row_ptr,
+	const u32* __restrict__ col_idx,
+	const f32* __restrict__ val,
+	const f32* __restrict__ dn,
+	const u32 m,
+	const u32 k,
+	const u32 n,
+	f32* __restrict__ res);
 
 __global__ void _k_ispmm_coalesced_nnzwise(
-	const float* __restrict__ dn,
-	const uint32_t* __restrict__ col_ptr,
-	const uint32_t* __restrict__ row_idx,
-	const float* __restrict__ val,
-	const uint32_t m,
-	const uint32_t k,
-	const uint32_t n,
-	float* __restrict__ res);
+	const f32* __restrict__ dn,
+	const u32* __restrict__ col_ptr,
+	const u32* __restrict__ row_idx,
+	const f32* __restrict__ val,
+	const u32 m,
+	const u32 k,
+	const u32 n,
+	f32* __restrict__ res);
 
 __global__ void _k_spmm_coalesced_nnzwise_no_smem(
-	const uint32_t* __restrict__ row_ptr,
-	const uint32_t* __restrict__ col_idx,
-	const float* __restrict__ val,
-	const float* __restrict__ dn,
-	const size_t m,
-	const size_t k,
-	const size_t n,
-	float* __restrict__ res);
+	const u32* __restrict__ row_ptr,
+	const u32* __restrict__ col_idx,
+	const f32* __restrict__ val,
+	const f32* __restrict__ dn,
+	const u32 m,
+	const u32 k,
+	const u32 n,
+	f32* __restrict__ res);
 
 __global__ void _k_ispmm_coalesced_nnzwise_no_smem(
-	const float* __restrict__ dn,
-	const uint32_t* __restrict__ col_ptr,
-	const uint32_t* __restrict__ row_idx,
-	const float* __restrict__ val,
-	const size_t m,
-	const size_t k,
-	const size_t n,
-	float* __restrict__ res);
+	const f32* __restrict__ dn,
+	const u32* __restrict__ col_ptr,
+	const u32* __restrict__ row_idx,
+	const f32* __restrict__ val,
+	const u32 m,
+	const u32 k,
+	const u32 n,
+	f32* __restrict__ res);
 
 __global__ void _k_ispmm_vectorized_nnzwise_regs(
-	const float* __restrict__ dn,
-	const uint32_t* __restrict__ col_ptr,
-	const uint32_t* __restrict__ row_idx,
-	const float* __restrict__ val,
-	const size_t m,
-	const size_t k,
-	const size_t n,
-	float* __restrict__ res);
+	const f32* __restrict__ dn,
+	const u32* __restrict__ col_ptr,
+	const u32* __restrict__ row_idx,
+	const f32* __restrict__ val,
+	const u32 m,
+	const u32 k,
+	const u32 n,
+	f32* __restrict__ res);
+
+__global__ void _k_spmm_vectorized_nnzwise_regs(
+	const u32* __restrict__ row_ptr,
+	const u32* __restrict__ col_idx,
+	const f32* __restrict__ val,
+	const f32* __restrict__ dn,
+	const u32 m,
+	const u32 k,
+	const u32 n,
+	f32* __restrict__ res);

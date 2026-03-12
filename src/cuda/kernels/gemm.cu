@@ -1,23 +1,23 @@
 #include "gemm.cuh"
 
 __global__ void gemm(
-	const float* __restrict__ a,  // row-major
-	const float* __restrict__ b,  // col-major
+	const f32* __restrict__ a,  // row-major
+	const f32* __restrict__ b,  // col-major
 	const size_t m,
 	const size_t k,
 	const size_t n,
-	float* __restrict__ res)
+	f32* __restrict__ res)
 {
-	uint32_t x = threadIdx.x;
-	uint32_t y = blockIdx.x;
+	u32 x = threadIdx.x;
+	u32 y = blockIdx.x;
 
 	if (x >= n || y >= m) {  // not really needed
 		return;
 	}
 
-	float acc = 0.0f;
+	f32 acc = 0.0f;
 	// TODO: Change hardcoded value
-	__shared__ float a_row_sm[512];
+	__shared__ f32 a_row_sm[512];
 
 	a_row_sm[x] = get_elem_rm(a, k, y, x);
 	__syncthreads();

@@ -12,7 +12,7 @@ Dense parse_dn_test_case(const std::filesystem::path& path)
 
 	rm.val.resize(rm.rows * rm.cols);
 
-	for (float& k : rm.val) {
+	for (f32& k : rm.val) {
 		stream >> k;
 	}
 	return rm;
@@ -33,15 +33,15 @@ CSR parse_csr_test_case(const std::filesystem::path& path)
 	csr.col_idx.resize(csr.nnz);
 	csr.val.resize(csr.nnz);
 
-	for (uint32_t& k : csr.row_ptr) {
+	for (u32& k : csr.row_ptr) {
 		stream >> k;
 	}
 
-	for (uint32_t& k : csr.col_idx) {
+	for (u32& k : csr.col_idx) {
 		stream >> k;
 	}
 
-	for (float& k : csr.val) {
+	for (f32& k : csr.val) {
 		stream >> k;
 	}
 
@@ -66,31 +66,31 @@ CSR parse_csr_dlmc(const std::filesystem::path& filepath)
 	std::istringstream line_stream(line);
 	std::getline(line_stream, token, ',');
 
-	csr.rows = static_cast<uint32_t>(std::stoul(token));
+	csr.rows = static_cast<u32>(std::stoul(token));
 
 	std::getline(line_stream, token, ',');
-	csr.cols = static_cast<uint32_t>(std::stoul(token));
+	csr.cols = static_cast<u32>(std::stoul(token));
 
 	std::getline(line_stream, token, ',');
-	csr.nnz = static_cast<uint32_t>(std::stoul(token));
+	csr.nnz = static_cast<u32>(std::stoul(token));
 
 	csr.row_ptr.resize(csr.rows + 1);
 	csr.col_idx.resize(csr.nnz);
 	csr.val.resize(csr.nnz);
 
-	for (uint32_t& k : csr.row_ptr) {
+	for (u32& k : csr.row_ptr) {
 		file_stream >> k;
 	}
 
-	for (uint32_t& k : csr.col_idx) {
+	for (u32& k : csr.col_idx) {
 		file_stream >> k;
 	}
 
-	for (float& k : csr.val) {
+	for (f32& k : csr.val) {
 		file_stream >> k;
 	}
 
-	gen_synth_weights_vec<float>(csr.val, csr.nnz);
+	gen_synth_weights_vec<f32>(csr.val, csr.nnz);
 
 	return csr;
 }
@@ -110,15 +110,15 @@ CSC parse_csc_test_case(const std::filesystem::path& path)
 	csc.row_idx.resize(csc.nnz);
 	csc.val.resize(csc.nnz);
 
-	for (uint32_t& k : csc.col_ptr) {
+	for (u32& k : csc.col_ptr) {
 		stream >> k;
 	}
 
-	for (uint32_t& k : csc.row_idx) {
+	for (u32& k : csc.row_idx) {
 		stream >> k;
 	}
 
-	for (float& k : csc.val) {
+	for (f32& k : csc.val) {
 		stream >> k;
 	}
 
@@ -137,13 +137,13 @@ CSC parse_csc_test_case(const std::filesystem::path& path)
 //
 // 	std::istringstream header_stream(header_line);
 // 	std::getline(header_stream, token, ',');
-// 	res.rows = static_cast<uint32_t>(std::stoul(token));
+// 	res.rows = static_cast<u32>(std::stoul(token));
 //
 // 	std::getline(header_stream, token, ',');
-// 	res.cols = static_cast<uint32_t>(std::stoul(token));
+// 	res.cols = static_cast<u32>(std::stoul(token));
 //
 // 	std::getline(header_stream, token, ',');
-// 	res.nnz = static_cast<uint32_t>(std::stoul(token));
+// 	res.nnz = static_cast<u32>(std::stoul(token));
 //
 // 	return res;
 // }
@@ -160,10 +160,10 @@ CSC parse_csc_test_case(const std::filesystem::path& path)
 //
 // 	std::istringstream header_stream(header_line);
 // 	std::getline(header_stream, token, ',');
-// 	res.rows = static_cast<uint32_t>(std::stoul(token));
+// 	res.rows = static_cast<u32>(std::stoul(token));
 //
 // 	std::getline(header_stream, token, ',');
-// 	res.cols = static_cast<uint32_t>(std::stoul(token));
+// 	res.cols = static_cast<u32>(std::stoul(token));
 //
 // 	return res;
 // }
@@ -182,30 +182,30 @@ CSC parse_csc_test_case(const std::filesystem::path& path)
 // 	Csc::init(csc, header.rows, header.cols, header.nnz);
 // 	Csc::partition(csc, reinterpret_cast<uintptr_t>(dst));
 //
-// 	std::vector<uint32_t> row_ptr_vec(header.rows + 1, 0);
+// 	std::vector<u32> row_ptr_vec(header.rows + 1, 0);
 //
 // 	std::string line, token;
 // 	std::getline(file_stream, line);
 // 	std::istringstream row_ptr_stream(line);
 // 	for (size_t i = 0; i < header.rows + 1; ++i) {
 // 		row_ptr_stream >> token;
-// 		row_ptr_vec[i] = static_cast<uint32_t>(std::stoi(token));
+// 		row_ptr_vec[i] = static_cast<u32>(std::stoi(token));
 // 	}
 //
-// 	std::vector<uint32_t> col_idx_vec(header.nnz, 0);
+// 	std::vector<u32> col_idx_vec(header.nnz, 0);
 //
 // 	std::getline(file_stream, line);
 // 	std::istringstream col_idx_stream(line);
 // 	for (size_t i = 0; i < header.nnz; ++i) {
 // 		col_idx_stream >> token;
-// 		col_idx_vec[i] = static_cast<uint32_t>(std::stoi(token));
+// 		col_idx_vec[i] = static_cast<u32>(std::stoi(token));
 // 	}
 //
 // 	csr_to_csc(csc, row_ptr_vec, col_idx_vec);
 //
 // 	std::random_device                    rd;
 // 	std::minstd_rand                      rng(rd());
-// 	std::uniform_real_distribution<float> uni_real_dist(0.0f, 1.0f);
+// 	std::uniform_real_distribution<f32> uni_real_dist(0.0f, 1.0f);
 // 	for (size_t i = 0; i < csc.val_count; ++i) {
 // 		csc.val[i] = uni_real_dist(rng);
 // 	}

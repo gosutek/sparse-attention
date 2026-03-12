@@ -1,15 +1,28 @@
 #if !defined(HELPERS_H)
 #define HELPERS_H
 
+#include <stdint.h>
+
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define CEIL_DIVI(m, n) (((m) + (n) - 1) / (n))
 #define PADDING_POW2(n, p) ((((p) - ((n) & ((p) - 1))) & ((p) - 1)))
-#define GIB(n) ((uint64_t)(n) << 30)
-#define MIB(n) ((uint64_t)(n) << 20)
-#define KIB(n) ((uint64_t)(n) << 10)
+#define GIB(n) ((u64)(n) << 30)
+#define MIB(n) ((u64)(n) << 20)
+#define KIB(n) ((u64)(n) << 10)
 #define LOWER_BITS_MASK(n) (((1u) << (n)) - 1)
 #define MOD_POW2(n, p) ((n) & ((p) - 1))
+
+typedef uint8_t  u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
+typedef int8_t   i8;
+typedef int16_t  i16;
+typedef int32_t  i32;
+typedef int64_t  i64;
+typedef float    f32;
+typedef double   f64;
 
 #define CUDA_CHECK(x)                                                                                    \
 	do {                                                                                                 \

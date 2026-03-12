@@ -1,21 +1,21 @@
 #include "softmax.cuh"
 
 __global__ void softmax(
-	const float* __restrict__ a,
+	const f32* __restrict__ a,
 	const size_t m,
 	const size_t k,
-	float*       acc,
-	float* __restrict__ res)
+	f32*       acc,
+	f32* __restrict__ res)
 {
-	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
-	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+	u32 x = blockIdx.x * blockDim.x + threadIdx.x;
+	u32 y = blockIdx.y * blockDim.y + threadIdx.y;
 
 	// TODO: std::expf()
-	float e = std::exp(get_elem_rm(a, k, y, x));
+	f32 e = std::exp(get_elem_rm(a, k, y, x));
 	atomicAdd(acc, e);
 
 	__syncthreads();
 
-	float val = e / *acc;
+	f32 val = e / *acc;
 	set_elem_rm(res, k, y, x, val);
 }

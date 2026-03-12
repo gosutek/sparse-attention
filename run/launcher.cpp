@@ -50,7 +50,7 @@ void run_mhsa(MHSA<CSC, CSR>& mhsa)
 	// TODO: can this be async?
 	// TODO: THIS NEEDS TO WRITE TO PAGE-LOCKED MEMORY NOT SOME RANDOM ALLOCATED MEMORY
 	//
-	// CUDA_CHECK(cudaMemcpy(res, q_res, sizeof(float) * kv_size, cudaMemcpyDeviceToHost));
+	// CUDA_CHECK(cudaMemcpy(res, q_res, sizeof(f32) * kv_size, cudaMemcpyDeviceToHost));
 }
 void prepare_mhsa(MHSA<CSC, CSR>& mhsa)
 {
@@ -60,7 +60,7 @@ void prepare_mhsa(MHSA<CSC, CSR>& mhsa)
 	size_t kv_size = mhsa.config.input_sequence_size * MAT_SIZE;  // k OR v's size
 	size_t gemm_res_size = mhsa.config.input_sequence_size * mhsa.config.input_sequence_size;
 
-	size_t res_b_size = sizeof(float) * (kv_size * 4 + gemm_res_size * 2 + 1);  // Q, K, V, gemm result, float acc for softmax, Attention matrix, Final Result
+	size_t res_b_size = sizeof(f32) * (kv_size * 4 + gemm_res_size * 2 + 1);  // Q, K, V, gemm result, f32 acc for softmax, Attention matrix, Final Result
 
 	mhsa.dev = cuda_malloc_device(mhsa.b_size + res_b_size);
 	CUDA_CHECK(cudaMemcpy(mhsa.dev, mhsa.host, mhsa.b_size, cudaMemcpyHostToDevice));
@@ -72,8 +72,8 @@ void prepare_mhsa(MHSA<CSC, CSR>& mhsa)
       * +-------------HOST-----------------+----------------DEVICE---------------------+
    */
 
-	res.x = reinterpret_cast<float*>(mhsa.dev);
-	size_t b_x_size = sizeof(float) * kv_size;
+	res.x = reinterpret_cast<f32*>(mhsa.dev);
+	size_t b_x_size = sizeof(f32) * kv_size;
 
 	char* ptr = reinterpret_cast<char*>(res.x) + b_x_size;
 
@@ -95,7 +95,7 @@ void prepare_mhsa(MHSA<CSC, CSR>& mhsa)
 	res.w_o.partition(ptr);
 	ptr += res.w_o.b_size;
 
-	res.q_res = reinterpret_cast<float*>(ptr);
+	res.q_res = reinterpret_cast<f32*>(ptr);
 	res.k_res = res.q_res + kv_size;
 	res.v_res = res.k_res + kv_size;
 	res.gemm_res = res.v_res + kv_size;
@@ -130,19 +130,19 @@ void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse)
 	}
 }
 
-bool warmup_spmm_csr(SPMM<CSR>& spmm, const uint32_t size_idx, void (*run_kernel)(SPMM<CSR>&, const uint32_t))
+bool warmup_spmm_csr(SPMM<CSR>& spmm, const u32 size_idx, void (*run_kernel)(SPMM<CSR>&, const u32))
 {
 	const size_t res_size = BENCH_DIMS[size_idx] * MAT_SIZE;
-	CUDA_CHECK(cudaMemset(spmm.dev.r[size_idx], 0.0f, res_size * sizeof(float)));
+	CUDA_CHECK(cudaMemset(spmm.dev.r[size_idx], 0.0f, res_size * sizeof(f32)));
 	// PERF: Bounds check
 	assert(size_idx < std::size(BENCH_DIMS) - 1);
 	run_kernel(spmm, size_idx);
 
-	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(f32), cudaMemcpyDeviceToHost));
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	// WARN: Temporary hack
-	std::memcpy(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size * sizeof(float));
+	std::memcpy(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size * sizeof(f32));
 
 	CuSparse cusparse;
 	cusparseCreate(&cusparse.handle);
@@ -151,7 +151,7 @@ bool warmup_spmm_csr(SPMM<CSR>& spmm, const uint32_t size_idx, void (*run_kernel
 	CUSPARSE_CHECK(cusparseSpMM(cusparse.handle,
 		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
 		&cusparse.alpha, cusparse.sparse, cusparse.dense[size_idx], &cusparse.beta, cusparse.res[size_idx], CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse.work_buffer));
-	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(f32), cudaMemcpyDeviceToHost));
 
 	cuda_dealloc_device(cusparse.work_buffer);
 
@@ -203,9 +203,9 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
 	std::ifstream file_stream = { spmm.sparse_path };
 	DLMCHeader    header = parse_dlmc_header(file_stream);
 
-	size_t col_ptr_b_size = sizeof(uint32_t) * (header.n_cols + 1);
-	size_t row_idx_b_size = sizeof(uint32_t) * header.nnz;
-	size_t val_b_size = sizeof(float) * header.nnz;
+	size_t col_ptr_b_size = sizeof(u32) * (header.n_cols + 1);
+	size_t row_idx_b_size = sizeof(u32) * header.nnz;
+	size_t val_b_size = sizeof(f32) * header.nnz;
 	size_t sparse_b_size_aligned = col_ptr_b_size + calc_padding_bytes(col_ptr_b_size, ALIGNMENT_BYTES) +
 	                               row_idx_b_size + calc_padding_bytes(row_idx_b_size, ALIGNMENT_BYTES) +
 	                               val_b_size + calc_padding_bytes(val_b_size, ALIGNMENT_BYTES);
@@ -217,7 +217,7 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
     **/
 	spmm.b_size = sparse_b_size_aligned + 2 * BENCH_DIMS_BSIZE;
 	spmm.host.data = cuda_malloc_host(spmm.b_size);
-	spmm.host.d[0] = reinterpret_cast<float*>(spmm.host.data);
+	spmm.host.d[0] = reinterpret_cast<f32*>(spmm.host.data);
 
 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		generate_token_embeddings(spmm.host.d[i], BENCH_DIMS[i] * MAT_SIZE);
@@ -235,10 +235,10 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
 
 	uintptr_t ptr = reinterpret_cast<uintptr_t>(start_of_sparse) + spmm.host.s.b_size;
 
-	// TODO: use uintptr_t instead of pointer arithmetic on float* (??)
+	// TODO: use uintptr_t instead of pointer arithmetic on f32* (??)
 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
-		spmm.host.r[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
+		spmm.host.r[i] = reinterpret_cast<f32*>(ptr);
+		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(f32);
 	}
 
 	// WARN: asserts cost
@@ -258,8 +258,8 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
 	ptr = reinterpret_cast<uintptr_t>(spmm.dev.data);
 
 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
-		spmm.dev.d[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
+		spmm.dev.d[i] = reinterpret_cast<f32*>(ptr);
+		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(f32);
 	}
 
 	// TODO: This trashes the previous empty object and makes a new one. Make a good copy assignment operator function instead.
@@ -269,8 +269,8 @@ void prepare_spmm_csc(SPMM<CSC>& spmm)
 	ptr += spmm.host.s.b_size;
 
 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
-		spmm.dev.r[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
+		spmm.dev.r[i] = reinterpret_cast<f32*>(ptr);
+		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(f32);
 	}
 }
 /**
@@ -307,7 +307,7 @@ void prepare_spmm_mem_csr(SPMM<CSR>& spmm)
 	spmm.host.s = parse_dlmc(spmm.host.data, spmm.sparse_path);
 
 	void* start_of_dense = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(spmm.host.s.row_ptr) + spmm.host.s.b_size);  // at the start of the sparse matrix, skip spmm.host.s.b_size bytes.
-	spmm.host.d[0] = reinterpret_cast<float*>(start_of_dense);
+	spmm.host.d[0] = reinterpret_cast<f32*>(start_of_dense);
 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
 		generate_token_embeddings(spmm.host.d[i], BENCH_DIMS[i] * MAT_SIZE);
 		if (i + 1 < std::size(BENCH_DIMS)) {
@@ -317,10 +317,10 @@ void prepare_spmm_mem_csr(SPMM<CSR>& spmm)
 
 	uintptr_t ptr = reinterpret_cast<uintptr_t>(start_of_dense) + BENCH_DIMS[std::size(BENCH_DIMS) - 1] * MAT_SIZE;  // skip the dense matrix
 
-	// TODO: use uintptr_t instead of pointer arithmetic on float* (??)
+	// TODO: use uintptr_t instead of pointer arithmetic on f32* (??)
 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
-		spmm.host.r[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
+		spmm.host.r[i] = reinterpret_cast<f32*>(ptr);
+		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(f32);
 	}
 
 	spmm.dev.data = cuda_malloc_device(spmm.b_size);
@@ -336,13 +336,13 @@ void prepare_spmm_mem_csr(SPMM<CSR>& spmm)
 	ptr += spmm.host.s.b_size;
 
 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
-		spmm.dev.d[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
+		spmm.dev.d[i] = reinterpret_cast<f32*>(ptr);
+		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(f32);
 	}
 
 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
-		spmm.dev.r[i] = reinterpret_cast<float*>(ptr);
-		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(float);
+		spmm.dev.r[i] = reinterpret_cast<f32*>(ptr);
+		ptr += BENCH_DIMS[i] * MAT_SIZE * sizeof(f32);
 	}
 }
 
@@ -379,19 +379,19 @@ void load_spmm_dlmc(SPMM<CSR>& spmm, const std::filesystem::path sparse_path, st
 	// spmm.b_size = get_dlmc_byte_size(sparse_path) + get_row_major_byte_size(dense_path);
 }
 
-bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint32_t size_idx, void (*run_kernel)(SPMM<CSC>&, const uint32_t))
+bool warmup_spmm_csc(SPMM<CSC>& spmm, const u32 size_idx, void (*run_kernel)(SPMM<CSC>&, const u32))
 {
 	const size_t res_size = BENCH_DIMS[size_idx] * MAT_SIZE;
-	CUDA_CHECK(cudaMemset(spmm.dev.r[size_idx], 0.0f, res_size * sizeof(float)));
+	CUDA_CHECK(cudaMemset(spmm.dev.r[size_idx], 0.0f, res_size * sizeof(f32)));
 	// PERF: Bounds check
 	assert(size_idx < std::size(BENCH_DIMS) - 1);  // DON'T REMOVE, YOU ARE DOING size_idx + 1 later
 	run_kernel(spmm, size_idx);
 
-	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(f32), cudaMemcpyDeviceToHost));
 	CUDA_CHECK(cudaDeviceSynchronize());
 
 	// WARN: Temporary hack
-	std::memcpy(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size * sizeof(float));
+	std::memcpy(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size * sizeof(f32));
 
 	CuSparse cusparse;
 	cusparseCreate(&cusparse.handle);
@@ -400,7 +400,7 @@ bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint32_t size_idx, void (*run_kernel
 	CUSPARSE_CHECK(cusparseSpMM(cusparse.handle,
 		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
 		&cusparse.alpha, cusparse.sparse, cusparse.dense[size_idx], &cusparse.beta, cusparse.res[size_idx], CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse.work_buffer));
-	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(float), cudaMemcpyDeviceToHost));
+	CUDA_CHECK(cudaMemcpy(spmm.host.r[size_idx], spmm.dev.r[size_idx], res_size * sizeof(f32), cudaMemcpyDeviceToHost));
 
 	cuda_dealloc_device(cusparse.work_buffer);
 
@@ -415,7 +415,7 @@ bool warmup_spmm_csc(SPMM<CSC>& spmm, const uint32_t size_idx, void (*run_kernel
 	return verify_res(spmm.host.r[size_idx + 1], spmm.host.r[size_idx], res_size);
 }
 
-void run_spmm_naive_elemwise_gmem(SPMM<CSR>& spmm, const uint32_t idx)
+void run_spmm_naive_elemwise_gmem(SPMM<CSR>& spmm, const u32 idx)
 {
 	const size_t m = spmm.dev.s.rows;
 	const size_t k = spmm.dev.s.cols;
@@ -431,7 +431,7 @@ void run_spmm_naive_elemwise_gmem(SPMM<CSR>& spmm, const uint32_t idx)
 	spmm_naive_elemwise_gmem<<<grid, block>>>(spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val, spmm.dev.d[idx], m, k, n, spmm.dev.r[idx]);
 }
 
-void run_spmm_naive_elemwise_csc_gmem(SPMM<CSC>& spmm, const uint32_t idx)
+void run_spmm_naive_elemwise_csc_gmem(SPMM<CSC>& spmm, const u32 idx)
 {
 	const size_t m = BENCH_DIMS[idx];
 	const size_t k = spmm.dev.s.rows;
@@ -447,7 +447,7 @@ void run_spmm_naive_elemwise_csc_gmem(SPMM<CSC>& spmm, const uint32_t idx)
 	spmm_naive_elemwise_csc_gmem<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
 
-void run_spmm_naive_elemwise_csc_smem(SPMM<CSC>& spmm, const uint32_t idx)
+void run_spmm_naive_elemwise_csc_smem(SPMM<CSC>& spmm, const u32 idx)
 {
 	const size_t m = BENCH_DIMS[idx];
 	const size_t k = spmm.dev.s.rows;
@@ -459,7 +459,7 @@ void run_spmm_naive_elemwise_csc_smem(SPMM<CSC>& spmm, const uint32_t idx)
 	spmm_naive_elemwise_csc_smem<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
 
-void run_spmm_coalesced_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx)
+void run_spmm_coalesced_elemwise_csr(SPMM<CSR>& spmm, const u32 idx)
 {
 	const size_t m = BENCH_DIMS[idx];
 	const size_t k = spmm.dev.s.rows;
@@ -471,7 +471,7 @@ void run_spmm_coalesced_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx)
 	spmm_coalesced_elemwise_csr<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
 
-// void run_spmm_blocktiling_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx)
+// void run_spmm_blocktiling_elemwise_csr(SPMM<CSR>& spmm, const u32 idx)
 // {
 // 	const size_t m = BENCHMARKING_DENSE_N_ROWS[idx];
 // 	const size_t k = spmm.dev.s.rows;
@@ -486,7 +486,7 @@ void run_spmm_coalesced_elemwise_csr(SPMM<CSR>& spmm, const uint32_t idx)
 // 	spmm_blocktiling_elemwise_csr<<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.row_ptr, spmm.dev.s.col_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 // }
 
-void run_spmm_coalesced_nnzwise(SPMM<CSC>& spmm, const uint32_t idx)
+void run_spmm_coalesced_nnzwise(SPMM<CSC>& spmm, const u32 idx)
 {
 	const size_t m = BENCH_DIMS[idx];
 	const size_t k = spmm.dev.s.rows;
@@ -500,7 +500,7 @@ void run_spmm_coalesced_nnzwise(SPMM<CSC>& spmm, const uint32_t idx)
 	spmm_coalesced_nnzwise<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
 
-void run_spmm_coalesced_nnzwise_no_smem(SPMM<CSC>& spmm, const uint32_t idx)
+void run_spmm_coalesced_nnzwise_no_smem(SPMM<CSC>& spmm, const u32 idx)
 {
 	const size_t m = BENCH_DIMS[idx];
 	const size_t k = spmm.dev.s.rows;
@@ -514,7 +514,7 @@ void run_spmm_coalesced_nnzwise_no_smem(SPMM<CSC>& spmm, const uint32_t idx)
 	spmm_coalesced_nnzwise_no_smem<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
 
-void run_spmm_coalesced_nnzwise_last(SPMM<CSC>& spmm, const uint32_t idx)
+void run_spmm_coalesced_nnzwise_last(SPMM<CSC>& spmm, const u32 idx)
 {
 	const size_t m = BENCH_DIMS[idx];
 	const size_t k = spmm.dev.s.rows;
@@ -529,7 +529,7 @@ void run_spmm_coalesced_nnzwise_last(SPMM<CSC>& spmm, const uint32_t idx)
 	spmm_coalesced_nnzwise_last<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, bn, spmm.dev.r[idx]);
 }
 
-void run_spmm_vectorized_nnzwise_regs(SPMM<CSC>& spmm, const uint32_t idx)
+void run_spmm_vectorized_nnzwise_regs(SPMM<CSC>& spmm, const u32 idx)
 {
 	const size_t m = BENCH_DIMS[idx];
 	const size_t k = spmm.dev.s.rows;
@@ -544,19 +544,19 @@ void run_spmm_vectorized_nnzwise_regs(SPMM<CSC>& spmm, const uint32_t idx)
 	spmm_vectorized_nnzwise_regs<n_threads><<<grid, block>>>(spmm.dev.d[idx], spmm.dev.s.col_ptr, spmm.dev.s.row_idx, spmm.dev.s.val, m, k, n, spmm.dev.r[idx]);
 }
 
-std::vector<float> read_row_major_from_rm(const std::filesystem::path& filepath, size_t size)
+std::vector<f32> read_row_major_from_rm(const std::filesystem::path& filepath, size_t size)
 {
 	if (!std::filesystem::exists(filepath) && !std::filesystem::is_regular_file(filepath)) {
 		throw std::runtime_error(filepath.string() + " does not exist\n");
 	}
-	std::vector<float> res;
+	std::vector<f32> res;
 	res.reserve(size);
 
 	std::ifstream file_stream(filepath, std::ios_base::in);
 	if (!file_stream) {
 		throw std::runtime_error("Failed to open file:" + filepath.string());
 	}
-	float tmp;
+	f32 tmp;
 	while (file_stream >> tmp) {
 		res.push_back(tmp);
 	}
@@ -565,7 +565,7 @@ std::vector<float> read_row_major_from_rm(const std::filesystem::path& filepath,
 
 std::vector<std::filesystem::path> collect_rec_input(const std::filesystem::path& path)
 {
-	uint32_t                                            n_unknown_extention_files{};
+	u32                                            n_unknown_extention_files{};
 	std::vector<std::filesystem::path>                  input_files;
 	const std::filesystem::recursive_directory_iterator rec_dir_iter(path);
 
@@ -589,14 +589,14 @@ std::vector<std::filesystem::path> collect_rec_input(const std::filesystem::path
  * c(m, n)
  * Expects b to be in column-major
  */
-[[maybe_unused]] static std::vector<float> host_spmm_rm_cm(const std::vector<float>& a, const std::vector<float>& b, size_t m, size_t k, size_t n)
+[[maybe_unused]] static std::vector<f32> host_spmm_rm_cm(const std::vector<f32>& a, const std::vector<f32>& b, size_t m, size_t k, size_t n)
 {
-	std::vector<float> res;
+	std::vector<f32> res;
 	res.reserve(m * n);
 
 	for (size_t a_row = 0; a_row < m; ++a_row) {
 		for (size_t b_col = 0; b_col < n; ++b_col) {
-			float acc = 0;
+			f32 acc = 0;
 			for (size_t i = 0; i < k; ++i) {
 				acc += a[a_row * k + i] * b[b_col * k + i];
 			}
@@ -607,14 +607,14 @@ std::vector<std::filesystem::path> collect_rec_input(const std::filesystem::path
 	return res;
 }
 
-[[maybe_unused]] static std::vector<float> host_spmm_rm_rm(std::vector<float> a, std::vector<float> b, size_t m, size_t k, size_t n)
+[[maybe_unused]] static std::vector<f32> host_spmm_rm_rm(std::vector<f32> a, std::vector<f32> b, size_t m, size_t k, size_t n)
 {
-	std::vector<float> res;
+	std::vector<f32> res;
 	res.reserve(m * n);
 
 	for (size_t a_row = 0; a_row < m; ++a_row) {
 		for (size_t b_col = 0; b_col < n; ++b_col) {
-			float acc = 0;
+			f32 acc = 0;
 			for (size_t i = 0; i < k; ++i) {
 				acc += a[a_row * k + i] * b[i * k + b_col];
 			}
