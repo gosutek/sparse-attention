@@ -192,19 +192,22 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 			}
 			break;
 		}
-	case SPMM_KERNEL_TYPE_NNZWISE_COLUMN_TILING:
+	case SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE:
 		{
-			constexpr u32 BN = 16;
-			const dim3    block(32);
+			const dim3 block(32);
 
 			const u64 smem_bsize = (block.x / _CONSTANTS_WARP_SIZE) * sizeof *d_dn.val;
 
 			if (invert == SPMM_KERNEL_NO_INVERT) {
-				const dim3 grid(CEIL_DIVI(d_dn.cols, BN), d_sp.rows);
-			} else {
-				const dim3 grid(CEIL_DIVI(d_sp.cols, BN), d_dn.rows);
+				constexpr u32 BM = 16;
+				const dim3    grid(CEIL_DIVI(d_sp.rows, BM), d_dn.cols);
 
-				_k_ispmm_coalesced_nnzwise_last<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, BN, d_res.val);
+				_k_spmm_column_tiling_nnzwise<<<grid, block, smem_bsize>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, BM, d_res.val);
+			} else {
+				constexpr u32 BN = 16;
+				const dim3    grid(CEIL_DIVI(d_sp.cols, BN), d_dn.rows);
+
+				_k_ispmm_column_tiling_nnzwise<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, BN, d_res.val);
 			}
 			break;
 		}

@@ -597,7 +597,58 @@ __global__ void _k_ispmm_vectorized_nnzwise_regs(
   * +------------------------------------------------------------------------------+
 */
 
-__global__ void _k_ispmm_coalesced_nnzwise_last(
+__global__ void _k_spmm_column_tiling_nnzwise(
+	const u32* __restrict__ row_ptr,
+	const u32* __restrict__ col_idx,
+	const f32* __restrict__ val,
+	const f32* __restrict__ dn,
+	const u32 m,
+	const u32 k,
+	const u32 n,
+	const u32 bm,
+	f32* __restrict__ res)
+{
+	for (u32 r = 0; r < bm; ++r) {
+		f32 acc = 0.0f;
+		for (u32 i = row_ptr[blockIdx.x * bm + r] + threadIdx.x; i < row_ptr[blockIdx.x * bm + r + 1]; i += blockDim.x) {
+			acc += get_elem_cm(dn, k, col_idx[i], blockIdx.y) * val[i];
+		}
+		__syncwarp();
+
+		for (u32 i = _CONSTANTS_WARP_SIZE / 2; i > 0; i /= 2) {
+			acc += __shfl_xor_sync(0xffffffff, acc, i, _CONSTANTS_WARP_SIZE);
+		}
+
+		const u32 lane_id = MOD_POW2(threadIdx.x, _CONSTANTS_WARP_SIZE);
+		const u32 warp_id = threadIdx.x / _CONSTANTS_WARP_SIZE;
+
+		const u32             warp_cnt = blockDim.x / _CONSTANTS_WARP_SIZE;
+		extern __shared__ f32 warp_sums[];
+
+		if (lane_id == 0) {
+			warp_sums[warp_id] = acc;
+		}
+
+		__syncthreads();
+
+		if (warp_id == 0 && lane_id < warp_cnt) {
+			// WARN: some threads point to garbage
+			f32 acc = warp_sums[lane_id];
+
+			const u32 mask = LOWER_BITS_MASK(warp_cnt);
+
+			for (u32 i = warp_cnt / 2; i > 0; i /= 2) {
+				acc += __shfl_xor_sync(mask, acc, i, _CONSTANTS_WARP_SIZE);
+			}
+
+			if (lane_id == 0) {
+				set_elem_rm(res, n, blockIdx.x * bm + r, blockIdx.y, acc);
+			}
+		}
+	}
+}
+
+__global__ void _k_ispmm_column_tiling_nnzwise(
 	const f32* __restrict__ dn,
 	const u32* __restrict__ col_ptr,
 	const u32* __restrict__ row_idx,
