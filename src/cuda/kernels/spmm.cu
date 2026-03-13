@@ -21,9 +21,9 @@ __global__ void _k_spmm_naive_elemwise_gmem(
 
 	f32 acc = 0.0f;
 	for (u32 i = row_ptr[y]; i < row_ptr[y + 1]; ++i) {
-		acc += get_elem_cm(dn, k, col_idx[i], x) * val[i];
+		acc += _d_dn_cm_get(dn, k, col_idx[i], x) * val[i];
 	}
-	set_elem_rm(res, n, y, x, acc);
+	_d_dn_rm_set(res, n, y, x, acc);
 }
 
 __global__ void _k_ispmm_naive_elemwise_gmem(
@@ -40,10 +40,10 @@ __global__ void _k_ispmm_naive_elemwise_gmem(
 	const u32 y = blockIdx.y * blockDim.y + threadIdx.y;
 
 	f32 acc = 0.0f;
-	for (u32 i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {     // 1 LDG
-		acc += get_elem_rm(dn, k, y, row_idx[i]) * val[i];  // 2 LDG
+	for (u32 i = col_ptr[x]; i < col_ptr[x + 1]; ++i) {      // 1 LDG
+		acc += _d_dn_rm_get(dn, k, y, row_idx[i]) * val[i];  // 2 LDG
 	}
-	set_elem_rm(res, n, y, x, acc);
+	_d_dn_rm_set(res, n, y, x, acc);
 }
 
 /*
@@ -69,14 +69,14 @@ __global__ void _k_spmm_naive_elemwise_smem(
 
 	extern __shared__ f32 dn_col_smem[];
 
-	dn_col_smem[r] = get_elem_cm(dn, k, r, c);
+	dn_col_smem[r] = _d_dn_cm_get(dn, k, r, c);
 	__syncthreads();
 
 	for (u32 i = row_ptr[r]; i < row_ptr[r + 1]; ++i) {
 		acc += dn_col_smem[col_idx[i]] * val[i];
 	}
 
-	set_elem_rm(res, n, r, c, acc);
+	_d_dn_rm_set(res, n, r, c, acc);
 }
 
 __global__ void _k_ispmm_naive_elemwise_smem(
@@ -96,14 +96,14 @@ __global__ void _k_ispmm_naive_elemwise_smem(
 
 	extern __shared__ f32 dn_row_smem[];
 
-	dn_row_smem[c] = get_elem_rm(dn, k, r, c);
+	dn_row_smem[c] = _d_dn_rm_get(dn, k, r, c);
 	__syncthreads();
 
 	for (u32 i = col_ptr[c]; i < col_ptr[c + 1]; ++i) {
 		acc += dn_row_smem[row_idx[i]] * val[i];
 	}
 
-	set_elem_rm(res, n, r, c, acc);
+	_d_dn_rm_set(res, n, r, c, acc);
 }
 
 /*
@@ -127,7 +127,7 @@ __global__ void _k_spmm_coalesced_nnzwise(
 	f32* const            warp_sums = smem + k;  // INFO: This is aligned to f32 (fosu)
 
 	for (u32 i = threadIdx.x; i < k; i += blockDim.x) {
-		dn_col_smem[i] = get_elem_cm(dn, k, i, blockIdx.x);
+		dn_col_smem[i] = _d_dn_cm_get(dn, k, i, blockIdx.x);
 	}
 	__syncthreads();
 
@@ -163,7 +163,7 @@ __global__ void _k_spmm_coalesced_nnzwise(
 		}
 
 		if (lane_id == 0) {
-			set_elem_rm(res, n, blockIdx.y, blockIdx.x, acc);
+			_d_dn_rm_set(res, n, blockIdx.y, blockIdx.x, acc);
 		}
 	}
 }
@@ -183,7 +183,7 @@ __global__ void _k_ispmm_coalesced_nnzwise(
 	f32* const            warp_sums = smem + k;  // INFO: This is aligned to f32 (fosu)
 
 	for (u32 i = threadIdx.x; i < k; i += blockDim.x) {
-		dn_row_smem[i] = get_elem_rm(dn, k, blockIdx.y, i);
+		dn_row_smem[i] = _d_dn_rm_get(dn, k, blockIdx.y, i);
 	}
 	__syncthreads();
 
@@ -221,7 +221,7 @@ __global__ void _k_ispmm_coalesced_nnzwise(
 		}
 
 		if (lane_id == 0) {
-			set_elem_rm(res, n, blockIdx.y, blockIdx.x, acc);
+			_d_dn_rm_set(res, n, blockIdx.y, blockIdx.x, acc);
 		}
 	}
 }
@@ -244,7 +244,7 @@ __global__ void _k_spmm_coalesced_nnzwise_no_smem(
 {
 	f32 acc = 0.0f;
 	for (u32 i = row_ptr[blockIdx.y] + threadIdx.x; i < row_ptr[blockIdx.y + 1]; i += blockDim.x) {
-		acc += get_elem_cm(dn, k, col_idx[i], blockIdx.x) * val[i];
+		acc += _d_dn_cm_get(dn, k, col_idx[i], blockIdx.x) * val[i];
 	}
 	__syncwarp();
 
@@ -275,7 +275,7 @@ __global__ void _k_spmm_coalesced_nnzwise_no_smem(
 		}
 
 		if (lane_id == 0) {
-			set_elem_rm(res, n, blockIdx.y, blockIdx.x, acc);
+			_d_dn_rm_set(res, n, blockIdx.y, blockIdx.x, acc);
 		}
 	}
 }
@@ -292,7 +292,7 @@ __global__ void _k_ispmm_coalesced_nnzwise_no_smem(
 {
 	f32 acc = 0.0f;
 	for (u32 i = col_ptr[blockIdx.x] + threadIdx.x; i < col_ptr[blockIdx.x + 1]; i += blockDim.x) {
-		acc += get_elem_rm(dn, k, blockIdx.y, row_idx[i]) * val[i];
+		acc += _d_dn_rm_get(dn, k, blockIdx.y, row_idx[i]) * val[i];
 	}
 	__syncwarp();
 
@@ -323,7 +323,7 @@ __global__ void _k_ispmm_coalesced_nnzwise_no_smem(
 		}
 
 		if (lane_id == 0) {
-			set_elem_rm(res, n, blockIdx.y, blockIdx.x, acc);
+			_d_dn_rm_set(res, n, blockIdx.y, blockIdx.x, acc);
 		}
 	}
 }
@@ -397,10 +397,10 @@ __global__ void _k_spmm_vectorized_nnzwise_regs(
 
 	if (blockIdx.z == 0 && warp == 0 && lane == 0) {  // WD
 		for (u32 i = 0; i < ri_unaligned_cnt; ++i) {  // up to 3 iterations
-			acc += get_elem_cm(dn, k, col_idx[base_unaligned_i + i], blockIdx.x) * val[base_unaligned_i + i];
+			acc += _d_dn_cm_get(dn, k, col_idx[base_unaligned_i + i], blockIdx.x) * val[base_unaligned_i + i];
 		}
 		for (u32 i = 0; i < n_tail_loads; ++i) {  // up to 3 iterations
-			acc += get_elem_cm(dn, k, col_idx[ri_aligned_i + gridDim.z * nnz_block + i], blockIdx.x) * val[ri_aligned_i + gridDim.z * nnz_block + i];
+			acc += _d_dn_cm_get(dn, k, col_idx[ri_aligned_i + gridDim.z * nnz_block + i], blockIdx.x) * val[ri_aligned_i + gridDim.z * nnz_block + i];
 		}
 	}
 	u32 block_start = 0;
@@ -419,10 +419,10 @@ __global__ void _k_spmm_vectorized_nnzwise_regs(
 		reinterpret_cast<uint4*>(&t_col_idx)[0] = row_idx_v[0];
 		reinterpret_cast<float4*>(&t_val)[0] = val_v[0];
 
-		acc += get_elem_cm(dn, k, t_col_idx[0], blockIdx.y) * t_val[0];
-		acc += get_elem_cm(dn, k, t_col_idx[1], blockIdx.y) * t_val[1];
-		acc += get_elem_cm(dn, k, t_col_idx[2], blockIdx.y) * t_val[2];
-		acc += get_elem_cm(dn, k, t_col_idx[3], blockIdx.y) * t_val[3];
+		acc += _d_dn_cm_get(dn, k, t_col_idx[0], blockIdx.y) * t_val[0];
+		acc += _d_dn_cm_get(dn, k, t_col_idx[1], blockIdx.y) * t_val[1];
+		acc += _d_dn_cm_get(dn, k, t_col_idx[2], blockIdx.y) * t_val[2];
+		acc += _d_dn_cm_get(dn, k, t_col_idx[3], blockIdx.y) * t_val[3];
 	}
 
 	__syncwarp();
@@ -524,11 +524,11 @@ __global__ void _k_ispmm_vectorized_nnzwise_regs(
 
 	if (blockIdx.z == 0 && warp == 0 && lane == 0) {  // WD
 		for (u32 i = 0; i < ri_unaligned_cnt; ++i) {  // up to 3 iterations
-			acc += get_elem_rm(dn, k, blockIdx.y, row_idx[base_unaligned_i + i]) * val[base_unaligned_i + i];
+			acc += _d_dn_rm_get(dn, k, blockIdx.y, row_idx[base_unaligned_i + i]) * val[base_unaligned_i + i];
 			// acc += x_row_smem[row_idx[base_unaligned_i + i]] * val[base_unaligned_i + i];
 		}
 		for (u32 i = 0; i < n_tail_loads; ++i) {  // up to 3 iterations
-			acc += get_elem_rm(dn, k, blockIdx.y, row_idx[ri_aligned_i + gridDim.z * nnz_block + i]) * val[ri_aligned_i + gridDim.z * nnz_block + i];
+			acc += _d_dn_rm_get(dn, k, blockIdx.y, row_idx[ri_aligned_i + gridDim.z * nnz_block + i]) * val[ri_aligned_i + gridDim.z * nnz_block + i];
 			// acc += x_row_smem[row_idx[ri_aligned_i + gridDim.z * nnz_block + i]] * val[ri_aligned_i + gridDim.z * nnz_block + i];
 		}
 	}
@@ -548,10 +548,10 @@ __global__ void _k_ispmm_vectorized_nnzwise_regs(
 		reinterpret_cast<uint4*>(&t_row_idx)[0] = row_idx_v[0];
 		reinterpret_cast<float4*>(&t_val)[0] = val_v[0];
 
-		acc += get_elem_rm(dn, k, blockIdx.y, t_row_idx[0]) * t_val[0];
-		acc += get_elem_rm(dn, k, blockIdx.y, t_row_idx[1]) * t_val[1];
-		acc += get_elem_rm(dn, k, blockIdx.y, t_row_idx[2]) * t_val[2];
-		acc += get_elem_rm(dn, k, blockIdx.y, t_row_idx[3]) * t_val[3];
+		acc += _d_dn_rm_get(dn, k, blockIdx.y, t_row_idx[0]) * t_val[0];
+		acc += _d_dn_rm_get(dn, k, blockIdx.y, t_row_idx[1]) * t_val[1];
+		acc += _d_dn_rm_get(dn, k, blockIdx.y, t_row_idx[2]) * t_val[2];
+		acc += _d_dn_rm_get(dn, k, blockIdx.y, t_row_idx[3]) * t_val[3];
 	}
 
 	__syncwarp();
@@ -611,7 +611,7 @@ __global__ void _k_spmm_column_tiling_nnzwise(
 	for (u32 r = 0; r < bm; ++r) {
 		f32 acc = 0.0f;
 		for (u32 i = row_ptr[blockIdx.x * bm + r] + threadIdx.x; i < row_ptr[blockIdx.x * bm + r + 1]; i += blockDim.x) {
-			acc += get_elem_cm(dn, k, col_idx[i], blockIdx.y) * val[i];
+			acc += _d_dn_cm_get(dn, k, col_idx[i], blockIdx.y) * val[i];
 		}
 		__syncwarp();
 
@@ -642,7 +642,7 @@ __global__ void _k_spmm_column_tiling_nnzwise(
 			}
 
 			if (lane_id == 0) {
-				set_elem_rm(res, n, blockIdx.x * bm + r, blockIdx.y, acc);
+				_d_dn_rm_set(res, n, blockIdx.x * bm + r, blockIdx.y, acc);
 			}
 		}
 	}
@@ -662,7 +662,7 @@ __global__ void _k_ispmm_column_tiling_nnzwise(
 	for (u32 c = 0; c < bn; ++c) {
 		f32 acc = 0.0f;
 		for (u32 i = col_ptr[blockIdx.x * bn + c] + threadIdx.x; i < col_ptr[blockIdx.x * bn + c + 1]; i += blockDim.x) {
-			acc += get_elem_rm(dn, k, blockIdx.y, row_idx[i]) * val[i];
+			acc += _d_dn_rm_get(dn, k, blockIdx.y, row_idx[i]) * val[i];
 		}
 		__syncwarp();
 
@@ -693,7 +693,7 @@ __global__ void _k_ispmm_column_tiling_nnzwise(
 			}
 
 			if (lane_id == 0) {
-				set_elem_rm(res, n, blockIdx.y, blockIdx.x * bn + c, acc);
+				_d_dn_rm_set(res, n, blockIdx.y, blockIdx.x * bn + c, acc);
 			}
 		}
 	}

@@ -40,6 +40,7 @@ extern "C"
 		SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE = 5,
 	} SpmmKernelType_t;
 
+	// TODO: Make this into a boolean instead
 	typedef enum
 	{
 		SPMM_KERNEL_INVERT = 0,
@@ -78,7 +79,7 @@ extern "C"
 	struct SpMatDescr;
 	typedef struct SpMatDescr* SpMatDescr_t;
 
-	SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_descr,
+	SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp,
 		uint32_t  rows,
 		uint32_t  cols,
 		uint32_t  nnz,

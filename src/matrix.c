@@ -1,4 +1,5 @@
 #include "matrix.h"
+#include "spmm.h"
 
 static SpmmStatus_t get_max_nnz_per_row(size_t* const max_nnz_out, SpMatDescr* const sp_mat_descr)
 {
@@ -178,7 +179,7 @@ f32 measure_sparsity(void* s, u32 size)
 	return nz / (f32)(size);
 }
 
-SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_descr,
+SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp,
 	u32  rows,
 	u32  cols,
 	u32  nnz,
@@ -186,23 +187,23 @@ SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_desc
 	u32* col_idx,
 	f32* val)
 {
-	if (sp_mat_descr == NULL || *sp_mat_descr != NULL) {
+	if (sp == NULL || *sp != NULL) {
 		return SPMM_STATUS_INVALID_VALUE;
 	}
 
-	if (mem_arena_host_push((MemArena*)ctx, sizeof **sp_mat_descr, (void**)sp_mat_descr) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (mem_arena_host_push((MemArena*)ctx, sizeof **sp, (void**)sp) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
-	(*sp_mat_descr)->format = SPARSE_FORMAT_CSR;
+	(*sp)->format = SPARSE_FORMAT_CSR;
 
-	(*sp_mat_descr)->rows = rows;
-	(*sp_mat_descr)->cols = cols;
-	(*sp_mat_descr)->nnz = nnz;
+	(*sp)->rows = rows;
+	(*sp)->cols = cols;
+	(*sp)->nnz = nnz;
 
-	(*sp_mat_descr)->csr.row_ptr = row_ptr;
-	(*sp_mat_descr)->csr.col_idx = col_idx;
-	(*sp_mat_descr)->val = val;
+	(*sp)->csr.row_ptr = row_ptr;
+	(*sp)->csr.col_idx = col_idx;
+	(*sp)->val = val;
 
 	return SPMM_STATUS_SUCCESS;
 }

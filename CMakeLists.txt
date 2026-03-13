@@ -75,7 +75,9 @@ add_executable(cute_main
 target_link_libraries(cute_main PRIVATE cute)
 
 target_include_directories(cute_main PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/run
+  /opt/cuda/include
 )
 
 target_compile_options(cute_main PRIVATE

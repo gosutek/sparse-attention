@@ -1,7 +1,8 @@
 #include <iostream>
 
-#include "../src/helpers.h"
 #include "../test/unit_tests.h"
+#include "cusparse.h"
+#include "helpers.h"
 #include "utils.h"
 
 #include "spmm.h"
@@ -310,23 +311,34 @@ static std::vector<f32> host_spmm_rm_cm(const std::vector<f32>& a, const std::ve
 
 static void launch_dlmc(const ExecutionContext_t handle, const std::filesystem::path& path)
 {
-	CSR          csr = parse_csr_dlmc(path);
-	SpMatDescr_t lib_csr = NULL;
+	CSR                  csr = parse_csr_dlmc(path);
+	SpMatDescr_t         lib_csr = NULL;
+	cusparseSpMatDescr_t cusparse_csr = NULL;
 	// WARN: Passing .data() is bad cause the vector might reallocate
 	SPMM_CHECK(create_sp_mat_csr(handle, &lib_csr, csr.rows, csr.cols, csr.nnz, csr.row_ptr.data(), csr.col_idx.data(), csr.val.data()));
+	CUSPARSE_CHECK(cusparseCreateCsr(&cusparse_csr,
+		csr.rows, csr.cols, csr.nnz,
+		csr.row_ptr.data(), csr.col_idx.data(), csr.val.data(),
+		CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
 
 	std::vector<f32> dn_buffer;
 	gen_synth_weights_vec<f32>(dn_buffer, csr.cols * csr.cols);
 
-	DnMatDescr_t lib_dn = NULL;
+	DnMatDescr_t         lib_dn = NULL;
+	cusparseDnMatDescr_t cusparse_dn = NULL;
 	// WARN: Passing .data() is bad cause the vector might reallocate
 	SPMM_CHECK(create_dn_mat_col_major(handle, &lib_dn, csr.cols, csr.cols, dn_buffer.data()));
+	CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse_dn,
+		csr.cols, csr.cols, csr.cols, dn_buffer.data(), CUDA_R_32F, CUSPARSE_ORDER_COL));
 
-	DnMatDescr_t     lib_res = NULL;
-	std::vector<f32> res_buffer(csr.rows * csr.cols, 0);
+	DnMatDescr_t         lib_res = NULL;
+	cusparseDnMatDescr_t cusparse_res = NULL;
+	std::vector<f32>     res_buffer(csr.rows * csr.cols, 0);
 	SPMM_CHECK(create_dn_mat_row_major(handle, &lib_res, csr.rows, csr.cols, res_buffer.data()));
+	CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse_res,
+		csr.rows, csr.cols, csr.cols, res_buffer.data(), CUDA_R_32F, CUSPARSE_ORDER_ROW));
 
-	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_NNZWISE_VECTORIZED, SPMM_KERNEL_NO_INVERT));
+	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE, SPMM_KERNEL_NO_INVERT));
 
 	DnMatDescr_t     lib_sp_rm = NULL;
 	std::vector<f32> sp_rm_buffer(csr.rows * csr.cols, 0);
@@ -345,7 +357,7 @@ static void launch_dlmc(const ExecutionContext_t handle, const std::filesystem::
 	SPMM_CHECK(create_sp_mat_csc(handle, &lib_csc, csc.rows, csc.cols, csc.nnz, csc.col_ptr.data(), csc.row_idx.data(), csc.val.data()));
 	sp_csr_to_csc(handle, lib_csr, lib_csc);
 
-	SPMM_CHECK(spmm(handle, lib_csc, lib_dn, lib_res, SPMM_KERNEL_TYPE_NNZWISE_VECTORIZED, SPMM_KERNEL_INVERT));
+	SPMM_CHECK(spmm(handle, lib_csc, lib_dn, lib_res, SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE, SPMM_KERNEL_INVERT));
 	DnMatDescr_t     lib_sp_cm = NULL;
 	std::vector<f32> sp_cm_buffer(csc.rows * csc.cols, 0);
 	SPMM_CHECK(create_dn_mat_col_major(handle, &lib_sp_cm, csc.rows, csc.cols, sp_cm_buffer.data()));
@@ -376,7 +388,7 @@ static void launch_test_cases(const ExecutionContext_t handle, const std::filesy
 	std::vector<f32> res_buffer(csr.rows * csr.cols, 0);
 	SPMM_CHECK(create_dn_mat_row_major(handle, &lib_res, csr.rows, csr.cols, res_buffer.data()));
 
-	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_NNZWISE_VECTORIZED, SPMM_KERNEL_NO_INVERT));
+	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE, SPMM_KERNEL_NO_INVERT));
 
 	DnMatDescr_t     lib_sp_rm = NULL;
 	std::vector<f32> sp_rm_buffer(csr.rows * csr.cols, 0);
@@ -395,7 +407,7 @@ static void launch_test_cases(const ExecutionContext_t handle, const std::filesy
 	SPMM_CHECK(create_sp_mat_csc(handle, &lib_csc, csc.rows, csc.cols, csc.nnz, csc.col_ptr.data(), csc.row_idx.data(), csc.val.data()));
 	sp_csr_to_csc(handle, lib_csr, lib_csc);
 
-	SPMM_CHECK(spmm(handle, lib_csc, lib_dn, lib_res, SPMM_KERNEL_TYPE_NNZWISE_VECTORIZED, SPMM_KERNEL_INVERT));
+	SPMM_CHECK(spmm(handle, lib_csc, lib_dn, lib_res, SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE, SPMM_KERNEL_INVERT));
 	DnMatDescr_t     lib_sp_cm = NULL;
 	std::vector<f32> sp_cm_buffer(csc.rows * csc.cols, 0);
 	SPMM_CHECK(create_dn_mat_col_major(handle, &lib_sp_cm, csc.rows, csc.cols, sp_cm_buffer.data()));
