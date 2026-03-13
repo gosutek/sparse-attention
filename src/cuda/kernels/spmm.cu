@@ -591,10 +591,9 @@ __global__ void _k_ispmm_vectorized_nnzwise_regs(
 	}
 }
 
-// TODO: Give this kernel a proper name
 /*
   * +------------------------------------------------------------------------------+
-  * |                       SPMM_KERNEL_TYPE_NNZWISE_FINAL                         |
+  * |                   SPMM_KERNEL_TYPE_NNZWISE_COLUMN_TILING                     |
   * +------------------------------------------------------------------------------+
 */
 
@@ -623,8 +622,7 @@ __global__ void _k_ispmm_coalesced_nnzwise_last(
 		const u32 lane_id = MOD_POW2(threadIdx.x, _CONSTANTS_WARP_SIZE);
 		const u32 warp_id = threadIdx.x / _CONSTANTS_WARP_SIZE;
 
-		const u32 n_warps = blockDim.x / _CONSTANTS_WARP_SIZE;
-		// extern __shared__ f32   warp_sums[n_warps];
+		const u32             warp_cnt = blockDim.x / _CONSTANTS_WARP_SIZE;
 		extern __shared__ f32 warp_sums[];
 
 		if (lane_id == 0) {
@@ -633,13 +631,13 @@ __global__ void _k_ispmm_coalesced_nnzwise_last(
 
 		__syncthreads();
 
-		if (warp_id == 0) {
+		if (warp_id == 0 && lane_id < warp_cnt) {
 			// WARN: some threads point to garbage
 			f32 acc = warp_sums[lane_id];
 
-			constexpr u32 mask = 0xFF;
+			const u32 mask = LOWER_BITS_MASK(warp_cnt);
 
-			for (u32 i = n_warps / 2; i > 0; i /= 2) {
+			for (u32 i = warp_cnt / 2; i > 0; i /= 2) {
 				acc += __shfl_xor_sync(mask, acc, i, _CONSTANTS_WARP_SIZE);
 			}
 

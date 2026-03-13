@@ -102,3 +102,14 @@ __global__ void _k_spmm_vectorized_nnzwise_regs(
 	const u32 k,
 	const u32 n,
 	f32* __restrict__ res);
+
+__global__ void _k_ispmm_coalesced_nnzwise_last(
+	const f32* __restrict__ dn,
+	const u32* __restrict__ col_ptr,
+	const u32* __restrict__ row_idx,
+	const f32* __restrict__ val,
+	const u32 m,
+	const u32 k,
+	const u32 n,
+	const u32 bn,
+	f32* __restrict__ res);
