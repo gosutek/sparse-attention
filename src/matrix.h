@@ -8,6 +8,8 @@
 #include <string.h>
 
 #include "allocator.h"
+#include "cuda_allocator.cuh"
+#include "cuda_mem_wrapper.cuh"
 #include "helpers.h"
 
 #if defined(__cplusplus)

@@ -24,7 +24,7 @@ typedef int64_t  i64;
 typedef float    f32;
 typedef double   f64;
 
-#define CUDA_CHECK(x)                                                                                    \
+#define CHECK_CUDA(x)                                                                                    \
 	do {                                                                                                 \
 		cudaError_t err = x;                                                                             \
 		if (err != cudaSuccess) {                                                                        \
@@ -34,7 +34,7 @@ typedef double   f64;
 		}                                                                                                \
 	} while (0)
 
-#define CUSPARSE_CHECK(x)                                                                                    \
+#define CHECK_CUSPARSE(x)                                                                                    \
 	do {                                                                                                     \
 		cusparseStatus_t err = x;                                                                            \
 		if (err != CUSPARSE_STATUS_SUCCESS) {                                                                \
@@ -44,7 +44,7 @@ typedef double   f64;
 		}                                                                                                    \
 	} while (0)
 
-#define SPMM_CHECK(x)                                                                           \
+#define CHECK_SPMM(x)                                                                           \
 	do {                                                                                        \
 		SpmmStatus_t err = x;                                                                   \
 		if (err != SPMM_STATUS_SUCCESS) {                                                       \

@@ -56,7 +56,9 @@ SpmmStatus_t exec_ctx_create(ExecutionContext_t* ctx)
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
-	(*ctx)->dev_arena._d_ptr = NULL;
+	if (mem_arena_dev_create(&(*ctx)->dev_arena, GIB(1)) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_ALLOC_FAILED;
+	}
 
 	return SPMM_STATUS_SUCCESS;
 }

@@ -48,7 +48,7 @@ static SpmmInternalStatus_t _d_sp_copy(DevArena* const arena, SpMatDescr* const 
 
 		break;
 	}
-	CUDA_CHECK(cudaMemcpy(d_ptr, src->val, val_bsize, cudaMemcpyHostToDevice));
+	CHECK_CUDA(cudaMemcpy(d_ptr, src->val, val_bsize, cudaMemcpyHostToDevice));
 	dst->val = reinterpret_cast<f32*>(d_ptr);
 
 	return SPMM_INTERNAL_STATUS_SUCCESS;
@@ -67,7 +67,7 @@ static SpmmInternalStatus_t _d_dn_copy(DevArena* const arena, DnMatDescr* dst, D
 	dst->rows = src->rows;
 	dst->cols = src->cols;
 
-	CUDA_CHECK(cudaMemcpy(d_ptr, src->val, dn_bsize, cudaMemcpyHostToDevice));
+	CHECK_CUDA(cudaMemcpy(d_ptr, src->val, dn_bsize, cudaMemcpyHostToDevice));
 	dst->val = reinterpret_cast<f32*>(d_ptr);
 
 	return SPMM_INTERNAL_STATUS_SUCCESS;
@@ -211,7 +211,7 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 		}
 	}
 
-	CUDA_CHECK(cudaMemcpy(h_res->val, d_res.val, res_bsize, cudaMemcpyDeviceToHost));
+	CHECK_CUDA(cudaMemcpy(h_res->val, d_res.val, res_bsize, cudaMemcpyDeviceToHost));
 
 	mem_arena_dev_pop(&ctx->dev_arena, res_bsize);
 	const u64 dn_bsize = dn_mat_bytes_get(&d_dn);
