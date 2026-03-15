@@ -214,6 +214,10 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 	CUDA_CHECK(cudaMemcpy(h_res->val, d_res.val, res_bsize, cudaMemcpyDeviceToHost));
 
 	mem_arena_dev_pop(&ctx->dev_arena, res_bsize);
+	const u64 dn_bsize = dn_mat_bytes_get(&d_dn);
+	mem_arena_dev_pop(&ctx->dev_arena, dn_bsize);
+	const u64 sp_bsize = sp_mat_byte_size_get(&d_sp);
+	mem_arena_dev_pop(&ctx->dev_arena, sp_bsize);
 
 	return SPMM_STATUS_SUCCESS;
 }
