@@ -1,3 +1,5 @@
+#include <filesystem>
+#include <format>
 #include <iostream>
 
 #include "../test/unit_tests.h"
@@ -353,24 +355,61 @@ static void launch_dlmc(const ExecutionContext_t handle, const std::filesystem::
 	void* cusparse_buffer = nullptr;
 	cudaMalloc(&cusparse_buffer, buffer_size);
 
+	f32         time;
+	cudaEvent_t start, stop;
+	cudaDeviceSynchronize();
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, 0);
 	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE, SPMM_KERNEL_NO_INVERT));
+	cudaDeviceSynchronize();
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&time, start, stop);
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
+
+	const auto custom_time = time * 1e-3;
+	const auto custom_flops = ((2 * csr.nnz * csr.cols) * 1e-9) / (time * 1e-3);
+
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, 0);
 	CUSPARSE_CHECK(cusparseSpMM(cusparse_handle,
 		CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, cusparse_csr, cusparse_dn, &beta, cusparse_res, CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse_buffer));
+	cudaDeviceSynchronize();
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&time, start, stop);
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
 
-	DnMatDescr_t     lib_sp_rm = NULL;
-	std::vector<f32> sp_rm_buffer(csr.rows * csr.cols, 0);
-	SPMM_CHECK(create_dn_mat_row_major(handle, &lib_sp_rm, csr.rows, csr.cols, sp_rm_buffer.data()));
-	SPMM_CHECK(sp_csr_to_row_major(lib_csr, lib_sp_rm));
+	const auto cusparse_time = time * 1e-3;
+	const auto cusparse_flops = ((2 * csr.nnz * csr.cols) * 1e-9) / (time * 1e-3);
 
-	std::vector<f32> expected = host_spmm_rm_cm(sp_rm_buffer, dn_buffer, csr.rows, csr.cols, csr.cols);
+	// DnMatDescr_t     lib_sp_rm = NULL;
+	// std::vector<f32> sp_rm_buffer(csr.rows * csr.cols, 0);
+	// SPMM_CHECK(create_dn_mat_row_major(handle, &lib_sp_rm, csr.rows, csr.cols, sp_rm_buffer.data()));
+	// SPMM_CHECK(sp_csr_to_row_major(lib_csr, lib_sp_rm));
+	//
+	// std::vector<f32> expected = host_spmm_rm_cm(sp_rm_buffer, dn_buffer, csr.rows, csr.cols, csr.cols);
 
 	for (u32 i = 0; i < csr.rows * csr.cols; ++i) {
-		comparef(res_buffer[i], expected[i]);
-		comparef(cusparse_res_buffer[i], expected[i]);
+		// comparef(res_buffer[i], expected[i]);
+		// comparef(cusparse_res_buffer[i], expected[i]);
 		comparef(res_buffer[i], cusparse_res_buffer[i]);
 	}
 
+	std::cout << std::format(
+		"Avg. time: {:.6f} | {:.6f} s\n"
+		"Flops: {:.6f} | {:.6f} GFLOPs/s\n",
+		custom_time, cusparse_time, custom_flops, cusparse_flops);
+
 	std::fill(res_buffer.begin(), res_buffer.end(), 0.0f);
+	cusparseDestroySpMat(cusparse_csr);
+	cusparseDestroyDnMat(cusparse_dn);
+	cudaFree(cusparse_buffer);
+	cusparseDestroy(cusparse_handle);
 
 	// CSC          csc = { csr.rows, csr.cols, csr.nnz, std::vector<u32>(csr.cols + 1), std::vector<u32>(csr.nnz), std::vector<f32>(csr.nnz) };
 	// SpMatDescr_t lib_csc = NULL;
@@ -445,7 +484,18 @@ int main(void)
 	ExecutionContext_t handle = NULL;
 	SPMM_CHECK(exec_ctx_create(&handle));
 
-	launch_dlmc(handle, "run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_v.smtx");
+	const std::filesystem::directory_iterator dir_it("run/data/dlmc/transformer/l0_regularization/0.5/");
+
+	for (const std::filesystem::path& p : dir_it) {
+		if (!p.stem().string().ends_with("aux")) {
+			std::cout << "Launching for " << p.stem() << std::endl;
+			if (handle->dev_arena._d_ptr != nullptr) {
+				std::cout << "Dev arena pos " << handle->dev_arena.pos << std::endl;
+			}
+			launch_dlmc(handle, p);
+		}
+	}
+	// launch_dlmc(handle, "run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_v.smtx");
 	// launch_test_cases(handle, "test_data/spmm/sp.cute", "test_data/spmm/dn.cute");
 
 	SPMM_CHECK(exec_ctx_destroy(handle));

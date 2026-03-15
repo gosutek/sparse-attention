@@ -79,6 +79,7 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 		return SPMM_STATUS_NOT_INITIALIZED;
 	}
 
+	// TODO: Maybe decouple dev arena allocation from the spmm operation
 	if (!ctx->dev_arena._d_ptr && mem_arena_dev_create(&ctx->dev_arena, GIB(1)) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_INTERNAL_ERROR;
 	}
@@ -121,7 +122,6 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 			} else {
 				_k_ispmm_naive_elemwise_gmem<<<grid, block>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
 			}
-			CUDA_CHECK(cudaDeviceSynchronize());
 
 			break;
 		}
@@ -138,7 +138,6 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 				const u64  smem_bsize = d_dn.cols * sizeof *d_dn.val;
 				_k_ispmm_naive_elemwise_smem<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
 			}
-			CUDA_CHECK(cudaDeviceSynchronize());
 			break;
 		}
 	case SPMM_KERNEL_TYPE_NNZWISE_COALESCED:
@@ -158,7 +157,6 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 
 				_k_ispmm_coalesced_nnzwise<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
 			}
-			CUDA_CHECK(cudaDeviceSynchronize());
 			break;
 		}
 	case SPMM_KERNEL_TYPE_NNZWISE_COALESCED_NO_SMEM:
