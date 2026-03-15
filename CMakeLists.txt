@@ -17,6 +17,8 @@ set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_INCLUDES 0)
 set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_LIBRARIES 0)
 set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_OBJECTS 0)
 
+find_package(CUDAToolkit REQUIRED)
+
 add_library(cute STATIC
   src/matrix.c
   src/allocator.c
@@ -72,12 +74,12 @@ add_executable(cute_main
   run/utils.cpp
 )
 
-target_link_libraries(cute_main PRIVATE cute)
+target_link_libraries(cute_main PRIVATE cute CUDA::cusparse)
 
 target_include_directories(cute_main PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
   ${CMAKE_CURRENT_SOURCE_DIR}/run
-  /opt/cuda/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/cuda/api
 )
 
 target_compile_options(cute_main PRIVATE
