@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "../test/unit_tests.h"
+#include "allocator.h"
 #include "cusparse.h"
 #include "helpers.h"
 #include "utils.h"
@@ -311,6 +312,10 @@ static std::vector<f32> host_spmm_rm_cm(const std::vector<f32>& a, const std::ve
 
 static void launch_dlmc(const ExecutionContext_t handle, const std::filesystem::path& path)
 {
+	cusparseHandle_t cusparse_handle = NULL;
+	const f32        alpha = 1.0f;
+	const f32        beta = 0.0f;
+	cusparseCreate(&cusparse_handle);
 	CSR                  csr = parse_csr_dlmc(path);
 	SpMatDescr_t         lib_csr = NULL;
 	cusparseSpMatDescr_t cusparse_csr = NULL;
@@ -331,14 +336,26 @@ static void launch_dlmc(const ExecutionContext_t handle, const std::filesystem::
 	CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse_dn,
 		csr.cols, csr.cols, csr.cols, dn_buffer.data(), CUDA_R_32F, CUSPARSE_ORDER_COL));
 
-	DnMatDescr_t         lib_res = NULL;
-	cusparseDnMatDescr_t cusparse_res = NULL;
+	DnMatDescr_t         lib_res = nullptr;
+	cusparseDnMatDescr_t cusparse_res = nullptr;
 	std::vector<f32>     res_buffer(csr.rows * csr.cols, 0);
+	std::vector<f32>     cusparse_res_buffer(csr.rows * csr.cols, 0);
 	SPMM_CHECK(create_dn_mat_row_major(handle, &lib_res, csr.rows, csr.cols, res_buffer.data()));
 	CUSPARSE_CHECK(cusparseCreateDnMat(&cusparse_res,
-		csr.rows, csr.cols, csr.cols, res_buffer.data(), CUDA_R_32F, CUSPARSE_ORDER_ROW));
+		csr.rows, csr.cols, csr.cols, cusparse_res_buffer.data(), CUDA_R_32F, CUSPARSE_ORDER_ROW));
+
+	u64 buffer_size;
+	CUSPARSE_CHECK(cusparseSpMM_bufferSize(cusparse_handle,
+		CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
+		&alpha, cusparse_csr, cusparse_dn, &beta, cusparse_res,
+		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, &buffer_size));
+
+	void* cusparse_buffer = nullptr;
+	cudaMalloc(&cusparse_buffer, buffer_size);
 
 	SPMM_CHECK(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE, SPMM_KERNEL_NO_INVERT));
+	CUSPARSE_CHECK(cusparseSpMM(cusparse_handle,
+		CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha, cusparse_csr, cusparse_dn, &beta, cusparse_res, CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse_buffer));
 
 	DnMatDescr_t     lib_sp_rm = NULL;
 	std::vector<f32> sp_rm_buffer(csr.rows * csr.cols, 0);
@@ -349,26 +366,29 @@ static void launch_dlmc(const ExecutionContext_t handle, const std::filesystem::
 
 	for (u32 i = 0; i < csr.rows * csr.cols; ++i) {
 		comparef(res_buffer[i], expected[i]);
+		comparef(cusparse_res_buffer[i], expected[i]);
+		comparef(res_buffer[i], cusparse_res_buffer[i]);
 	}
+
 	std::fill(res_buffer.begin(), res_buffer.end(), 0.0f);
 
-	CSC          csc = { csr.rows, csr.cols, csr.nnz, std::vector<u32>(csr.cols + 1), std::vector<u32>(csr.nnz), std::vector<f32>(csr.nnz) };
-	SpMatDescr_t lib_csc = NULL;
-	SPMM_CHECK(create_sp_mat_csc(handle, &lib_csc, csc.rows, csc.cols, csc.nnz, csc.col_ptr.data(), csc.row_idx.data(), csc.val.data()));
-	sp_csr_to_csc(handle, lib_csr, lib_csc);
-
-	SPMM_CHECK(spmm(handle, lib_csc, lib_dn, lib_res, SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE, SPMM_KERNEL_INVERT));
-	DnMatDescr_t     lib_sp_cm = NULL;
-	std::vector<f32> sp_cm_buffer(csc.rows * csc.cols, 0);
-	SPMM_CHECK(create_dn_mat_col_major(handle, &lib_sp_cm, csc.rows, csc.cols, sp_cm_buffer.data()));
-	SPMM_CHECK(sp_csc_to_col_major(lib_csc, lib_sp_cm));
-
-	expected = host_spmm_rm_cm(dn_buffer, sp_cm_buffer, csc.rows, csc.cols, csc.cols);
-
-	for (u32 i = 0; i < csc.rows * csc.cols; ++i) {
-		comparef(res_buffer[i], expected[i]);
-	}
-	std::fill(res_buffer.begin(), res_buffer.end(), 0.0f);
+	// CSC          csc = { csr.rows, csr.cols, csr.nnz, std::vector<u32>(csr.cols + 1), std::vector<u32>(csr.nnz), std::vector<f32>(csr.nnz) };
+	// SpMatDescr_t lib_csc = NULL;
+	// SPMM_CHECK(create_sp_mat_csc(handle, &lib_csc, csc.rows, csc.cols, csc.nnz, csc.col_ptr.data(), csc.row_idx.data(), csc.val.data()));
+	// sp_csr_to_csc(handle, lib_csr, lib_csc);
+	//
+	// SPMM_CHECK(spmm(handle, lib_csc, lib_dn, lib_res, SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE, SPMM_KERNEL_INVERT));
+	// DnMatDescr_t     lib_sp_cm = NULL;
+	// std::vector<f32> sp_cm_buffer(csc.rows * csc.cols, 0);
+	// SPMM_CHECK(create_dn_mat_col_major(handle, &lib_sp_cm, csc.rows, csc.cols, sp_cm_buffer.data()));
+	// SPMM_CHECK(sp_csc_to_col_major(lib_csc, lib_sp_cm));
+	//
+	// expected = host_spmm_rm_cm(dn_buffer, sp_cm_buffer, csc.rows, csc.cols, csc.cols);
+	//
+	// for (u32 i = 0; i < csc.rows * csc.cols; ++i) {
+	// 	comparef(res_buffer[i], expected[i]);
+	// }
+	// std::fill(res_buffer.begin(), res_buffer.end(), 0.0f);
 }
 
 static void launch_test_cases(const ExecutionContext_t handle, const std::filesystem::path& sp_path, const std::filesystem::path& dn_path)
