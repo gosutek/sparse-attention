@@ -203,7 +203,7 @@ SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp,
 	const u64 col_idx_bsize = nnz * sizeof *col_idx;
 	const u64 val_bsize = nnz * sizeof *val;
 	const u64 bsize = row_ptr_bsize + col_idx_bsize + val_bsize;
-	if (mem_arena_dev_push(&ctx->dev_arena, bsize, (void*)(*sp)->csr.row_ptr) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (mem_arena_dev_push(&ctx->dev_arena, bsize, (void**)&(*sp)->csr.row_ptr) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
@@ -243,7 +243,7 @@ SpmmStatus_t create_sp_mat_csc(ExecutionContext_t ctx, SpMatDescr_t* sp,
 	const u64 row_idx_bsize = nnz * sizeof *row_idx;
 	const u64 val_bsize = nnz * sizeof *val;
 	const u64 bsize = col_ptr_bsize + row_idx_bsize + val_bsize;
-	if (mem_arena_dev_push(&ctx->dev_arena, bsize, (void*)(*sp)->csc.col_ptr) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (mem_arena_dev_push(&ctx->dev_arena, bsize, (void**)&(*sp)->csc.col_ptr) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
@@ -276,7 +276,7 @@ SpmmStatus_t create_dn_mat_row_major(ExecutionContext_t ctx, DnMatDescr_t* dn,
 	(*dn)->cols = cols;
 
 	const u64 bsize = rows * cols * sizeof *val;
-	if (mem_arena_dev_push(&ctx->dev_arena, bsize, (void*)(*dn)->val) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (mem_arena_dev_push(&ctx->dev_arena, bsize, (void**)&(*dn)->val) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
@@ -304,7 +304,7 @@ SpmmStatus_t create_dn_mat_col_major(ExecutionContext_t ctx, DnMatDescr_t* dn,
 	(*dn)->cols = cols;
 
 	const u64 bsize = rows * cols * sizeof *val;
-	if (mem_arena_dev_push(&ctx->dev_arena, bsize, (void*)(*dn)->val) != SPMM_INTERNAL_STATUS_SUCCESS) {
+	if (mem_arena_dev_push(&ctx->dev_arena, bsize, (void**)&(*dn)->val) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 	cuda_mem_cpy_hd((*dn)->val, val, bsize);
