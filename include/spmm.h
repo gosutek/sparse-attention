@@ -81,7 +81,7 @@ extern "C"
 	struct SpMatDescr;
 	typedef struct SpMatDescr* SpMatDescr_t;
 
-	SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp,
+	SpmmStatus_t sp_csr_create(ExecutionContext_t ctx, SpMatDescr_t* sp,
 		uint32_t  rows,
 		uint32_t  cols,
 		uint32_t  nnz,
@@ -89,7 +89,15 @@ extern "C"
 		uint32_t* col_idx,
 		float*    val);
 
-	SpmmStatus_t create_sp_mat_csc(ExecutionContext_t ctx, SpMatDescr_t* sp_mat_descr,
+	SpmmStatus_t sp_csr_get(SpMatDescr_t sp,
+		uint32_t*                        rows,
+		uint32_t*                        cols,
+		uint32_t*                        nnz,
+		uint32_t**                       row_ptr,
+		uint32_t**                       col_idx,
+		float**                          val);
+
+	SpmmStatus_t sp_csc_create(ExecutionContext_t ctx, SpMatDescr_t* sp,
 		uint32_t  rows,
 		uint32_t  cols,
 		uint32_t  nnz,
@@ -97,18 +105,36 @@ extern "C"
 		uint32_t* row_idx,
 		float*    val);
 
+	SpmmStatus_t sp_csc_get(SpMatDescr_t sp,
+		uint32_t*                        rows,
+		uint32_t*                        cols,
+		uint32_t*                        nnz,
+		uint32_t**                       col_ptr,
+		uint32_t**                       row_idx,
+		float**                          val);
+
 	struct DnMatDescr;
 	typedef struct DnMatDescr* DnMatDescr_t;
 
-	SpmmStatus_t create_dn_mat_row_major(ExecutionContext_t ctx, DnMatDescr_t* dn_mat_descr,
+	SpmmStatus_t dn_rm_create(ExecutionContext_t ctx, DnMatDescr_t* dn,
 		uint32_t rows,
 		uint32_t cols,
 		float*   val);
 
-	SpmmStatus_t create_dn_mat_col_major(ExecutionContext_t ctx, DnMatDescr_t* dn_mat_descr,
+	SpmmStatus_t dn_rm_get(DnMatDescr_t dn,
+		uint32_t*                       rows,
+		uint32_t*                       cols,
+		float**                         val);
+
+	SpmmStatus_t dn_cm_create(ExecutionContext_t ctx, DnMatDescr_t* dn,
 		uint32_t rows,
 		uint32_t cols,
 		float*   val);
+
+	SpmmStatus_t dn_cm_get(DnMatDescr_t dn,
+		uint32_t*                       rows,
+		uint32_t*                       cols,
+		float**                         val);
 
 	/*
     * +------------------------------------------------------------------------------+
@@ -127,7 +153,7 @@ extern "C"
     * +------------------------------------------------------------------------------+
   */
 
-	SpmmStatus_t spmm(ExecutionContext_t ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr_t h_res, SpmmKernelType_t kernel_type, SpmmInvert_t invert);
+	SpmmStatus_t spmm(ExecutionContext_t ctx, SpMatDescr_t sp, DnMatDescr_t dn, DnMatDescr_t res, SpmmKernelType_t kernel_type, SpmmInvert_t invert);
 #if defined(__cplusplus)
 }
 #endif

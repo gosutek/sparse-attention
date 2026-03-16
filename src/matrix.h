@@ -19,19 +19,19 @@ extern "C"
 
 	typedef enum
 	{
-		SPARSE_FORMAT_CSR = 0,
-		SPARSE_FORMAT_CSC = 1,
-	} SparseFormat_t;
+		SPMM_FORMAT_SPARSE_CSR = 0,
+		SPMM_FORMAT_SPARSE_CSC = 1,
+	} FormatSparse_t;
 
 	typedef enum
 	{
-		DENSE_FORMAT_ROW_MAJOR = 0,
-		DENSE_FORMAT_COL_MAJOR = 1,
-	} DenseFormat_t;
+		SPMM_FORMAT_DENSE_ROW_MAJOR = 0,
+		SPMM_FORMAT_DENSE_COLUMN_MAJOR = 1,
+	} FormatDense_t;
 
 	typedef struct SpMatDescr
 	{
-		SparseFormat_t format;
+		FormatSparse_t format;
 
 		u32 rows;
 		u32 cols;
@@ -58,9 +58,9 @@ extern "C"
 	static inline size_t sp_mat_ptr_count_get(const SpMatDescr* const sp)
 	{
 		switch (sp->format) {
-		case SPARSE_FORMAT_CSR:
+		case SPMM_FORMAT_SPARSE_CSR:
 			return sp->rows + 1;
-		case SPARSE_FORMAT_CSC:
+		case SPMM_FORMAT_SPARSE_CSC:
 			return sp->cols + 1;
 		default:
 			__builtin_unreachable();
@@ -99,7 +99,7 @@ extern "C"
 
 	typedef struct DnMatDescr
 	{
-		DenseFormat_t format;
+		FormatDense_t format;
 
 		u32 rows;
 		u32 cols;

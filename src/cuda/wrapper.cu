@@ -6,8 +6,6 @@
 #include "matrix.h"
 #include "spmm.h"
 
-// TODO: Maybe copy to a contiguous mem block in host first then in dev
-// for further optimization
 static SpmmInternalStatus_t _d_sp_copy(DevArena* const arena, SpMatDescr* const dst, const SpMatDescr* const src)
 {
 	uint8_t* d_ptr = NULL;
@@ -27,7 +25,7 @@ static SpmmInternalStatus_t _d_sp_copy(DevArena* const arena, SpMatDescr* const 
 	dst->nnz = src->nnz;
 
 	switch (src->format) {
-	case SPARSE_FORMAT_CSR:
+	case SPMM_SPARSE_FORMAT_CSR:
 		cudaMemcpy(d_ptr, src->csr.row_ptr, ptr_bsize, cudaMemcpyHostToDevice);
 		dst->csr.row_ptr = reinterpret_cast<u32*>(d_ptr);
 		d_ptr += ptr_bsize;
@@ -37,7 +35,7 @@ static SpmmInternalStatus_t _d_sp_copy(DevArena* const arena, SpMatDescr* const 
 		d_ptr += idx_bsize;
 
 		break;
-	case SPARSE_FORMAT_CSC:
+	case SPMM_SPARSE_FORMAT_CSC:
 		cudaMemcpy(d_ptr, src->csr.row_ptr, ptr_bsize, cudaMemcpyHostToDevice);
 		dst->csc.col_ptr = reinterpret_cast<u32*>(d_ptr);
 		d_ptr += ptr_bsize;
@@ -73,36 +71,12 @@ static SpmmInternalStatus_t _d_dn_copy(DevArena* const arena, DnMatDescr* dst, D
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
-SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr_t h_res, SpmmKernelType_t kernel_type, SpmmInvert_t invert)
+SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t sp, DnMatDescr_t dn, DnMatDescr_t res, SpmmKernelType_t kernel_type, SpmmInvert_t invert)
 {
+	// TODO: Handle ctx->dev_arena being null, ctx->dev_arena._d_ptr being null && not being a valid device pointer
 	if (!ctx) {
 		return SPMM_STATUS_NOT_INITIALIZED;
 	}
-
-	// TODO: Maybe decouple dev arena allocation from the spmm operation
-	if (!ctx->dev_arena._d_ptr && mem_arena_dev_create(&ctx->dev_arena, GIB(1)) != SPMM_INTERNAL_STATUS_SUCCESS) {
-		return SPMM_STATUS_INTERNAL_ERROR;
-	}
-
-	// TODO: Error check these two
-	SpMatDescr d_sp;
-	_d_sp_copy(&ctx->dev_arena, &d_sp, h_sp);
-
-	DnMatDescr d_dn;
-	_d_dn_copy(&ctx->dev_arena, &d_dn, h_dn);
-
-	DnMatDescr d_res = {
-		.format = DENSE_FORMAT_ROW_MAJOR,
-		.rows = d_sp.rows,
-		.cols = d_dn.cols,
-		.val = nullptr
-	};
-	const u64 res_bsize = dn_mat_bytes_get(&d_res);
-
-	if (mem_arena_dev_push(&ctx->dev_arena, res_bsize, reinterpret_cast<void**>(&d_res.val)) != SPMM_INTERNAL_STATUS_SUCCESS) {
-		return SPMM_STATUS_INTERNAL_ERROR;
-	}
-	// d_res.val now points to device memory
 
 	switch (kernel_type) {
 	case SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK:
@@ -110,17 +84,17 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 			constexpr u32 BM = 8;
 			constexpr u32 BK = BM;
 
-			const u32 res_rows = h_sp->rows;
-			const u32 res_cols = h_dn->cols;
+			const u32 res_rows = sp->rows;
+			const u32 res_cols = dn->cols;
 
 			static_assert(BM <= 32);  // otherwise threads per block exceed max
 			dim3 grid(CEIL_DIVI(res_cols, BK), CEIL_DIVI(res_rows, BM));
 			dim3 block(BK, BM);
 
 			if (invert == SPMM_KERNEL_NO_INVERT) {
-				_k_spmm_naive_elemwise_gmem<<<grid, block>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, d_res.val);
+				_k_spmm_naive_elemwise_gmem<<<grid, block>>>(sp->csr.row_ptr, sp->csr.col_idx, sp->val, dn->val, sp->rows, sp->cols, dn->cols, res->val);
 			} else {
-				_k_ispmm_naive_elemwise_gmem<<<grid, block>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
+				_k_ispmm_naive_elemwise_gmem<<<grid, block>>>(dn->val, sp->csc.col_ptr, sp->csc.row_idx, sp->val, dn->rows, dn->cols, sp->cols, res->val);
 			}
 
 			break;
@@ -128,49 +102,49 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 	case SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM:
 		{
 			if (invert == SPMM_KERNEL_NO_INVERT) {
-				const dim3 grid(d_dn.cols);
-				const dim3 block(d_sp.rows);
-				const u64  smem_bsize = d_sp.rows * sizeof *d_sp.val;
-				_k_spmm_naive_elemwise_smem<<<grid, block, smem_bsize>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_sp.cols, d_res.val);
+				const dim3 grid(dn->cols);
+				const dim3 block(sp->rows);
+				const u64  smem_bsize = sp->rows * sizeof *sp->val;
+				_k_spmm_naive_elemwise_smem<<<grid, block, smem_bsize>>>(sp->csr.row_ptr, sp->csr.col_idx, sp->val, dn->val, sp->rows, sp->cols, sp->cols, res->val);
 			} else {
-				const dim3 grid(d_dn.rows);
-				const dim3 block(d_sp.cols);
-				const u64  smem_bsize = d_dn.cols * sizeof *d_dn.val;
-				_k_ispmm_naive_elemwise_smem<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
+				const dim3 grid(dn->rows);
+				const dim3 block(sp->cols);
+				const u64  smem_bsize = dn->cols * sizeof *dn->val;
+				_k_ispmm_naive_elemwise_smem<<<grid, block, smem_bsize>>>(dn->val, sp->csc.col_ptr, sp->csc.row_idx, sp->val, dn->rows, dn->cols, sp->cols, res->val);
 			}
 			break;
 		}
 	case SPMM_KERNEL_TYPE_NNZWISE_COALESCED:
 		{
 			if (invert == SPMM_KERNEL_NO_INVERT) {
-				const dim3 grid(d_dn.cols, d_sp.rows);
+				const dim3 grid(dn->cols, sp->rows);
 				const dim3 block(64);
 
-				const u64 smem_bsize = (d_dn.rows + block.x / _CONSTANTS_WARP_SIZE) * sizeof *d_dn.val;
+				const u64 smem_bsize = (dn->rows + block.x / _CONSTANTS_WARP_SIZE) * sizeof *dn->val;
 
-				_k_spmm_coalesced_nnzwise<<<grid, block, smem_bsize>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, d_res.val);
+				_k_spmm_coalesced_nnzwise<<<grid, block, smem_bsize>>>(sp->csr.row_ptr, sp->csr.col_idx, sp->val, dn->val, sp->rows, sp->cols, dn->cols, res->val);
 			} else {
-				const dim3 grid(d_sp.cols, d_dn.rows);
+				const dim3 grid(sp->cols, dn->rows);
 				const dim3 block(64);
 
-				const u64 smem_bsize = (d_dn.cols + block.x /*thread_cnt*/ / _CONSTANTS_WARP_SIZE) * sizeof *d_dn.val;
+				const u64 smem_bsize = (dn->cols + block.x /*thread_cnt*/ / _CONSTANTS_WARP_SIZE) * sizeof *dn->val;
 
-				_k_ispmm_coalesced_nnzwise<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
+				_k_ispmm_coalesced_nnzwise<<<grid, block, smem_bsize>>>(dn->val, sp->csc.col_ptr, sp->csc.row_idx, sp->val, dn->rows, dn->cols, sp->cols, res->val);
 			}
 			break;
 		}
 	case SPMM_KERNEL_TYPE_NNZWISE_COALESCED_NO_SMEM:
 		{
 			const dim3 block(32);
-			const u64  smem_bsize = (block.x / _CONSTANTS_WARP_SIZE) * sizeof *d_dn.val;
+			const u64  smem_bsize = (block.x / _CONSTANTS_WARP_SIZE) * sizeof *dn->val;
 			if (invert == SPMM_KERNEL_NO_INVERT) {
-				const dim3 grid(d_dn.cols, d_sp.rows);
+				const dim3 grid(dn->cols, sp->rows);
 
-				_k_spmm_coalesced_nnzwise_no_smem<<<grid, block, smem_bsize>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, d_res.val);
+				_k_spmm_coalesced_nnzwise_no_smem<<<grid, block, smem_bsize>>>(sp->csr.row_ptr, sp->csr.col_idx, sp->val, dn->val, sp->rows, sp->cols, dn->cols, res->val);
 			} else {
-				const dim3 grid(d_sp.cols, d_dn.rows);
+				const dim3 grid(sp->cols, dn->rows);
 
-				_k_ispmm_coalesced_nnzwise_no_smem<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
+				_k_ispmm_coalesced_nnzwise_no_smem<<<grid, block, smem_bsize>>>(dn->val, sp->csc.col_ptr, sp->csc.row_idx, sp->val, dn->rows, dn->cols, sp->cols, res->val);
 			}
 			break;
 		}
@@ -178,15 +152,15 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 		{
 			constexpr u32 BK = 512;
 			const dim3    block(64);
-			const u64     smem_bsize = (block.x / _CONSTANTS_WARP_SIZE) * sizeof *d_dn.val;
+			const u64     smem_bsize = (block.x / _CONSTANTS_WARP_SIZE) * sizeof *dn->val;
 			if (invert == SPMM_KERNEL_NO_INVERT) {
-				const dim3 grid(d_dn.cols, d_sp.rows, CEIL_DIVI(d_sp.cols, BK));
+				const dim3 grid(dn->cols, sp->rows, CEIL_DIVI(sp->cols, BK));
 
-				_k_spmm_vectorized_nnzwise_regs<<<grid, block, smem_bsize>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, d_res.val);
+				_k_spmm_vectorized_nnzwise_regs<<<grid, block, smem_bsize>>>(sp->csr.row_ptr, sp->csr.col_idx, sp->val, dn->val, sp->rows, sp->cols, dn->cols, res->val);
 			} else {
-				const dim3 grid(d_sp.cols, d_dn.rows, CEIL_DIVI(d_dn.cols, BK));
+				const dim3 grid(sp->cols, dn->rows, CEIL_DIVI(dn->cols, BK));
 
-				_k_ispmm_vectorized_nnzwise_regs<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, d_res.val);
+				_k_ispmm_vectorized_nnzwise_regs<<<grid, block, smem_bsize>>>(dn->val, sp->csc.col_ptr, sp->csc.row_idx, sp->val, dn->rows, dn->cols, sp->cols, res->val);
 			}
 			break;
 		}
@@ -194,29 +168,28 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t h_sp, DnMatDescr_t h_dn, DnMatDescr
 		{
 			const dim3 block(32);
 
-			const u64 smem_bsize = (block.x / _CONSTANTS_WARP_SIZE) * sizeof *d_dn.val;
+			const u64 smem_bsize = (block.x / _CONSTANTS_WARP_SIZE) * sizeof *dn->val;
 
 			if (invert == SPMM_KERNEL_NO_INVERT) {
 				constexpr u32 BM = 16;
-				const dim3    grid(CEIL_DIVI(d_sp.rows, BM), d_dn.cols);
+				const dim3    grid(CEIL_DIVI(sp->rows, BM), dn->cols);
 
-				_k_spmm_column_tiling_nnzwise<<<grid, block, smem_bsize>>>(d_sp.csr.row_ptr, d_sp.csr.col_idx, d_sp.val, d_dn.val, d_sp.rows, d_sp.cols, d_dn.cols, BM, d_res.val);
+				_k_spmm_column_tiling_nnzwise<<<grid, block, smem_bsize>>>(sp->csr.row_ptr, sp->csr.col_idx, sp->val, dn->val, sp->rows, sp->cols, dn->cols, BM, res->val);
 			} else {
 				constexpr u32 BN = 16;
-				const dim3    grid(CEIL_DIVI(d_sp.cols, BN), d_dn.rows);
+				const dim3    grid(CEIL_DIVI(sp->cols, BN), dn->rows);
 
-				_k_ispmm_column_tiling_nnzwise<<<grid, block, smem_bsize>>>(d_dn.val, d_sp.csc.col_ptr, d_sp.csc.row_idx, d_sp.val, d_dn.rows, d_dn.cols, d_sp.cols, BN, d_res.val);
+				_k_ispmm_column_tiling_nnzwise<<<grid, block, smem_bsize>>>(dn->val, sp->csc.col_ptr, sp->csc.row_idx, sp->val, dn->rows, dn->cols, sp->cols, BN, res->val);
 			}
 			break;
 		}
 	}
 
-	CHECK_CUDA(cudaMemcpy(h_res->val, d_res.val, res_bsize, cudaMemcpyDeviceToHost));
-
+	const u64 res_bsize = dn_mat_bytes_get(res);
 	mem_arena_dev_pop(&ctx->dev_arena, res_bsize);
-	const u64 dn_bsize = dn_mat_bytes_get(&d_dn);
+	const u64 dn_bsize = dn_mat_bytes_get(dn);
 	mem_arena_dev_pop(&ctx->dev_arena, dn_bsize);
-	const u64 sp_bsize = sp_mat_byte_size_get(&d_sp);
+	const u64 sp_bsize = sp_mat_byte_size_get(sp);
 	mem_arena_dev_pop(&ctx->dev_arena, sp_bsize);
 
 	return SPMM_STATUS_SUCCESS;

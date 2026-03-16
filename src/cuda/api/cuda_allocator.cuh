@@ -2,6 +2,7 @@
 #define CUDA_ALLOCATOR_CUH
 
 #include <stdint.h>
+#include <stdio.h>
 
 #include "helpers.h"
 

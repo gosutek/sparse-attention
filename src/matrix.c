@@ -21,7 +21,7 @@ SpmmStatus_t sp_csr_to_row_major(SpMatDescr_t sp, DnMatDescr_t dn)
 		return SPMM_STATUS_NOT_INITIALIZED;
 	}
 
-	if (sp->format != SPARSE_FORMAT_CSR) {
+	if (sp->format != SPMM_FORMAT_SPARSE_CSR) {
 		return SPMM_STATUS_NOT_SUPPORTED;
 	}
 
@@ -43,7 +43,7 @@ SpmmStatus_t sp_csc_to_col_major(SpMatDescr_t sp, DnMatDescr_t dn)
 		return SPMM_STATUS_NOT_INITIALIZED;
 	}
 
-	if (sp->format != SPARSE_FORMAT_CSC) {
+	if (sp->format != SPMM_FORMAT_SPARSE_CSC) {
 		return SPMM_STATUS_NOT_SUPPORTED;
 	}
 
@@ -177,7 +177,7 @@ f32 measure_sparsity(void* s, u32 size)
 	return nz / (f32)(size);
 }
 
-SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp,
+SpmmStatus_t sp_csr_create(ExecutionContext_t ctx, SpMatDescr_t* sp,
 	u32  rows,
 	u32  cols,
 	u32  nnz,
@@ -193,7 +193,7 @@ SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp,
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
-	(*sp)->format = SPARSE_FORMAT_CSR;
+	(*sp)->format = SPMM_FORMAT_SPARSE_CSR;
 
 	(*sp)->rows = rows;
 	(*sp)->cols = cols;
@@ -217,7 +217,33 @@ SpmmStatus_t create_sp_mat_csr(ExecutionContext_t ctx, SpMatDescr_t* sp,
 	return SPMM_STATUS_SUCCESS;
 }
 
-SpmmStatus_t create_sp_mat_csc(ExecutionContext_t ctx, SpMatDescr_t* sp,
+SpmmStatus_t sp_csr_get(SpMatDescr* sp,
+	u32*                            rows,
+	u32*                            cols,
+	u32*                            nnz,
+	u32**                           row_ptr,
+	u32**                           col_idx,
+	f32**                           val)
+{
+	if (!sp) {
+		return SPMM_STATUS_INVALID_VALUE;
+	}
+
+	if (sp->format != SPMM_FORMAT_SPARSE_CSR) {
+		return SPMM_STATUS_MATRIX_TYPE_NOT_SUPPORTED;
+	}
+
+	*rows = sp->rows;
+	*cols = sp->cols;
+	*nnz = sp->nnz;
+	*row_ptr = sp->csr.row_ptr;
+	*col_idx = sp->csr.col_idx;
+	*val = sp->val;
+
+	return SPMM_STATUS_SUCCESS;
+}
+
+SpmmStatus_t sp_csc_create(ExecutionContext_t ctx, SpMatDescr_t* sp,
 	u32  rows,
 	u32  cols,
 	u32  nnz,
@@ -233,7 +259,7 @@ SpmmStatus_t create_sp_mat_csc(ExecutionContext_t ctx, SpMatDescr_t* sp,
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
-	(*sp)->format = SPARSE_FORMAT_CSC;
+	(*sp)->format = SPMM_FORMAT_SPARSE_CSC;
 
 	(*sp)->rows = rows;
 	(*sp)->cols = cols;
@@ -257,7 +283,33 @@ SpmmStatus_t create_sp_mat_csc(ExecutionContext_t ctx, SpMatDescr_t* sp,
 	return SPMM_STATUS_SUCCESS;
 }
 
-SpmmStatus_t create_dn_mat_row_major(ExecutionContext_t ctx, DnMatDescr_t* dn,
+SpmmStatus_t sp_csc_get(SpMatDescr* sp,
+	u32*                            rows,
+	u32*                            cols,
+	u32*                            nnz,
+	u32**                           col_ptr,
+	u32**                           row_idx,
+	f32**                           val)
+{
+	if (!sp) {
+		return SPMM_STATUS_INVALID_VALUE;
+	}
+
+	if (sp->format != SPMM_FORMAT_SPARSE_CSC) {
+		return SPMM_STATUS_MATRIX_TYPE_NOT_SUPPORTED;
+	}
+
+	*rows = sp->rows;
+	*cols = sp->cols;
+	*nnz = sp->nnz;
+	*col_ptr = sp->csc.col_ptr;
+	*row_idx = sp->csc.row_idx;
+	*val = sp->val;
+
+	return SPMM_STATUS_SUCCESS;
+}
+
+SpmmStatus_t dn_rm_create(ExecutionContext_t ctx, DnMatDescr_t* dn,
 	u32  rows,
 	u32  cols,
 	f32* val)
@@ -270,7 +322,7 @@ SpmmStatus_t create_dn_mat_row_major(ExecutionContext_t ctx, DnMatDescr_t* dn,
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
-	(*dn)->format = DENSE_FORMAT_ROW_MAJOR;
+	(*dn)->format = SPMM_FORMAT_DENSE_ROW_MAJOR;
 
 	(*dn)->rows = rows;
 	(*dn)->cols = cols;
@@ -285,7 +337,27 @@ SpmmStatus_t create_dn_mat_row_major(ExecutionContext_t ctx, DnMatDescr_t* dn,
 	return SPMM_STATUS_SUCCESS;
 }
 
-SpmmStatus_t create_dn_mat_col_major(ExecutionContext_t ctx, DnMatDescr_t* dn,
+SpmmStatus_t dn_rm_get(DnMatDescr* dn,
+	u32*                           rows,
+	u32*                           cols,
+	f32**                          val)
+{
+	if (!dn) {
+		return SPMM_STATUS_INVALID_VALUE;
+	}
+
+	if (dn->format != SPMM_FORMAT_DENSE_ROW_MAJOR) {
+		return SPMM_STATUS_MATRIX_TYPE_NOT_SUPPORTED;
+	}
+
+	*rows = dn->rows;
+	*cols = dn->cols;
+	*val = dn->val;
+
+	return SPMM_STATUS_SUCCESS;
+}
+
+SpmmStatus_t dn_cm_create(ExecutionContext_t ctx, DnMatDescr_t* dn,
 	u32  rows,
 	u32  cols,
 	f32* val)
@@ -298,7 +370,7 @@ SpmmStatus_t create_dn_mat_col_major(ExecutionContext_t ctx, DnMatDescr_t* dn,
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
-	(*dn)->format = DENSE_FORMAT_COL_MAJOR;
+	(*dn)->format = SPMM_FORMAT_DENSE_COLUMN_MAJOR;
 
 	(*dn)->rows = rows;
 	(*dn)->cols = cols;
@@ -308,6 +380,26 @@ SpmmStatus_t create_dn_mat_col_major(ExecutionContext_t ctx, DnMatDescr_t* dn,
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 	cuda_mem_cpy_hd((*dn)->val, val, bsize);
+
+	return SPMM_STATUS_SUCCESS;
+}
+
+SpmmStatus_t dn_cm_get(DnMatDescr* dn,
+	u32*                           rows,
+	u32*                           cols,
+	f32**                          val)
+{
+	if (!dn) {
+		return SPMM_STATUS_INVALID_VALUE;
+	}
+
+	if (dn->format != SPMM_FORMAT_DENSE_COLUMN_MAJOR) {
+		return SPMM_STATUS_MATRIX_TYPE_NOT_SUPPORTED;
+	}
+
+	*rows = dn->rows;
+	*cols = dn->cols;
+	*val = dn->val;
 
 	return SPMM_STATUS_SUCCESS;
 }
