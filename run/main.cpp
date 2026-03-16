@@ -323,10 +323,18 @@ static void launch_dlmc(const ExecutionContext_t handle, const std::filesystem::
 	SpMatDescr_t         lib_csr = NULL;
 	cusparseSpMatDescr_t cusparse_csr = NULL;
 
+	// INFO: Calling sp_csr_create copies the vector data to device
+	// Then we pass the pointers to device data to cusparse's interface
+	// cusparse should not copy anything to device then
 	CHECK_SPMM(sp_csr_create(handle, &lib_csr, csr.rows, csr.cols, csr.nnz, csr.row_ptr.data(), csr.col_idx.data(), csr.val.data()));
+
+	u32  _rows, _cols, _nnz, *_row_ptr, *_col_idx;
+	f32* _val;
+	CHECK_SPMM(sp_csr_get(lib_csr, &_rows, &_cols, &_nnz, &_row_ptr, &_col_idx, &_val));
+
 	CHECK_CUSPARSE(cusparseCreateCsr(&cusparse_csr,
-		csr.rows, csr.cols, csr.nnz,
-		csr.row_ptr.data(), csr.col_idx.data(), csr.val.data(),
+		_rows, _cols, _nnz,
+		_row_ptr, _col_idx, _val,
 		CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
 
 	std::vector<f32> dn_buffer;
@@ -336,18 +344,30 @@ static void launch_dlmc(const ExecutionContext_t handle, const std::filesystem::
 	cusparseDnMatDescr_t cusparse_dn = NULL;
 	// WARN: Passing .data() is bad cause the vector might reallocate
 	CHECK_SPMM(dn_cm_create(handle, &lib_dn, csr.cols, csr.cols, dn_buffer.data()));
+
+	CHECK_SPMM(dn_cm_get(lib_dn, &_rows, &_cols, &_val));
+
 	CHECK_CUSPARSE(cusparseCreateDnMat(&cusparse_dn,
-		csr.cols, csr.cols, csr.cols, dn_buffer.data(), CUDA_R_32F, CUSPARSE_ORDER_COL));
+		_rows, _cols, _cols, _val, CUDA_R_32F, CUSPARSE_ORDER_COL));
 
 	DnMatDescr_t         lib_res = nullptr;
 	cusparseDnMatDescr_t cusparse_res = nullptr;
-	std::vector<f32>     res_buffer(csr.rows * csr.cols, 0);
-	std::vector<f32>     cusparse_res_buffer(csr.rows * csr.cols, 0);
+
+	std::vector<f32> res_buffer(csr.rows * csr.cols, 0);
+	std::vector<f32> cusparse_res_buffer(csr.rows * csr.cols, 0);
 	// WARN: This copies a csr.rows * csr.cols vector into device memory
 	// No need to do that
 	CHECK_SPMM(dn_rm_create(handle, &lib_res, csr.rows, csr.cols, res_buffer.data()));
+	// TODO: What if you pass an uninitialized vector here^
+
+	f32* _d_res = NULL;
+	CHECK_SPMM(dn_rm_get(lib_res, &_rows, &_cols, &_d_res));
+	CHECK_SPMM(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE, SPMM_KERNEL_NO_INVERT));
+
+	CHECK_CUDA(cudaMemcpy(res_buffer.data(), _d_res, _rows * _cols * sizeof *_d_res, cudaMemcpyDeviceToHost));
+
 	CHECK_CUSPARSE(cusparseCreateDnMat(&cusparse_res,
-		csr.rows, csr.cols, csr.cols, cusparse_res_buffer.data(), CUDA_R_32F, CUSPARSE_ORDER_ROW));
+		_rows, _cols, _cols, _d_res, CUDA_R_32F, CUSPARSE_ORDER_ROW));
 
 	u64 buffer_size;
 	CHECK_CUSPARSE(cusparseSpMM_bufferSize(cusparse_handle,
@@ -368,24 +388,28 @@ static void launch_dlmc(const ExecutionContext_t handle, const std::filesystem::
 		&alpha, cusparse_csr, cusparse_dn, &beta, cusparse_res,
 		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse_buffer));
 
-	f32         time;
-	cudaEvent_t start, stop;
-	cudaDeviceSynchronize();
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
-	cudaEventRecord(start, 0);
-	CHECK_SPMM(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE, SPMM_KERNEL_NO_INVERT));
-	cudaDeviceSynchronize();
-	cudaEventRecord(stop, 0);
-	cudaEventSynchronize(stop);
-	cudaEventElapsedTime(&time, start, stop);
-	cudaEventDestroy(start);
-	cudaEventDestroy(stop);
+	CHECK_CUDA(cudaMemcpy(cusparse_res_buffer.data(), _d_res, _rows * _cols * sizeof *_d_res, cudaMemcpyDeviceToHost));
 
-	const auto custom_time = time * 1e-3;
-	const auto custom_flops = ((2 * csr.nnz * csr.cols) * 1e-9) / (time * 1e-3);
+	for (u32 i = 0; i < _rows * _cols; ++i) {
+		comparef(res_buffer[i], cusparse_res_buffer[i]);
+	}
 
-	std::cout << cusparse_res_buffer[0] << std::endl;
+	// f32         time;
+	// cudaEvent_t start, stop;
+	// cudaDeviceSynchronize();
+	// cudaEventCreate(&start);
+	// cudaEventCreate(&stop);
+	// cudaEventRecord(start, 0);
+	// CHECK_SPMM(spmm(handle, lib_csr, lib_dn, lib_res, SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE, SPMM_KERNEL_NO_INVERT));
+	// cudaDeviceSynchronize();
+	// cudaEventRecord(stop, 0);
+	// cudaEventSynchronize(stop);
+	// cudaEventElapsedTime(&time, start, stop);
+	// cudaEventDestroy(start);
+	// cudaEventDestroy(stop);
+	//
+	// const auto custom_time = time * 1e-3;
+	// const auto custom_flops = ((2 * csr.nnz * csr.cols) * 1e-9) / (time * 1e-3);
 
 	// cudaEventCreate(&start);
 	// cudaEventCreate(&stop);
@@ -409,20 +433,15 @@ static void launch_dlmc(const ExecutionContext_t handle, const std::filesystem::
 	//
 	// std::vector<f32> expected = host_spmm_rm_cm(sp_rm_buffer, dn_buffer, csr.rows, csr.cols, csr.cols);
 
-	// for (u32 i = 0; i < csr.rows * csr.cols; ++i) {
-	// comparef(res_buffer[i], expected[i]);
-	// comparef(cusparse_res_buffer[i], expected[i]);
-	// comparef(res_buffer[i], cusparse_res_buffer[i]);
-	// }
-
 	// std::cout << std::format(
 	// 	"Avg. time: {:.6f} | {:.6f} s\n"
 	// 	"Flops: {:.6f} | {:.6f} GFLOPs/s\n",
 	// 	custom_time, cusparse_time, custom_flops, cusparse_flops);
 
-	std::fill(res_buffer.begin(), res_buffer.end(), 0.0f);
+	// std::fill(res_buffer.begin(), res_buffer.end(), 0.0f);
 	cusparseDestroySpMat(cusparse_csr);
 	cusparseDestroyDnMat(cusparse_dn);
+	cusparseDestroyDnMat(cusparse_res);
 	cudaFree(cusparse_buffer);
 	cusparseDestroy(cusparse_handle);
 

@@ -25,7 +25,7 @@ static SpmmInternalStatus_t _d_sp_copy(DevArena* const arena, SpMatDescr* const 
 	dst->nnz = src->nnz;
 
 	switch (src->format) {
-	case SPMM_SPARSE_FORMAT_CSR:
+	case SPMM_FORMAT_SPARSE_CSR:
 		cudaMemcpy(d_ptr, src->csr.row_ptr, ptr_bsize, cudaMemcpyHostToDevice);
 		dst->csr.row_ptr = reinterpret_cast<u32*>(d_ptr);
 		d_ptr += ptr_bsize;
@@ -35,7 +35,7 @@ static SpmmInternalStatus_t _d_sp_copy(DevArena* const arena, SpMatDescr* const 
 		d_ptr += idx_bsize;
 
 		break;
-	case SPMM_SPARSE_FORMAT_CSC:
+	case SPMM_FORMAT_SPARSE_CSC:
 		cudaMemcpy(d_ptr, src->csr.row_ptr, ptr_bsize, cudaMemcpyHostToDevice);
 		dst->csc.col_ptr = reinterpret_cast<u32*>(d_ptr);
 		d_ptr += ptr_bsize;

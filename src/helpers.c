@@ -27,5 +27,7 @@ const char* spmm_get_error_name(SpmmStatus_t err)
 		return "SPMM_STATUS_NOT_SUPPORTED";
 	case SPMM_STATUS_INSUFFICIENT_RESOURCES:
 		return "SPMM_STATUS_INSUFFICIENT_RESOURCES";
+	default:
+		__builtin_unreachable();
 	}
 }
