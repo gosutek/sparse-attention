@@ -1,8 +1,88 @@
-#include "cusparse.h"
-
-#include "../src/helpers.h"
-#include "spmm.h"
 #include <cstdlib>
+#include <filesystem>
+
+#include "cusparse.h"
+#include "helpers.h"
+#include "spmm.h"
+#include "utils.h"
+
+struct SpmmContext
+{
+	CSR          h_csr;
+	SpMatDescr_t d_csr;
+
+	std::vector<f32> h_dn;
+	DnMatDescr_t     d_dn;
+
+	std::vector<f32> h_res;
+	DnMatDescr_t     d_res;
+};
+
+struct CusparseContext
+{
+	cusparseSpMatDescr_t d_csr;
+
+	cusparseDnMatDescr_t d_dn;
+
+	std::vector<f32>     h_res;
+	cusparseDnMatDescr_t d_res;
+};
+
+SpmmContext setup_spmm(const ExecutionContext_t handle, const std::filesystem::path& sp_path)
+{
+	CSR          h_csr = parse_csr_dlmc(sp_path);
+	SpMatDescr_t d_csr = NULL;
+
+	CHECK_SPMM(sp_csr_create(handle, &d_csr, h_csr.rows, h_csr.cols, h_csr.nnz, h_csr.row_ptr.data(), h_csr.col_idx.data(), h_csr.val.data()));
+
+	std::vector<f32> h_dn;
+	gen_synth_weights_vec(h_dn, h_csr.rows * h_csr.cols);
+
+	DnMatDescr_t d_dn = NULL;
+	CHECK_SPMM(dn_cm_create(handle, &d_dn, h_csr.cols, h_csr.cols, h_dn.data()));
+
+	std::vector<f32> h_res(h_csr.rows * h_csr.cols, 0);
+
+	DnMatDescr_t d_res = NULL;
+	CHECK_SPMM(dn_rm_create(handle, &d_res, h_csr.rows, h_csr.cols, h_res.data()));
+
+	return {
+		.h_csr = std::move(h_csr),
+		.d_csr = d_csr,
+		.h_dn = std::move(h_dn),
+		.d_dn = d_dn,
+		.h_res = std::move(h_res),
+		.d_res = d_res
+	};
+}
+
+CusparseContext setup_cusparse(const cusparseHandle_t handle, const SpMatDescr_t d_sp, const DnMatDescr_t d_dn, const DnMatDescr_t d_res)
+{
+	constexpr const f32 alpha = 1.0f;
+	constexpr const f32 beta = 0.0f;
+
+	u32  rows, cols, nnz, *row_ptr, *col_idx;
+	f32* val;
+
+	CHECK_SPMM(sp_csr_get(d_sp, &rows, &cols, &nnz, &row_ptr, &col_idx, &val));
+
+	// TODO: Check the ptr is on the device
+	cusparseSpMatDescr_t cusparse_csr = NULL;
+	CHECK_CUSPARSE(cusparseCreateCsr(&cusparse_csr,
+		rows, cols, nnz,
+		row_ptr, col_idx, val,
+		CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_32F));
+
+	CHECK_SPMM(dn_cm_get(d_dn, &rows, &cols, &val));
+	// TODO: Check the ptr is on the device
+	cusparseDnMatDescr_t cusparse_dn = NULL;
+	CHECK_CUSPARSE(cusparseCreateDnMat(&cusparse_dn,
+		rows, cols, cols, val, CUDA_R_32F, CUSPARSE_ORDER_COL));
+
+	// TODO: Check the ptr is on the device
+	CHECK_SPMM(dn_rm_get(d_res, &rows, &cols, &val));
+	cusparseDnMatDescr_t cusparse_res = NULL;
+}
 
 // void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse)
 // {
