@@ -22,9 +22,11 @@ find_package(CUDAToolkit REQUIRED)
 add_library(cute STATIC
   src/matrix.c
   src/allocator.c
+  src/helpers.c
 
   src/cuda/wrapper.cu
   src/cuda/api/cuda_allocator.cu
+  src/cuda/api/cuda_mem_wrapper.cu
   src/cuda/kernels/spmm.cu
   src/cuda/helpers.cuh
 )

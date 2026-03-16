@@ -47,6 +47,8 @@ extern "C"
 		SPMM_KERNEL_NO_INVERT = 1,
 	} SpmmInvert_t;
 
+	const char* spmm_get_error_name(SpmmStatus_t err);
+
 	/*
     * +------------------------------------------------------------------------------+
     * |                             MATRIX DESCRIPTORS                               |

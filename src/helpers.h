@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "spmm.h"
+
 #define MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define CEIL_DIVI(m, n) (((m) + (n) - 1) / (n))
@@ -44,13 +46,13 @@ typedef double   f64;
 		}                                                                                                    \
 	} while (0)
 
-#define CHECK_SPMM(x)                                                                           \
-	do {                                                                                        \
-		SpmmStatus_t err = x;                                                                   \
-		if (err != SPMM_STATUS_SUCCESS) {                                                       \
-			fprintf(stderr, "SPMM error in %s at %s:%d: \n", __FUNCTION__, __FILE__, __LINE__); \
-			abort();                                                                            \
-		}                                                                                       \
+#define CHECK_SPMM(x)                                                                                                                 \
+	do {                                                                                                                              \
+		SpmmStatus_t err = x;                                                                                                         \
+		if (err != SPMM_STATUS_SUCCESS) {                                                                                             \
+			fprintf(stderr, "SPMM error in %s at %s:%d: (%s=%d)\n", __FUNCTION__, __FILE__, __LINE__, spmm_get_error_name(err), err); \
+			abort();                                                                                                                  \
+		}                                                                                                                             \
 	} while (0)
 
 typedef enum
