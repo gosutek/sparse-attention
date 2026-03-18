@@ -1,32 +1,4 @@
-#include <cstdlib>
-#include <filesystem>
-
-#include "cusparse.h"
-#include "helpers.h"
-#include "spmm.h"
-#include "utils.h"
-
-struct SpmmContext
-{
-	CSR          h_csr;
-	SpMatDescr_t d_csr;
-
-	std::vector<f32> h_dn;
-	DnMatDescr_t     d_dn;
-
-	std::vector<f32> h_res;
-	DnMatDescr_t     d_res;
-};
-
-struct CusparseContext
-{
-	cusparseSpMatDescr_t d_csr;
-
-	cusparseDnMatDescr_t d_dn;
-
-	std::vector<f32>     h_res;
-	cusparseDnMatDescr_t d_res;
-};
+#include "launcher.h"
 
 SpmmContext setup_spmm(const ExecutionContext_t handle, const std::filesystem::path& sp_path)
 {
@@ -81,7 +53,33 @@ CusparseContext setup_cusparse(const cusparseHandle_t handle, const SpMatDescr_t
 
 	// TODO: Check the ptr is on the device
 	CHECK_SPMM(dn_rm_get(d_res, &rows, &cols, &val));
+	std::vector<f32>     h_res(rows * cols, 0);
 	cusparseDnMatDescr_t cusparse_res = NULL;
+	CHECK_CUSPARSE(cusparseCreateDnMat(&cusparse_res, rows, cols, cols, val, CUDA_R_32F, CUSPARSE_ORDER_ROW));
+
+	u64 buffer_size;
+	CHECK_CUSPARSE(cusparseSpMM_bufferSize(handle,
+		CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
+		&alpha, cusparse_csr, cusparse_dn, &beta, cusparse_res,
+		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, &buffer_size));
+
+	void* cusparse_buffer = nullptr;
+	CHECK_CUDA(cudaMalloc(&cusparse_buffer, buffer_size));
+	CHECK_CUSPARSE(cusparseSpMM_preprocess(handle,
+		CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
+		&alpha, cusparse_csr, cusparse_dn, &beta, cusparse_res,
+		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse_buffer));
+
+	return {
+		.d_csr = cusparse_csr,
+		.d_dn = cusparse_dn,
+		.h_res = std::move(h_res),
+		.d_res = cusparse_res,
+		.buffer_size = buffer_size,
+		.buffer = cusparse_buffer,
+		.alpha = alpha,
+		.beta = beta
+	};
 }
 
 // void prepare_cusparse_csc(SPMM<CSC>& spmm, CuSparse& cusparse)

@@ -73,6 +73,7 @@ target_compile_options(cute PRIVATE
 
 add_executable(cute_main
   run/main.cpp
+  run/launcher.cpp
   run/utils.cpp
 )
 
