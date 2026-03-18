@@ -8,7 +8,7 @@ SpmmContext setup_spmm(const ExecutionContext_t handle, const std::filesystem::p
 	CHECK_SPMM(sp_csr_create(handle, &d_csr, h_csr.rows, h_csr.cols, h_csr.nnz, h_csr.row_ptr.data(), h_csr.col_idx.data(), h_csr.val.data()));
 
 	std::vector<f32> h_dn;
-	gen_synth_weights_vec(h_dn, h_csr.rows * h_csr.cols);
+	gen_synth_weights_vec(h_dn, h_csr.cols * h_csr.cols);
 
 	DnMatDescr_t d_dn = NULL;
 	CHECK_SPMM(dn_cm_create(handle, &d_dn, h_csr.cols, h_csr.cols, h_dn.data()));
