@@ -132,12 +132,6 @@ extern "C"
 	} RowMajorHeader;
 
 	f32 measure_sparsity(void* s, u32 size);
-	// size_t             calc_sparse_b_size(const size_t n, const size_t nnz);
-	// DlmcHeader         parse_dlmc_header(std::ifstream& file_stream);
-	// RowMajorHeader     parse_row_major_header(std::ifstream& file_stream);
-	// Csr::Matrix        parse_dlmc(void* dst, const std::filesystem::path& filepath);
-	// Csc::Matrix        parse_csc_dlmc(void* dst, const std::filesystem::path& filepath);
-	// size_t             calc_max_nnz_per_col(const Csc::Matrix& csc);
 
 #if defined(__cplusplus)
 }

@@ -35,17 +35,3 @@ SpmmTestStatus_t ut_run_tests()
 
 	return SPMM_TEST_STATUS_OK;
 }
-
-static SpmmTestStatus_t _sp_csr_to_csc_invalid_ctx(SpMatDescr_t sp_csr, SpMatDescr_t sp_csc)
-{
-	ExecutionContext_t ctx = NULL;
-	if (sp_)
-		return sp_csr_to_csc(ctx, sp_csr, sp_csc) == SPMM_STATUS_NOT_INITIALIZED;
-}
-
-static SpmmTestStatus_t ut_sp_csr_to_csc(ExecutionContext_t ctx, SpMatDescr_t sp_csr, SpMatDescr_t sp_csc)
-{
-	if (!_sp_csr_to_csc_invalid_ctx(sp_csr, sp_csc)) {
-		return SPMM_TEST_STATUS_
-	}
-}

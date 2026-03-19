@@ -2,19 +2,12 @@
 #include <format>
 #include <iostream>
 
-#include "../test/unit_tests.h"
-#include "allocator.h"
 #include "cusparse.h"
 #include "helpers.h"
 #include "launcher.h"
 #include "utils.h"
 
 #include "spmm.h"
-
-// constexpr const char* prunning_methods[] = { "l0_regularization/", "variational_dropout/", "magnitude_pruning/", "random_pruning/" };
-// constexpr const char* sparsity_arr[] = { "0.5/", "0.6/", "0.7/", "0.8/", "0.9/", "0.95/", "0.98/" };
-// constexpr const char* custom_sparse[] = { "1024/" };
-// constexpr const char* DEFAULT_TEST_DIR = "test/dlmc/";
 
 // struct Benchmark
 // {
@@ -50,26 +43,6 @@
 // 		"Max shared memory per block", static_cast<u32>(dev_prop.sharedMemPerBlock / 1e3),
 // 		"Max shared memory per SM", dev_prop.sharedMemPerMultiprocessor,
 // 		"SM count", dev_prop.multiProcessorCount);
-// }
-//
-// void print_help()
-// {
-// 	const std::string help_msg = std::format(
-// 		"usage: cute [options]\n\n"
-// 		"Options:\n"
-// 		"\t-b <kernel number>      Benchmark a kernel, use -l [ --list ] for a list of kernel numbers.\n"
-// 		"\t-l                      Enumerate kernels for use with -b.\n"
-// 		"\t-m                      Run the entire pipeline.\n"
-// 		"\t-p                      Print device properties.\n");
-//
-// 	std::cout << help_msg << "\n";
-// }
-//
-// void list_kernels()
-// {
-// 	const std::string kernel_msg = "Placeholder";
-//
-// 	std::cout << kernel_msg << "\n";
 // }
 //
 // void print_benchmarks(const std::string op_name, const std::string contender_1, const std::string contender_2,
@@ -124,176 +97,6 @@
 // // 		"Flops: {:.6f} GFLOPs/s\n",
 // // 		BENCHMARKING_DENSE_N_ROWS[size_idx], avg_time, (BENCHMARKING_ROUNDS * flops * 1e-9) / time);
 // // }
-//
-// Benchmark benchmark_spmm_csr(void (*run_kernel)(SPMM<CSR>&, const u32), const std::string prunning_method = "l0_regularization/", const std::string sparsity = "0.5/")
-// {
-// 	// 1. Read weight
-// 	// 2. Generate X with sizes (32, 64, 128, 256, 512)
-// 	// 3. For each size
-// 	// 3.1 Run once
-// 	// 3.2 Verify result
-// 	// 3.3 Run 100-1000 times each
-// 	// 3.4 Calculate FLOPs
-//
-// 	SPMM<CSR>   spmm;
-// 	Benchmark   res;
-// 	std::string data_dir_path = construct_path("data/dlmc/transformer/" + prunning_method + sparsity, BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
-// 	if (prunning_method == "random_pruning/" || prunning_method == "magnitude_pruning/") {
-// 		spmm.sparse_path = data_dir_path + "q_fully_connected.smtx";
-// 	} else {
-// 		spmm.sparse_path = data_dir_path + "q.smtx";
-// 	}
-//
-// 	prepare_spmm_mem_csr(spmm);
-//
-// 	f32       time;
-// 	cudaEvent_t start, stop;
-// 	cudaEventCreate(&start);
-// 	cudaEventCreate(&stop);
-//
-// 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
-// 		bool correct = warmup_spmm_csr(spmm, 0, run_kernel);
-// 		cudaEventRecord(start);
-// 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
-// 			run_kernel(spmm, i);
-// 		}
-// 		cudaEventRecord(stop);
-// 		cudaEventSynchronize(start);
-// 		cudaEventSynchronize(stop);
-// 		cudaEventElapsedTime(&time, start, stop);
-//
-// 		res.time[i] = (time * 1e-3) / BENCHMARKING_ROUNDS;
-// 		res.flops[i] = ((2 * BENCH_DIMS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
-// 	}
-//
-// 	cudaEventDestroy(start);
-// 	cudaEventDestroy(stop);
-//
-// 	cuda_dealloc_host(spmm.host.data);
-// 	cuda_dealloc_device(spmm.dev.data);
-//
-// 	return res;
-// }
-//
-// Benchmark benchmark_spmm_csc(void (*run_kernel)(SPMM<CSC>&, const u32), const std::string prunning_method, const std::string sparsity)
-// {
-// 	// 1. Read weights
-// 	// 2. Generate X with sizes (32, 64, 128, 256, 512)
-// 	// 3. For each size
-// 	// 3.1 Run once
-// 	// 3.2 Verify result against cuspase
-// 	// 3.3 Run 100-1000 times each
-// 	// 3.4 Calculate FLOPs
-//
-// 	SPMM<CSC>   spmm;
-// 	Benchmark   res;
-// 	std::string data_dir_path = construct_path("data/dlmc/transformer/" + prunning_method + sparsity, BodyType::Decoder, AttentionMechanism::SelfAttention, 5);
-// 	if (prunning_method == "random_pruning/" || prunning_method == "magnitude_pruning/") {
-// 		spmm.sparse_path = data_dir_path + "v_fully_connected.smtx";
-// 	} else {
-// 		spmm.sparse_path = data_dir_path + "v.smtx";
-// 	}
-//
-// 	prepare_spmm_csc(spmm);
-//
-// 	f32       time;
-// 	cudaEvent_t start, stop;
-//
-// 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
-// 		bool correct = warmup_spmm_csc(spmm, 0, run_kernel);
-// 		cudaDeviceSynchronize();
-// 		cudaEventCreate(&start);
-// 		cudaEventCreate(&stop);
-// 		cudaEventRecord(start, 0);
-// 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
-// 			run_kernel(spmm, i);
-// 		}
-// 		cudaDeviceSynchronize();
-// 		cudaEventRecord(stop, 0);
-// 		cudaEventSynchronize(stop);
-// 		cudaEventElapsedTime(&time, start, stop);
-//
-// 		res.time[i] = (time * 1e-3) / BENCHMARKING_ROUNDS;
-// 		res.flops[i] = ((2 * BENCH_DIMS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
-// 		cudaEventDestroy(start);
-// 		cudaEventDestroy(stop);
-// 	}
-// 	cudaDeviceSynchronize();
-//
-// 	cuda_dealloc_host(spmm.host.data);
-// 	cuda_dealloc_device(spmm.dev.data);
-//
-// 	return res;
-// }
-//
-// Benchmark benchmark_cusparse(const std::string prunning_method, const std::string sparsity)
-// {
-// 	// WARN: This function throws but doesn't gracefuly exit!1!
-// 	SPMM<CSR> spmm;
-// 	Benchmark res;
-//
-// 	CuSparse cusparse;
-// cusparseCreate(&cusparse.handle);
-//
-// 	std::string data_dir_path = construct_path("data/dlmc/transformer/" + prunning_method + sparsity, BodyType::Decoder, AttentionMechanism::SelfAttention, 0);
-// 	if (prunning_method == "random_pruning/" || prunning_method == "magnitude_pruning/") {
-// 		spmm.sparse_path = data_dir_path + "v_fully_connected.smtx";
-// 	} else {
-// 		spmm.sparse_path = data_dir_path + "v.smtx";
-// 	}
-//
-// 	prepare_cusparse_csr(spmm, cusparse);
-//
-// 	f32       time;
-// 	cudaEvent_t start, stop;
-//
-// 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
-// 		// Warmup
-// CHECK_CUSPARSE(cusparseSpMM_preprocess(cusparse.handle,
-// 	CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
-// 	&cusparse.alpha, cusparse.sparse, cusparse.dense[0], &cusparse.beta, cusparse.res[0],
-// 	CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse.work_buffer));
-//
-// 		CHECK_CUSPARSE(cusparseSpMM(cusparse.handle,
-// 			CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
-// 			&cusparse.alpha, cusparse.sparse, cusparse.dense[0], &cusparse.beta, cusparse.res[0], CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse.work_buffer));
-//
-// 		cudaDeviceSynchronize();
-// 		cudaEventCreate(&start);
-// 		cudaEventCreate(&stop);
-// 		cudaEventRecord(start, 0);
-// 		for (size_t j = 0; j < BENCHMARKING_ROUNDS; ++j) {
-// 			CHECK_CUSPARSE(cusparseSpMM(cusparse.handle,
-// 				CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
-// 				&cusparse.alpha, cusparse.sparse, cusparse.dense[i], &cusparse.beta, cusparse.res[i], CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse.work_buffer));
-// 		}
-// 		cudaDeviceSynchronize();
-// 		cudaEventRecord(stop, 0);
-// 		cudaEventSynchronize(stop);
-// 		cudaEventElapsedTime(&time, start, stop);
-// 		cudaEventDestroy(start);
-// 		cudaEventDestroy(stop);
-//
-// 		res.time[i] = (time * 1e-3) / BENCHMARKING_ROUNDS;
-// 		res.flops[i] = ((2 * BENCH_DIMS[i] * spmm.host.s.nnz) * BENCHMARKING_ROUNDS * 1e-9) / (time * 1e-3);
-// 	}
-// 	CHECK_CUDA(cudaDeviceSynchronize());
-//
-// 	cuda_dealloc_device(cusparse.work_buffer);
-//
-// 	cusparseDestroySpMat(cusparse.sparse);
-//
-// 	for (size_t i = 0; i < std::size(BENCH_DIMS); ++i) {
-// 		cusparseDestroyDnMat(cusparse.dense[i]);
-// 		cusparseDestroyDnMat(cusparse.res[i]);
-// 	}
-// 	cusparseDestroy(cusparse.handle);
-//
-// 	cuda_dealloc_host(spmm.host.data);
-// 	cuda_dealloc_device(spmm.dev.data);
-//
-// 	return res;
-// }
 
 static std::vector<f32> host_spmm_rm_cm(const std::vector<f32>& a, const std::vector<f32>& b, size_t m, size_t k, size_t n)
 {
@@ -389,50 +192,15 @@ static void bench_spmm_cusparse(const std::filesystem::path& sp_path, const Spmm
 	CHECK_CUSPARSE(cusparseDestroy(cusparse_handle));
 }
 
-static void launch_dlmc(const ExecutionContext_t handle, const std::filesystem::path& path)
-{
-	// DnMatDescr_t     lib_sp_rm = NULL;
-	// std::vector<f32> sp_rm_buffer(csr.rows * csr.cols, 0);
-	// CHECK_SPMM(create_dn_mat_row_major(handle, &lib_sp_rm, csr.rows, csr.cols, sp_rm_buffer.data()));
-	// CHECK_SPMM(sp_csr_to_row_major(lib_csr, lib_sp_rm));
-	//
-	// std::vector<f32> expected = host_spmm_rm_cm(sp_rm_buffer, dn_buffer, csr.rows, csr.cols, csr.cols);
-
-	// std::fill(res_buffer.begin(), res_buffer.end(), 0.0f);
-	// cusparseDestroySpMat(cusparse_csr);
-	// cusparseDestroyDnMat(cusparse_dn);
-	// cusparseDestroyDnMat(cusparse_res);
-	// cudaFree(cusparse_buffer);
-	// cusparseDestroy(cusparse_handle);
-
-	// CSC          csc = { csr.rows, csr.cols, csr.nnz, std::vector<u32>(csr.cols + 1), std::vector<u32>(csr.nnz), std::vector<f32>(csr.nnz) };
-	// SpMatDescr_t lib_csc = NULL;
-	// CHECK_SPMM(create_sp_mat_csc(handle, &lib_csc, csc.rows, csc.cols, csc.nnz, csc.col_ptr.data(), csc.row_idx.data(), csc.val.data()));
-	// sp_csr_to_csc(handle, lib_csr, lib_csc);
-	//
-	// CHECK_SPMM(spmm(handle, lib_csc, lib_dn, lib_res, SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE, SPMM_KERNEL_INVERT));
-	// DnMatDescr_t     lib_sp_cm = NULL;
-	// std::vector<f32> sp_cm_buffer(csc.rows * csc.cols, 0);
-	// CHECK_SPMM(create_dn_mat_col_major(handle, &lib_sp_cm, csc.rows, csc.cols, sp_cm_buffer.data()));
-	// CHECK_SPMM(sp_csc_to_col_major(lib_csc, lib_sp_cm));
-	//
-	// expected = host_spmm_rm_cm(dn_buffer, sp_cm_buffer, csc.rows, csc.cols, csc.cols);
-	//
-	// for (u32 i = 0; i < csc.rows * csc.cols; ++i) {
-	// 	comparef(res_buffer[i], expected[i]);
-	// }
-	// std::fill(res_buffer.begin(), res_buffer.end(), 0.0f);
-}
-
 int main(void)
 {
-	// const std::filesystem::directory_iterator dir_it("run/data/dlmc/transformer/l0_regularization/0.5/");
-	// for (const std::filesystem::path& p : dir_it) {
-	// 	if (!p.stem().string().ends_with("aux")) {
-	// 		std::cout << "Benchmarking: " << p.stem().string() << std::endl;
-	// 		bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_NO_INVERT);
-	// 	}
-	// }
-	bench_spmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_5_ffn_conv2.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_NO_INVERT);
+	const std::filesystem::directory_iterator dir_it("run/data/dlmc/transformer/l0_regularization/0.5/");
+	for (const std::filesystem::path& p : dir_it) {
+		if (!p.stem().string().ends_with("aux")) {
+			std::cout << "Benchmarking: " << p.stem().string() << std::endl;
+			bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_NO_INVERT);
+		}
+	}
+	// bench_spmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_5_ffn_conv2.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_NO_INVERT);
 	return 0;
 }
