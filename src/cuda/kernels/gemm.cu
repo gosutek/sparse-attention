@@ -1,4 +1,4 @@
-#include "cuda_helpers.cuh"
+#include "cu_helpers.cuh"
 #include "helpers.h"
 
 __global__ void gemm(

@@ -1,7 +1,7 @@
 #if !defined(ALLOCATOR_H)
 #define ALLOCATOR_H
 
-#include "cuda_allocator.cuh"
+#include "cu_allocator.cuh"
 
 #if defined(__cplusplus)
 extern "C"

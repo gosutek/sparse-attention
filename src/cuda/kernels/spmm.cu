@@ -1,6 +1,6 @@
 #include "spmm.cuh"
 
-#include "cuda_helpers.cuh"
+#include "cu_helpers.cuh"
 
 /*
   * +------------------------------------------------------------------------------+

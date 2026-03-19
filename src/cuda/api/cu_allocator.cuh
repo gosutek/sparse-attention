@@ -1,5 +1,5 @@
-#if !defined(CUDA_ALLOCATOR_CUH)
-#define CUDA_ALLOCATOR_CUH
+#if !defined(CU_ALLOCATOR_CUH)
+#define CU_ALLOCATOR_CUH
 
 #include "helpers.h"
 
@@ -29,4 +29,4 @@ extern "C"
 }
 #endif
 
-#endif  // CUDA_ALLOCATOR_CUH
+#endif  // CU_ALLOCATOR_CUH

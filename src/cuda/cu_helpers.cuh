@@ -48,7 +48,7 @@ __device__ inline void _d_dn_cm_set(f32* const a, u32 n_rows, u32 row, u32 col, 
 	a[col * n_rows + row] = val;
 }
 
-__host__ inline i8 _dev_ptr_chk(void* ptr)
+__host__ inline bool _dev_ptr_chk(const void* ptr)
 {
 	cudaPointerAttributes a;
 	cudaPointerGetAttributes(&a, ptr);

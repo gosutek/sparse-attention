@@ -1,11 +1,12 @@
 #include <cstdio>
 
 #include "allocator.h"
-#include "cuda_helpers.cuh"
+#include "cu_helpers.cuh"
 #include "kernels/spmm.cuh"
 #include "matrix.h"
 #include "spmm.h"
 
+// TODO: This needs to be changed as src->val now points to device memory
 static SpmmInternalStatus_t _d_sp_copy(DevArena* const arena, SpMatDescr* const dst, const SpMatDescr* const src)
 {
 	uint8_t* d_ptr = NULL;
@@ -52,6 +53,7 @@ static SpmmInternalStatus_t _d_sp_copy(DevArena* const arena, SpMatDescr* const 
 	return SPMM_INTERNAL_STATUS_SUCCESS;
 }
 
+// TODO: This needs to be changed as src->val now points to device memory
 static SpmmInternalStatus_t _d_dn_copy(DevArena* const arena, DnMatDescr* dst, DnMatDescr* src)
 {
 	uint8_t* d_ptr = NULL;

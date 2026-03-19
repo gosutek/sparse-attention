@@ -25,8 +25,8 @@ add_library(cute STATIC
   src/helpers.c
 
   src/cuda/wrapper.cu
-  src/cuda/api/cuda_allocator.cu
-  src/cuda/api/cuda_mem_wrapper.cu
+  src/cuda/api/cu_allocator.cu
+  src/cuda/api/cu_mem_wrapper.cu
   src/cuda/kernels/spmm.cu
 )
 

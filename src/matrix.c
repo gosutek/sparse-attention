@@ -1,28 +1,29 @@
 #include <string.h>
 
 #include "allocator.h"
-#include "cuda_mem_wrapper.cuh"
+#include "cu_mem_wrapper.cuh"
 #include "matrix.h"
 #include "spmm.h"
 
-static SpmmStatus_t get_max_nnz_per_row(size_t* const max_nnz_out, SpMatDescr* const sp_mat_descr)
-{
-	if (!sp_mat_descr || !max_nnz_out) {
-		return SPMM_STATUS_INVALID_VALUE;
-	}
-	*max_nnz_out = 0;
-	const size_t row_ptr_count = sp_mat_ptr_count_get(sp_mat_descr);
+// WARN: Doesn't work currently, see comment
+// static SpmmStatus_t sp_get_max_nnz_per_row(size_t* const max_nnz_out, const SpMatDescr* const sp_mat_descr)
+// {
+// 	if (!sp_mat_descr || !max_nnz_out) {
+// 		return SPMM_STATUS_INVALID_VALUE;
+// 	}
+// 	*max_nnz_out = 0;
+// 	const u32 offset_buf_cnt = sp_mat_ptr_count_get(sp_mat_descr);
+//
+// 	for (u32 i = 0; i < offset_buf_cnt - 1; ++i) {
+// 		const u32 curr_col_nnz = ((u32*)(sp_mat_descr->csr.row_ptr))[i + 1] - ((u32*)(sp_mat_descr->csr.row_ptr))[i]; // WARN: This tries to access device memory. Needs refactoring
+// 		*max_nnz_out = *max_nnz_out > curr_col_nnz ? *max_nnz_out : curr_col_nnz;
+// 	}
+// 	return SPMM_STATUS_SUCCESS;
+// }
 
-	for (size_t i = 0; i < row_ptr_count - 1; ++i) {
-		const size_t curr_col_nnz = ((u32*)(sp_mat_descr->csr.row_ptr))[i + 1] - ((u32*)(sp_mat_descr->csr.row_ptr))[i];
-		*max_nnz_out = *max_nnz_out > curr_col_nnz ? *max_nnz_out : curr_col_nnz;
-	}
-	return SPMM_STATUS_SUCCESS;
-}
-
-SpmmStatus_t sp_csr_to_row_major(SpMatDescr_t sp, DnMatDescr_t dn)
+SpmmStatus_t sp_csr_to_row_major(ExecutionContext_t const ctx, SpMatDescr_t sp, DnMatDescr_t dn)
 {
-	if (!sp || !dn) {  // I except both of these to be allocated
+	if (!ctx || !sp || !dn) {  // TODO: Maybe 'dn' doesn't have to be created (??)
 		return SPMM_STATUS_NOT_INITIALIZED;
 	}
 
@@ -31,7 +32,9 @@ SpmmStatus_t sp_csr_to_row_major(SpMatDescr_t sp, DnMatDescr_t dn)
 	}
 
 	// INFO: Will need to change when you template out types
-	memset(dn->val, 0, sp->rows * sp->cols * (sizeof(f32)));
+	f32*      work_buf = NULL;
+	const u64 work_buf_bsize = sp->rows * sp->cols * sizeof(f32);
+	mem_arena_host_push((MemArena*)ctx, work_buf_bsize, (void**)&work_buf);  // Should already be zero-ed out when on Linux
 
 	for (size_t i = 0; i < sp->rows; ++i) {
 		const u32* const row_ptr = sp->csr.row_ptr;
@@ -39,6 +42,8 @@ SpmmStatus_t sp_csr_to_row_major(SpMatDescr_t sp, DnMatDescr_t dn)
 			dn->val[i * sp->cols + sp->csr.col_idx[j]] = sp->val[j];
 		}
 	}
+
+	mem_arena_host_pop((MemArena*)ctx, work_buf_bsize);
 	return SPMM_STATUS_SUCCESS;
 }
 
@@ -182,6 +187,7 @@ f32 measure_sparsity(void* s, u32 size)
 	return nz / (f32)(size);
 }
 
+// TODO: Think about if this should accept NULL for row_ptr, col_idx, val
 SpmmStatus_t sp_csr_create(ExecutionContext_t ctx, SpMatDescr_t* sp,
 	u32  rows,
 	u32  cols,
@@ -215,9 +221,9 @@ SpmmStatus_t sp_csr_create(ExecutionContext_t ctx, SpMatDescr_t* sp,
 	(*sp)->csr.col_idx = (*sp)->csr.row_ptr + rows + 1;
 	(*sp)->val = (float*)((*sp)->csr.col_idx + nnz);
 
-	cuda_mem_cpy_hd((*sp)->csr.row_ptr, row_ptr, row_ptr_bsize);
-	cuda_mem_cpy_hd((*sp)->csr.col_idx, col_idx, col_idx_bsize);
-	cuda_mem_cpy_hd((*sp)->val, val, val_bsize);
+	cu_memcpy_htd((*sp)->csr.row_ptr, row_ptr, row_ptr_bsize);
+	cu_memcpy_htd((*sp)->csr.col_idx, col_idx, col_idx_bsize);
+	cu_memcpy_htd((*sp)->val, val, val_bsize);
 
 	return SPMM_STATUS_SUCCESS;
 }
@@ -248,6 +254,7 @@ SpmmStatus_t sp_csr_get(SpMatDescr* sp,
 	return SPMM_STATUS_SUCCESS;
 }
 
+// TODO: Think about if this should accept NULL for row_ptr, col_idx, val
 SpmmStatus_t sp_csc_create(ExecutionContext_t ctx, SpMatDescr_t* sp,
 	u32  rows,
 	u32  cols,
@@ -281,9 +288,9 @@ SpmmStatus_t sp_csc_create(ExecutionContext_t ctx, SpMatDescr_t* sp,
 	(*sp)->csc.row_idx = row_idx + cols + 1;
 	(*sp)->val = (float*)((*sp)->csc.row_idx + nnz);
 
-	cuda_mem_cpy_hd((*sp)->csc.col_ptr, col_ptr, col_ptr_bsize);
-	cuda_mem_cpy_hd((*sp)->csc.row_idx, row_idx, row_idx_bsize);
-	cuda_mem_cpy_hd((*sp)->val, val, val_bsize);
+	cu_memcpy_htd((*sp)->csc.col_ptr, col_ptr, col_ptr_bsize);
+	cu_memcpy_htd((*sp)->csc.row_idx, row_idx, row_idx_bsize);
+	cu_memcpy_htd((*sp)->val, val, val_bsize);
 
 	return SPMM_STATUS_SUCCESS;
 }
@@ -314,6 +321,7 @@ SpmmStatus_t sp_csc_get(SpMatDescr* sp,
 	return SPMM_STATUS_SUCCESS;
 }
 
+// TODO: Think about if this should accept NULL for val
 SpmmStatus_t dn_rm_create(ExecutionContext_t ctx, DnMatDescr_t* dn,
 	u32  rows,
 	u32  cols,
@@ -337,7 +345,7 @@ SpmmStatus_t dn_rm_create(ExecutionContext_t ctx, DnMatDescr_t* dn,
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
-	cuda_mem_cpy_hd((*dn)->val, val, bsize);
+	cu_memcpy_htd((*dn)->val, val, bsize);
 
 	return SPMM_STATUS_SUCCESS;
 }
@@ -362,6 +370,7 @@ SpmmStatus_t dn_rm_get(DnMatDescr* dn,
 	return SPMM_STATUS_SUCCESS;
 }
 
+// TODO: Think about if this should accept NULL for val
 SpmmStatus_t dn_cm_create(ExecutionContext_t ctx, DnMatDescr_t* dn,
 	u32  rows,
 	u32  cols,
@@ -384,7 +393,7 @@ SpmmStatus_t dn_cm_create(ExecutionContext_t ctx, DnMatDescr_t* dn,
 	if (mem_arena_dev_push(&ctx->dev_arena, bsize, (void**)&(*dn)->val) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
-	cuda_mem_cpy_hd((*dn)->val, val, bsize);
+	cu_memcpy_htd((*dn)->val, val, bsize);
 
 	return SPMM_STATUS_SUCCESS;
 }

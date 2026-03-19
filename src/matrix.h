@@ -46,7 +46,7 @@ extern "C"
 		f32* val;
 	} SpMatDescr;
 
-	static inline size_t sp_mat_ptr_count_get(const SpMatDescr* const sp)
+	static inline u32 sp_mat_ptr_count_get(const SpMatDescr* const sp)
 	{
 		switch (sp->format) {
 		case SPMM_FORMAT_SPARSE_CSR:

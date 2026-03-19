@@ -1,4 +1,4 @@
-#include "cuda_allocator.cuh"
+#include "cu_allocator.cuh"
 
 #include <cstdio>
 
