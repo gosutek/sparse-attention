@@ -1,9 +1,5 @@
 #pragma once
 
-#include <filesystem>
-
-#include "spmm.h"
-
 #define TEST_CASE_DIR "../test_data/unit/"
 
 enum SpmmTestStatus_t

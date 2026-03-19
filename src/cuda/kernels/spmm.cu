@@ -1,5 +1,7 @@
 #include "spmm.cuh"
 
+#include "cuda_helpers.cuh"
+
 /*
   * +------------------------------------------------------------------------------+
   * |                    SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK                     |

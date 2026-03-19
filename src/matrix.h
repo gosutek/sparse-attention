@@ -1,15 +1,6 @@
 #if !defined(MATRIX_H)
 #define MATRIX_H
 
-#include "spmm.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include "allocator.h"
-#include "cuda_allocator.cuh"
-#include "cuda_mem_wrapper.cuh"
 #include "helpers.h"
 
 #if defined(__cplusplus)

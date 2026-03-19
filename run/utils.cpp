@@ -1,5 +1,7 @@
 #include "utils.h"
 
+#include <fstream>
+
 Dense parse_dn_test_case(const std::filesystem::path& path)
 {
 	Dense       rm;

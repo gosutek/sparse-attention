@@ -1,8 +1,8 @@
+#include <cstdio>
+
 #include "allocator.h"
-#include "cuda/helpers.cuh"
-#include "cuda/kernels/spmm.cuh"
-#include "cuda_allocator.cuh"
-#include "helpers.h"
+#include "cuda_helpers.cuh"
+#include "kernels/spmm.cuh"
 #include "matrix.h"
 #include "spmm.h"
 

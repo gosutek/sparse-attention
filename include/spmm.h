@@ -1,8 +1,6 @@
 #if !defined(SPMM_H)
 #define SPMM_H
 
-#include <stdint.h>
-
 #if defined(__cplusplus)
 extern "C"
 {

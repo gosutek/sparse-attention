@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../helpers.cuh"
 #include "helpers.h"
 
 __global__ void _k_spmm_naive_elemwise_gmem(

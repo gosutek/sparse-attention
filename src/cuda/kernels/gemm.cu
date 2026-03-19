@@ -1,4 +1,5 @@
-#include "gemm.cuh"
+#include "cuda_helpers.cuh"
+#include "helpers.h"
 
 __global__ void gemm(
 	const f32* __restrict__ a,  // row-major
@@ -19,11 +20,11 @@ __global__ void gemm(
 	// TODO: Change hardcoded value
 	__shared__ f32 a_row_sm[512];
 
-	a_row_sm[x] = get_elem_rm(a, k, y, x);
+	a_row_sm[x] = _d_dn_rm_get(a, k, y, x);
 	__syncthreads();
 
 	for (size_t i = 0; i < k; ++i) {
 		acc += a_row_sm[i] * b[x * k + i];
 	}
-	set_elem_rm(res, n, y, x, acc);
+	_d_dn_rm_set(res, n, y, x, acc);
 }

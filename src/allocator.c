@@ -1,5 +1,11 @@
 #include "allocator.h"
 
+#include <stdlib.h>  // for abort()
+#include <sys/mman.h>
+#include <unistd.h>
+
+#include "spmm.h"
+
 /*
       * +------------------------------------------------------------------------------+
       * |                             PLATFORM SPECIFIC                                |

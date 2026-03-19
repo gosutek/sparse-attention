@@ -1,15 +1,6 @@
 #if !defined(ALLOCATOR_H)
 #define ALLOCATOR_H
 
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/mman.h>
-#include <unistd.h>
-
-#include "helpers.h"
-#include "spmm.h"
-
 #include "cuda_allocator.cuh"
 
 #if defined(__cplusplus)

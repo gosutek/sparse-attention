@@ -1,4 +1,5 @@
 #include "helpers.h"
+#include "spmm.h"
 
 const char* spmm_get_error_name(SpmmStatus_t err)
 {

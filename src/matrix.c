@@ -1,4 +1,9 @@
+#include <string.h>
+
+#include "allocator.h"
+#include "cuda_mem_wrapper.cuh"
 #include "matrix.h"
+#include "spmm.h"
 
 static SpmmStatus_t get_max_nnz_per_row(size_t* const max_nnz_out, SpMatDescr* const sp_mat_descr)
 {

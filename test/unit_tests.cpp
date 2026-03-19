@@ -1,7 +1,8 @@
-#include "unit_tests.h"
-#include "../run/utils.h"
+#include <filesystem>
 
 #include "spmm.h"
+#include "unit_tests.h"
+#include "utils.h"
 
 SpmmTestStatus_t ut_run_tests()
 {

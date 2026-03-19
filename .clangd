@@ -8,6 +8,7 @@ CompileFlags:
     - "--options-file"
     - "-Xcompiler*"
     - "--expt-relaxed-constexpr"
+    - "-rdc=true"
 
 ---
 

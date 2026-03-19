@@ -28,7 +28,6 @@ add_library(cute STATIC
   src/cuda/api/cuda_allocator.cu
   src/cuda/api/cuda_mem_wrapper.cu
   src/cuda/kernels/spmm.cu
-  src/cuda/helpers.cuh
 )
 
 target_include_directories(cute
@@ -37,11 +36,12 @@ target_include_directories(cute
     $<INSTALL_INTERFACE:include>
   PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/src
+  ${CMAKE_CURRENT_SOURCE_DIR}/src/cuda
   ${CMAKE_CURRENT_SOURCE_DIR}/src/cuda/api
 )
 
 set_target_properties(cute PROPERTIES
-  CUDA_SEPERABLE_COMPILATION ON
+  CUDA_SEPARABLE_COMPILATION ON
   CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 

@@ -1,5 +1,7 @@
 #include "cuda_allocator.cuh"
 
+#include <cstdio>
+
 SpmmInternalStatus_t mem_arena_dev_create(DevArena* arena, const u64 bsize)
 {
 	cudaPointerAttributes ptr_attr;

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstdint>
-
 #include "helpers.h"
 
 /*
@@ -48,4 +46,11 @@ __device__ inline void _d_dn_rm_set(f32* const a, u32 n_cols, u32 row, u32 col, 
 __device__ inline void _d_dn_cm_set(f32* const a, u32 n_rows, u32 row, u32 col, f32 val)
 {
 	a[col * n_rows + row] = val;
+}
+
+__host__ inline i8 _dev_ptr_chk(void* ptr)
+{
+	cudaPointerAttributes a;
+	cudaPointerGetAttributes(&a, ptr);
+	return a.type == cudaMemoryTypeDevice;
 }

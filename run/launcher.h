@@ -1,13 +1,10 @@
 #pragma once
 
-#include <cstdlib>
 #include <filesystem>
 
 #include "cusparse.h"
-#include "helpers.h"
-#include "utils.h"
-
 #include "spmm.h"
+#include "utils.h"
 
 struct SpmmContext
 {
