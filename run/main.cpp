@@ -1,5 +1,4 @@
 #include <filesystem>
-#include <format>
 #include <iostream>
 
 #include "cusparse.h"
@@ -160,8 +159,8 @@ static void bench_spmm_cusparse(const std::filesystem::path& sp_path, const Spmm
 	cudaEventDestroy(start);
 	cudaEventDestroy(stop);
 
-	const f64 custom_time = time / bench_rounds;
-	const f64 custom_flops = ((2.0 * rows_res * cols_res) * bench_rounds * 1e-9) / (time * 1e-3);
+	const f64 custom_time = time / bench_rounds;  // ms
+	const f64 custom_flops = (2.0 * ctx_spmm.h_csr.nnz * cols_res * 1e-9) / (custom_time * 1e-3);
 
 	cudaEventCreate(&start);
 	cudaEventCreate(&stop);
@@ -177,12 +176,13 @@ static void bench_spmm_cusparse(const std::filesystem::path& sp_path, const Spmm
 	cudaEventDestroy(stop);
 
 	const f64 cusparse_time = time / bench_rounds;
-	const f64 cusparse_flops = ((2.0 * rows_res * cols_res) * bench_rounds * 1e-9) / (time * 1e-3);
+	const f64 cusparse_flops = (2.0 * ctx_spmm.h_csr.nnz * cols_res * 1e-9) / (cusparse_time * 1e-3);
 
-	std::cout << std::format(
-		"Avg. time: {:.6f} | {:.6f} s\n"
-		"Flops: {:.6f} | {:.6f} GFLOPs/s\n",
-		custom_time, cusparse_time, custom_flops, cusparse_flops);
+	std::cout << "Avg. time: " << custom_time << " | " << cusparse_time << " ms\nFlops: " << custom_flops << " | " << cusparse_flops << " GFLOPs/s\n";
+	// std::cout << std::format(
+	// 	"Avg. time: {:.6f} | {:.6f} s\n"
+	// 	"Flops: {:.6f} | {:.6f} GFLOPs/s\n",
+	// 	custom_time, cusparse_time, custom_flops, cusparse_flops);
 
 	CHECK_SPMM(exec_ctx_destroy(spmm_handle));
 
@@ -194,13 +194,13 @@ static void bench_spmm_cusparse(const std::filesystem::path& sp_path, const Spmm
 
 int main(void)
 {
-	const std::filesystem::directory_iterator dir_it("run/data/dlmc/transformer/l0_regularization/0.5/");
-	for (const std::filesystem::path& p : dir_it) {
-		if (!p.stem().string().ends_with("aux")) {
-			std::cout << "Benchmarking: " << p.stem().string() << std::endl;
-			bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_NO_INVERT);
-		}
-	}
-	// bench_spmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_5_ffn_conv2.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_NO_INVERT);
+	// const std::filesystem::directory_iterator dir_it("run/data/dlmc/transformer/l0_regularization/0.5/");
+	// for (const std::filesystem::path& p : dir_it) {
+	// 	if (!p.stem().string().ends_with("aux")) {
+	// 		std::cout << "Benchmarking: " << p.stem().string() << std::endl;
+	// 		bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_NO_INVERT);
+	// 	}
+	// }
+	bench_spmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_NO_INVERT);
 	return 0;
 }
