@@ -1,5 +1,8 @@
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <sys/ioctl.h>
+#include <unistd.h>
 
 #include "cusparse.h"
 #include "helpers.h"
@@ -8,11 +11,14 @@
 
 #include "spmm.h"
 
-// struct Benchmark
-// {
-// 	f32  time[std::size(BENCH_DIMS)];
-// 	f64 flops[std::size(BENCH_DIMS)];
-// };
+struct Benchmark
+{
+	u32 rows;
+	u32 cols;
+	u32 nnz;
+	f64 time[2];
+	f64 flops[2];
+};
 //
 // void print_device_properties()
 // {
@@ -115,7 +121,7 @@ static std::vector<f32> host_spmm_rm_cm(const std::vector<f32>& a, const std::ve
 	return res;
 }
 
-static void bench_spmm_cusparse(const std::filesystem::path& sp_path, const SpmmKernelType_t kernel_t, const SpmmInvert_t invert_t, const u32 bench_rounds = 1000)
+static Benchmark bench_spmm_cusparse(const std::filesystem::path& sp_path, const SpmmKernelType_t kernel_t, const u32 bench_rounds = 1000)
 {
 	ExecutionContext_t spmm_handle = NULL;
 	CHECK_SPMM(exec_ctx_create(&spmm_handle));
@@ -127,7 +133,7 @@ static void bench_spmm_cusparse(const std::filesystem::path& sp_path, const Spmm
 
 	CusparseContext ctx_cusparse = setup_cusparse(cusparse_handle, ctx_spmm.d_csr, ctx_spmm.d_dn, ctx_spmm.d_res);
 
-	CHECK_SPMM(spmm(spmm_handle, ctx_spmm.d_csr, ctx_spmm.d_dn, ctx_spmm.d_res, kernel_t, invert_t));
+	CHECK_SPMM(spmm(spmm_handle, ctx_spmm.d_csr, ctx_spmm.d_dn, ctx_spmm.d_res, kernel_t, SPMM_KERNEL_NO_INVERT));
 	u32  rows_res, cols_res;
 	f32* val_res;
 	CHECK_SPMM(dn_rm_get(ctx_spmm.d_res, &rows_res, &cols_res, &val_res));
@@ -138,6 +144,11 @@ static void bench_spmm_cusparse(const std::filesystem::path& sp_path, const Spmm
 		&ctx_cusparse.alpha, ctx_cusparse.d_csr, ctx_cusparse.d_dn, &ctx_cusparse.beta, ctx_cusparse.d_res,
 		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, ctx_cusparse.buffer));
 
+	// INFO: Kind of redundant because both SPMM and CUSPARSE write to the same result buffer in the device
+	i64             ld;
+	cudaDataType    type;
+	cusparseOrder_t order;
+	CHECK_CUSPARSE(cusparseDnMatGet(ctx_cusparse.d_res, (i64*)&rows_res, (i64*)&cols_res, &ld, (void**)&val_res, &type, &order));
 	CHECK_CUDA(cudaMemcpy(ctx_cusparse.h_res.data(), val_res, rows_res * cols_res * sizeof *val_res, cudaMemcpyDeviceToHost));
 
 	for (u32 i = 0; i < rows_res * cols_res; ++i) {
@@ -151,7 +162,7 @@ static void bench_spmm_cusparse(const std::filesystem::path& sp_path, const Spmm
 	cudaEventCreate(&stop);
 	cudaEventRecord(start, 0);
 	for (u32 i = 0; i < bench_rounds; ++i) {
-		CHECK_SPMM(spmm(spmm_handle, ctx_spmm.d_csr, ctx_spmm.d_dn, ctx_spmm.d_res, kernel_t, invert_t));
+		CHECK_SPMM(spmm(spmm_handle, ctx_spmm.d_csr, ctx_spmm.d_dn, ctx_spmm.d_res, kernel_t, SPMM_KERNEL_NO_INVERT));
 	}
 	cudaEventRecord(stop, 0);
 	cudaEventSynchronize(stop);
@@ -178,6 +189,99 @@ static void bench_spmm_cusparse(const std::filesystem::path& sp_path, const Spmm
 	const f64 cusparse_time = time / bench_rounds;
 	const f64 cusparse_flops = (2.0 * ctx_spmm.h_csr.nnz * cols_res * 1e-9) / (cusparse_time * 1e-3);
 
+	// std::cout << "Avg. time: " << custom_time << " | " << cusparse_time << " ms\nFlops: " << custom_flops << " | " << cusparse_flops << " GFLOPs/s\n";
+	// std::cout << std::format(
+	// 	"Avg. time: {:.6f} | {:.6f} s\n"
+	// 	"Flops: {:.6f} | {:.6f} GFLOPs/s\n",
+	// 	custom_time, cusparse_time, custom_flops, cusparse_flops);
+
+	CHECK_SPMM(exec_ctx_destroy(spmm_handle));
+
+	cudaFree(ctx_cusparse.buffer);
+	CHECK_CUSPARSE(cusparseDestroySpMat(ctx_cusparse.d_csr));
+	CHECK_CUSPARSE(cusparseDestroyDnMat(ctx_cusparse.d_dn));
+	CHECK_CUSPARSE(cusparseDestroyDnMat(ctx_cusparse.d_res));
+	CHECK_CUSPARSE(cusparseDestroy(cusparse_handle));
+
+	return {
+		.rows = rows_res,
+		.cols = cols_res,
+		.nnz = ctx_spmm.h_csr.nnz,
+		.time = { custom_time, cusparse_time },
+		.flops = { custom_flops, cusparse_flops }
+	};
+}
+
+static void bench_ispmm_cusparse(const std::filesystem::path& sp_path, const SpmmKernelType_t kernel_t, const u32 bench_rounds = 1000)
+{
+	ExecutionContext_t spmm_handle = NULL;
+	CHECK_SPMM(exec_ctx_create(&spmm_handle));
+
+	ISpmmContext ctx_ispmm = setup_ispmm(spmm_handle, sp_path);
+
+	cusparseHandle_t cusparse_handle = NULL;
+	CHECK_CUSPARSE(cusparseCreate(&cusparse_handle));
+
+	CusparseContext ctx_icusparse = setup_icusparse(cusparse_handle, ctx_ispmm.d_csc, ctx_ispmm.d_dn, ctx_ispmm.d_res);
+
+	CHECK_SPMM(spmm(spmm_handle, ctx_ispmm.d_csc, ctx_ispmm.d_dn, ctx_ispmm.d_res, kernel_t, SPMM_KERNEL_INVERT));
+	u32  rows_res, cols_res;
+	f32* val_res;
+	CHECK_SPMM(dn_rm_get(ctx_ispmm.d_res, &rows_res, &cols_res, &val_res));
+	CHECK_CUDA(cudaMemcpy(ctx_ispmm.h_res.data(), val_res, rows_res * cols_res * sizeof *val_res, cudaMemcpyDeviceToHost));
+
+	CHECK_CUSPARSE(cusparseSpMM(cusparse_handle,
+		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+		&ctx_icusparse.alpha, ctx_icusparse.d_csr, ctx_icusparse.d_dn, &ctx_icusparse.beta, ctx_icusparse.d_res,
+		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, ctx_icusparse.buffer));
+
+	// INFO: Kind of redundant because both SPMM and CUSPARSE write to the same result buffer in the device
+	i64             ld;
+	cudaDataType    type;
+	cusparseOrder_t order;
+	CHECK_CUSPARSE(cusparseDnMatGet(ctx_icusparse.d_res, (i64*)&rows_res, (i64*)&cols_res, &ld, (void**)&val_res, &type, &order));
+	CHECK_CUDA(cudaMemcpy(ctx_icusparse.h_res.data(), val_res, rows_res * cols_res * sizeof *val_res, cudaMemcpyDeviceToHost));
+
+	for (u32 i = 0; i < rows_res * cols_res; ++i) {
+		comparef(ctx_ispmm.h_res[i], ctx_icusparse.h_res[i]);
+	}
+
+	f32         time;
+	cudaEvent_t start, stop;
+	cudaDeviceSynchronize();
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, 0);
+	for (u32 i = 0; i < bench_rounds; ++i) {
+		CHECK_SPMM(spmm(spmm_handle, ctx_ispmm.d_csc, ctx_ispmm.d_dn, ctx_ispmm.d_res, kernel_t, SPMM_KERNEL_INVERT));
+	}
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&time, start, stop);
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
+
+	const f64 custom_time = time / bench_rounds;  // ms
+	const f64 custom_flops = (2.0 * ctx_ispmm.h_csc.nnz * cols_res * 1e-9) / (custom_time * 1e-3);
+
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, 0);
+	for (u32 i = 0; i < bench_rounds; ++i) {
+		CHECK_CUSPARSE(cusparseSpMM(cusparse_handle,
+			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+			&ctx_icusparse.alpha, ctx_icusparse.d_csr, ctx_icusparse.d_dn, &ctx_icusparse.beta, ctx_icusparse.d_res,
+			CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, ctx_icusparse.buffer));
+	}
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&time, start, stop);
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
+
+	const f64 cusparse_time = time / bench_rounds;
+	const f64 cusparse_flops = (2.0 * ctx_ispmm.h_csc.nnz * cols_res * 1e-9) / (cusparse_time * 1e-3);
+
 	std::cout << "Avg. time: " << custom_time << " | " << cusparse_time << " ms\nFlops: " << custom_flops << " | " << cusparse_flops << " GFLOPs/s\n";
 	// std::cout << std::format(
 	// 	"Avg. time: {:.6f} | {:.6f} s\n"
@@ -186,10 +290,111 @@ static void bench_spmm_cusparse(const std::filesystem::path& sp_path, const Spmm
 
 	CHECK_SPMM(exec_ctx_destroy(spmm_handle));
 
-	CHECK_CUSPARSE(cusparseDestroySpMat(ctx_cusparse.d_csr));
-	CHECK_CUSPARSE(cusparseDestroyDnMat(ctx_cusparse.d_dn));
-	CHECK_CUSPARSE(cusparseDestroyDnMat(ctx_cusparse.d_res));
+	cudaFree(ctx_icusparse.buffer);
+	CHECK_CUSPARSE(cusparseDestroySpMat(ctx_icusparse.d_csr));
+	CHECK_CUSPARSE(cusparseDestroyDnMat(ctx_icusparse.d_dn));
+	CHECK_CUSPARSE(cusparseDestroyDnMat(ctx_icusparse.d_res));
 	CHECK_CUSPARSE(cusparseDestroy(cusparse_handle));
+}
+
+static inline bool is_valid_smtx(const std::filesystem::path& path)
+{
+	return std::filesystem::is_regular_file(path) && std::filesystem::exists(path) && path.extension().string() == ".smtx" && !path.stem().string().starts_with("symbol");
+}
+
+static inline i32 get_terminal_width()
+{
+	winsize w;
+	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+	return w.ws_col;
+}
+
+static inline i32 get_terminal_height()
+{
+	winsize w;
+	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+	return w.ws_row;
+}
+
+static void draw_bar(f32 progress, i32 width)
+{
+	i32 bar_width = width - 200;
+	i32 filled = static_cast<i32>(bar_width * progress);
+	i32 grey = bar_width - filled;
+	i32 percent = static_cast<i32>(progress * 100);
+
+	std::cout
+		<< "\033[2K"
+		<< "["
+		<< "\033[38;5;33m" << std::string(filled, '.') << "\033[0m"
+		<< std::string(grey, ' ')
+		<< "]"
+		<< " " << percent << "%";
+
+	std::cout.flush();
+}
+
+static void spmm_log(const std::string& msg, f32 progress)
+{
+	i32 cols = get_terminal_width();
+	i32 rows = get_terminal_height();
+
+	std::cout << "\033[" << rows - 1 << ";1H";
+	std::cout << "\033[2K";
+	std::cout << msg;
+
+	std::cout << "\033[" << rows << ";1H";
+	draw_bar(progress, cols);
+
+	std::cout.flush();
+}
+
+static void redraw_bar(float progress)
+{
+	i32 cols = get_terminal_width();
+	i32 rows = get_terminal_height();
+
+	std::cout << "\033[s";
+	std::cout << "\033[" << rows << ";1H";
+	draw_bar(progress, cols);
+	std::cout << "\033[u";
+	std::cout.flush();
+}
+
+static inline void push_to_csv(std::ofstream& csv_ifstream, const f64 a, const f64 b, const f64 c, const f64 d)
+{
+	csv_ifstream << a << "," << b << "," << c << "," << d << "\n";
+}
+
+void pretty_print(const std::filesystem::recursive_directory_iterator& rdir_it, const char* csv_filename)
+{
+	std::vector<std::filesystem::path> dataset;
+	for (const std::filesystem::path& p : rdir_it) {
+		if (is_valid_smtx(p)) {
+			dataset.emplace_back(p);
+		}
+	}
+
+	const std::filesystem::path csv_out = std::filesystem::current_path() / csv_filename;
+	std::ofstream               file(csv_out, std::ios_base::out);
+	file << "rows,cols,nnz,prunning_method,custom_time,cusparse_time,custom_flops,cusparse_flops\n";
+
+	const f32 total = static_cast<f32>(dataset.size());
+	for (u32 i = 0; i < total; ++i) {
+		const std::filesystem::path& p = dataset[i];
+		const std::string            prunning_method = p.parent_path().parent_path().stem().string();
+		f32                          progress = static_cast<f32>(i) / total;
+		spmm_log("Spmm-ing: " + p.stem().string(), progress);
+		Benchmark benchmark = bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_NNZWISE_COALESCED);
+		file << benchmark.rows << "," << benchmark.cols << "," << benchmark.nnz << "," << prunning_method << ","
+			 << benchmark.time[0] << "," << benchmark.time[1] << "," << benchmark.flops[0] << "," << benchmark.flops[1] << "\n";
+
+		redraw_bar(progress);
+	}
+
+	i32 rows = get_terminal_height();
+	std::cout << "\033[" << rows << ";1H\033[2K";
+	std::cout << "Done\n";
 }
 
 int main(void)
@@ -201,6 +406,9 @@ int main(void)
 	// 		bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_NO_INVERT);
 	// 	}
 	// }
-	bench_spmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_NO_INVERT);
+	// bench_spmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
+	// bench_ispmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
+	const std::filesystem::recursive_directory_iterator rdir_it("run/data/dlmc/transformer/");
+	pretty_print(rdir_it, "rtx_spmm_nnzwise_coalesced.csv");
 	return 0;
 }

@@ -2,6 +2,7 @@
 
 #include "allocator.h"
 #include "cu_mem_wrapper.cuh"
+#include "helpers.h"
 #include "matrix.h"
 #include "spmm.h"
 
@@ -221,9 +222,15 @@ SpmmStatus_t sp_csr_create(ExecutionContext_t ctx, SpMatDescr_t* sp,
 	(*sp)->csr.col_idx = (*sp)->csr.row_ptr + rows + 1;
 	(*sp)->val = (float*)((*sp)->csr.col_idx + nnz);
 
-	cu_memcpy_htd((*sp)->csr.row_ptr, row_ptr, row_ptr_bsize);
-	cu_memcpy_htd((*sp)->csr.col_idx, col_idx, col_idx_bsize);
-	cu_memcpy_htd((*sp)->val, val, val_bsize);
+	if (cu_memcpy_htd((*sp)->csr.row_ptr, row_ptr, row_ptr_bsize) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_INTERNAL_ERROR;
+	}
+	if (cu_memcpy_htd((*sp)->csr.col_idx, col_idx, col_idx_bsize) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_INTERNAL_ERROR;
+	}
+	if (cu_memcpy_htd((*sp)->val, val, val_bsize) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_INTERNAL_ERROR;
+	}
 
 	return SPMM_STATUS_SUCCESS;
 }
@@ -285,12 +292,18 @@ SpmmStatus_t sp_csc_create(ExecutionContext_t ctx, SpMatDescr_t* sp,
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
-	(*sp)->csc.row_idx = row_idx + cols + 1;
+	(*sp)->csc.row_idx = (*sp)->csc.col_ptr + cols + 1;
 	(*sp)->val = (float*)((*sp)->csc.row_idx + nnz);
 
-	cu_memcpy_htd((*sp)->csc.col_ptr, col_ptr, col_ptr_bsize);
-	cu_memcpy_htd((*sp)->csc.row_idx, row_idx, row_idx_bsize);
-	cu_memcpy_htd((*sp)->val, val, val_bsize);
+	if (cu_memcpy_htd((*sp)->csc.col_ptr, col_ptr, col_ptr_bsize) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_INTERNAL_ERROR;
+	}
+	if (cu_memcpy_htd((*sp)->csc.row_idx, row_idx, row_idx_bsize) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_INTERNAL_ERROR;
+	}
+	if (cu_memcpy_htd((*sp)->val, val, val_bsize) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_INTERNAL_ERROR;
+	}
 
 	return SPMM_STATUS_SUCCESS;
 }
@@ -345,7 +358,9 @@ SpmmStatus_t dn_rm_create(ExecutionContext_t ctx, DnMatDescr_t* dn,
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
 
-	cu_memcpy_htd((*dn)->val, val, bsize);
+	if (cu_memcpy_htd((*dn)->val, val, bsize) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_INTERNAL_ERROR;
+	}
 
 	return SPMM_STATUS_SUCCESS;
 }
@@ -393,7 +408,10 @@ SpmmStatus_t dn_cm_create(ExecutionContext_t ctx, DnMatDescr_t* dn,
 	if (mem_arena_dev_push(&ctx->dev_arena, bsize, (void**)&(*dn)->val) != SPMM_INTERNAL_STATUS_SUCCESS) {
 		return SPMM_STATUS_ALLOC_FAILED;
 	}
-	cu_memcpy_htd((*dn)->val, val, bsize);
+
+	if (cu_memcpy_htd((*dn)->val, val, bsize) != SPMM_INTERNAL_STATUS_SUCCESS) {
+		return SPMM_STATUS_INTERNAL_ERROR;
+	}
 
 	return SPMM_STATUS_SUCCESS;
 }

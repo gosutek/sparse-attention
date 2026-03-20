@@ -18,6 +18,18 @@ struct SpmmContext
 	DnMatDescr_t     d_res;
 };
 
+struct ISpmmContext
+{
+	CSC          h_csc;
+	SpMatDescr_t d_csc;
+
+	std::vector<f32> h_dn;
+	DnMatDescr_t     d_dn;
+
+	std::vector<f32> h_res;
+	DnMatDescr_t     d_res;
+};
+
 struct CusparseContext
 {
 	cusparseSpMatDescr_t d_csr;
@@ -33,5 +45,8 @@ struct CusparseContext
 	f32 alpha, beta;
 };
 
-SpmmContext     setup_spmm(const ExecutionContext_t handle, const std::filesystem::path& sp_path);
+SpmmContext  setup_spmm(const ExecutionContext_t handle, const std::filesystem::path& sp_path);
+ISpmmContext setup_ispmm(const ExecutionContext_t handle, const std::filesystem::path& sp_path);
+
 CusparseContext setup_cusparse(const cusparseHandle_t handle, const SpMatDescr_t d_sp, const DnMatDescr_t d_dn, const DnMatDescr_t d_res);
+CusparseContext setup_icusparse(const cusparseHandle_t handle, const SpMatDescr_t d_sp, const DnMatDescr_t d_dn, const DnMatDescr_t d_res);

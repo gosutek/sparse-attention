@@ -86,16 +86,22 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t sp, DnMatDescr_t dn, DnMatDescr_t r
 			constexpr u32 BM = 8;
 			constexpr u32 BK = BM;
 
-			const u32 res_rows = sp->rows;
-			const u32 res_cols = dn->cols;
-
-			static_assert(BM <= 32);  // otherwise threads per block exceed max
-			dim3 grid(CEIL_DIVI(res_cols, BK), CEIL_DIVI(res_rows, BM));
-			dim3 block(BK, BM);
-
 			if (invert == SPMM_KERNEL_NO_INVERT) {
+				const u32 res_rows = sp->rows;
+				const u32 res_cols = dn->cols;
+
+				static_assert(BM <= 32);  // otherwise threads per block exceed max
+				dim3 grid(CEIL_DIVI(res_cols, BK), CEIL_DIVI(res_rows, BM));
+				dim3 block(BK, BM);
+
 				_k_spmm_naive_elemwise_gmem<<<grid, block>>>(sp->csr.row_ptr, sp->csr.col_idx, sp->val, dn->val, sp->rows, sp->cols, dn->cols, res->val);
 			} else {
+				const u32 res_rows = dn->rows;
+				const u32 res_cols = sp->cols;
+
+				static_assert(BM <= 32);
+				dim3 grid(CEIL_DIVI(res_cols, BK), CEIL_DIVI(res_rows, BM));
+				dim3 block(BK, BM);
 				_k_ispmm_naive_elemwise_gmem<<<grid, block>>>(dn->val, sp->csc.col_ptr, sp->csc.row_idx, sp->val, dn->rows, dn->cols, sp->cols, res->val);
 			}
 
