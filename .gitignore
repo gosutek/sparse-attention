@@ -3,6 +3,7 @@ build/
 *.a
 *.so
 *.log
+*.csv
 
 compile_commands.json
 CMakeCache.txt
