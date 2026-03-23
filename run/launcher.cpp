@@ -1,6 +1,5 @@
 #include "launcher.h"
 #include <cusparse.h>
-#include <library_types.h>
 
 SpmmContext setup_spmm(const ExecutionContext_t handle, const std::filesystem::path& sp_path)
 {

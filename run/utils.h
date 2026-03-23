@@ -58,6 +58,25 @@ CSR   parse_csr_dlmc(const std::filesystem::path& filepath);
 CSC   parse_csc_dlmc(const std::filesystem::path& path);
 
 bool verify_res(const f32* const actual, const f32* const expected, size_t n);
+f64  calc_cv(const f64 flops, f64& mu, f64& q, const u32 n);
+
+inline f64 mean_f64(const std::vector<f64>& vec)
+{
+	f32 mean = 0.0f;
+	for (u32 i = 0; i < vec.size(); ++i) {
+		mean += vec[i];
+	}
+	return mean / vec.size();
+}
+
+inline f32 mean_f32(const std::vector<f32>& vec)
+{
+	f32 mean = 0.0f;
+	for (u32 i = 0; i < vec.size(); ++i) {
+		mean += vec[i];
+	}
+	return mean / vec.size();
+}
 
 /*
  * Adapted from:

@@ -1,3 +1,4 @@
+#include <cassert>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -19,6 +20,31 @@ struct Benchmark
 	f64 time[2];
 	f64 flops[2];
 };
+
+template <typename Kernel>
+f32 time_kernel(Kernel kernel)
+{
+	f32         time;
+	cudaEvent_t start, stop;
+	cudaDeviceSynchronize();
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+	cudaEventRecord(start, 0);
+	kernel();
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
+	cudaEventElapsedTime(&time, start, stop);
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
+
+	return time;
+}
+
+static inline f64 calc_sparse_gflops(const f32 secs, const u32 nnz, const u32 n)
+{
+	return (2.0 * nnz * n * 1e-9) / secs;
+}
+
 //
 // void print_device_properties()
 // {
@@ -121,6 +147,14 @@ static std::vector<f32> host_spmm_rm_cm(const std::vector<f32>& a, const std::ve
 	return res;
 }
 
+template <typename Kernel>
+static void warmup(Kernel kernel, const u32 warmup_rounds = 10)
+{
+	for (u32 i = 0; i < warmup_rounds; ++i) {
+		kernel();
+	}
+}
+
 static Benchmark bench_spmm_cusparse(const std::filesystem::path& sp_path, const SpmmKernelType_t kernel_t, const u32 bench_rounds = 1000)
 {
 	ExecutionContext_t spmm_handle = NULL;
@@ -155,41 +189,67 @@ static Benchmark bench_spmm_cusparse(const std::filesystem::path& sp_path, const
 		comparef(ctx_spmm.h_res[i], ctx_cusparse.h_res[i]);
 	}
 
-	f32         time;
-	cudaEvent_t start, stop;
-	cudaDeviceSynchronize();
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
-	cudaEventRecord(start, 0);
-	for (u32 i = 0; i < bench_rounds; ++i) {
+	warmup([&]() {
 		CHECK_SPMM(spmm(spmm_handle, ctx_spmm.d_csr, ctx_spmm.d_dn, ctx_spmm.d_res, kernel_t, SPMM_KERNEL_NO_INVERT));
+	});
+
+	std::vector<f32> ms_spmm_vec;
+	std::vector<f64> gflops_spmm_vec;
+	f32              ms_spmm = time_kernel([&]() {
+		CHECK_SPMM(spmm(spmm_handle, ctx_spmm.d_csr, ctx_spmm.d_dn, ctx_spmm.d_res, kernel_t, SPMM_KERNEL_NO_INVERT));
+	});
+	ms_spmm_vec.push_back(ms_spmm);
+	f64 mean_spmm = 0.0;
+	f64 variance_spmm = 0.0;
+	f64 gflops_spmm = calc_sparse_gflops(ms_spmm * 1e-3, ctx_spmm.h_csr.nnz, cols_res);
+	gflops_spmm_vec.push_back(gflops_spmm);
+	f64 cv_spmm = calc_cv(gflops_spmm, mean_spmm, variance_spmm, 1);
+
+	u32 min_iter = 5;
+	u32 max_iter = 20;
+
+	for (u32 i = 1; i < min_iter + 1; ++i) {
+		ms_spmm = time_kernel([&]() {
+			CHECK_SPMM(spmm(spmm_handle, ctx_spmm.d_csr, ctx_spmm.d_dn, ctx_spmm.d_res, kernel_t, SPMM_KERNEL_NO_INVERT));
+		});
+		gflops_spmm = calc_sparse_gflops(ms_spmm * 1e-3, ctx_spmm.h_csr.nnz, cols_res);
+		cv_spmm = calc_cv(gflops_spmm, mean_spmm, variance_spmm, i + 1);
+		ms_spmm_vec.push_back(ms_spmm);
+		gflops_spmm_vec.push_back(gflops_spmm);
+		std::cout << i << ": " << cv_spmm << std::endl;
 	}
-	cudaEventRecord(stop, 0);
-	cudaEventSynchronize(stop);
-	cudaEventElapsedTime(&time, start, stop);
-	cudaEventDestroy(start);
-	cudaEventDestroy(stop);
 
-	const f64 custom_time = time / bench_rounds;  // ms
-	const f64 custom_flops = (2.0 * ctx_spmm.h_csr.nnz * cols_res * 1e-9) / (custom_time * 1e-3);
+	u32 curr_iter = min_iter;
+	while (cv_spmm > 0.01 && curr_iter < max_iter) {
+		++curr_iter;
+		ms_spmm = time_kernel([&]() {
+			CHECK_SPMM(spmm(spmm_handle, ctx_spmm.d_csr, ctx_spmm.d_dn, ctx_spmm.d_res, kernel_t, SPMM_KERNEL_NO_INVERT));
+		});
+		gflops_spmm = calc_sparse_gflops(ms_spmm * 1e-3, ctx_spmm.h_csr.nnz, cols_res);
+		cv_spmm = calc_cv(gflops_spmm, mean_spmm, variance_spmm, curr_iter + 1);
+		ms_spmm_vec.push_back(ms_spmm);
+		gflops_spmm_vec.push_back(gflops_spmm);
+		std::cout << curr_iter << ": " << cv_spmm << std::endl;
+	}
 
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
-	cudaEventRecord(start, 0);
-	for (u32 i = 0; i < bench_rounds; ++i) {
+	assert(ms_spmm_vec.size() == curr_iter);
+	assert(gflops_spmm_vec.size() == curr_iter);
+	std::cout << "curr_iter: " << curr_iter << std::endl;
+
+	warmup([&]() {
 		CHECK_CUSPARSE(cusparseSpMM(cusparse_handle,
 			CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE, &ctx_cusparse.alpha, ctx_cusparse.d_csr, ctx_cusparse.d_dn, &ctx_cusparse.beta, ctx_cusparse.d_res, CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, ctx_cusparse.buffer));
-	}
-	cudaEventRecord(stop, 0);
-	cudaEventSynchronize(stop);
-	cudaEventElapsedTime(&time, start, stop);
-	cudaEventDestroy(start);
-	cudaEventDestroy(stop);
+	});
+	f32 ms_cusparse = time_kernel([&]() {
+		CHECK_CUSPARSE(cusparseSpMM(cusparse_handle,
+			CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE, &ctx_cusparse.alpha, ctx_cusparse.d_csr, ctx_cusparse.d_dn, &ctx_cusparse.beta, ctx_cusparse.d_res, CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, ctx_cusparse.buffer));
+	});
 
-	const f64 cusparse_time = time / bench_rounds;
-	const f64 cusparse_flops = (2.0 * ctx_spmm.h_csr.nnz * cols_res * 1e-9) / (cusparse_time * 1e-3);
+	const f64 gflops_cusparse = calc_sparse_gflops(ms_cusparse * 1e-3, ctx_spmm.h_csr.nnz, cols_res);
 
-	// std::cout << "Avg. time: " << custom_time << " | " << cusparse_time << " ms\nFlops: " << custom_flops << " | " << cusparse_flops << " GFLOPs/s\n";
+	const f32 mean_ms_spmm = mean_f32(ms_spmm_vec);
+	const f64 mean_gflops_spmm = mean_f64(gflops_spmm_vec);
+	std::cout << "Avg. time: " << mean_ms_spmm << " | " << ms_cusparse << " ms\nFlops: " << mean_gflops_spmm << " | " << gflops_cusparse << " GFLOPs/s\n";
 	// std::cout << std::format(
 	// 	"Avg. time: {:.6f} | {:.6f} s\n"
 	// 	"Flops: {:.6f} | {:.6f} GFLOPs/s\n",
@@ -207,8 +267,8 @@ static Benchmark bench_spmm_cusparse(const std::filesystem::path& sp_path, const
 		.rows = rows_res,
 		.cols = cols_res,
 		.nnz = ctx_spmm.h_csr.nnz,
-		.time = { custom_time, cusparse_time },
-		.flops = { custom_flops, cusparse_flops }
+		.time = { ms_spmm, ms_cusparse },
+		.flops = { gflops_spmm, gflops_cusparse }
 	};
 }
 
@@ -246,43 +306,21 @@ static void bench_ispmm_cusparse(const std::filesystem::path& sp_path, const Spm
 		comparef(ctx_ispmm.h_res[i], ctx_icusparse.h_res[i]);
 	}
 
-	f32         time;
-	cudaEvent_t start, stop;
-	cudaDeviceSynchronize();
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
-	cudaEventRecord(start, 0);
-	for (u32 i = 0; i < bench_rounds; ++i) {
+	f32 ms_spmm = time_kernel([&] {
 		CHECK_SPMM(spmm(spmm_handle, ctx_ispmm.d_csc, ctx_ispmm.d_dn, ctx_ispmm.d_res, kernel_t, SPMM_KERNEL_INVERT));
-	}
-	cudaEventRecord(stop, 0);
-	cudaEventSynchronize(stop);
-	cudaEventElapsedTime(&time, start, stop);
-	cudaEventDestroy(start);
-	cudaEventDestroy(stop);
+	});
 
-	const f64 custom_time = time / bench_rounds;  // ms
-	const f64 custom_flops = (2.0 * ctx_ispmm.h_csc.nnz * cols_res * 1e-9) / (custom_time * 1e-3);
-
-	cudaEventCreate(&start);
-	cudaEventCreate(&stop);
-	cudaEventRecord(start, 0);
-	for (u32 i = 0; i < bench_rounds; ++i) {
+	f32 ms_cusparse = time_kernel([&] {
 		CHECK_CUSPARSE(cusparseSpMM(cusparse_handle,
 			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
 			&ctx_icusparse.alpha, ctx_icusparse.d_csr, ctx_icusparse.d_dn, &ctx_icusparse.beta, ctx_icusparse.d_res,
 			CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, ctx_icusparse.buffer));
-	}
-	cudaEventRecord(stop, 0);
-	cudaEventSynchronize(stop);
-	cudaEventElapsedTime(&time, start, stop);
-	cudaEventDestroy(start);
-	cudaEventDestroy(stop);
+	});
 
-	const f64 cusparse_time = time / bench_rounds;
-	const f64 cusparse_flops = (2.0 * ctx_ispmm.h_csc.nnz * cols_res * 1e-9) / (cusparse_time * 1e-3);
+	const f64 gflops_spmm = calc_sparse_gflops(ms_spmm * 1e-3, ctx_ispmm.h_csc.nnz, rows_res);
+	const f64 gflops_cusparse = calc_sparse_gflops(ms_cusparse * 1e-3, ctx_ispmm.h_csc.nnz, rows_res);
 
-	std::cout << "Avg. time: " << custom_time << " | " << cusparse_time << " ms\nFlops: " << custom_flops << " | " << cusparse_flops << " GFLOPs/s\n";
+	// std::cout << "Avg. time: " << custom_time << " | " << cusparse_time << " ms\nFlops: " << custom_flops << " | " << cusparse_flops << " GFLOPs/s\n";
 	// std::cout << std::format(
 	// 	"Avg. time: {:.6f} | {:.6f} s\n"
 	// 	"Flops: {:.6f} | {:.6f} GFLOPs/s\n",
@@ -406,9 +444,9 @@ int main(void)
 	// 		bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_NO_INVERT);
 	// 	}
 	// }
-	// bench_spmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
+	const auto bench = bench_spmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
 	// bench_ispmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
-	const std::filesystem::recursive_directory_iterator rdir_it("run/data/dlmc/transformer/");
-	pretty_print(rdir_it, "rtx_spmm_nnzwise_coalesced.csv");
+	// const std::filesystem::recursive_directory_iterator rdir_it("run/data/dlmc/transformer/");
+	// pretty_print(rdir_it, "rtx_spmm_nnzwise_coalesced.csv");
 	return 0;
 }

@@ -2,6 +2,34 @@
 
 #include <fstream>
 
+static inline f64 _calc_mean_iter(const f64 mu, const f64 a, const u32 n)
+{
+	return mu + ((a - mu) / n);  // https://en.wikipedia.org/wiki/Standard_deviation#Rapid_calculation_methods
+}
+
+static inline f64 _calc_variance_iter(const f64 q, const f64 a, const f64 mu, const u32 n)
+{
+	return q + (a - mu) * (a - _calc_mean_iter(mu, a, n));  // https://en.wikipedia.org/wiki/Standard_deviation#Rapid_calculation_methods
+}
+
+static inline f64 _calc_stdev_sample(const f64 q, const f64 a, const f64 mu, const u32 n)
+{
+	return std::sqrt(_calc_variance_iter(q, a, mu, n) / (n - 1));  // https://en.wikipedia.org/wiki/Standard_deviation#Rapid_calculation_methods
+}
+
+[[maybe_unused]] static inline f64 _calc_stdev_pop(const f64 q, const f64 a, const f64 mu, const u32 n)
+{
+	return std::sqrt(_calc_variance_iter(q, a, mu, n) / n);
+}
+
+f64 calc_cv(const f64 flops, f64& mu, f64& q, const u32 n)
+{
+	f64 stdev = _calc_stdev_sample(q, flops, mu, n);
+	q = _calc_variance_iter(q, flops, mu, n);
+	mu = _calc_mean_iter(mu, flops, n);
+	return stdev / mu;
+}
+
 Dense parse_dn_test_case(const std::filesystem::path& path)
 {
 	Dense       rm;
