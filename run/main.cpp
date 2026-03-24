@@ -199,9 +199,9 @@ static Benchmark bench_spmm_cusparse(const std::filesystem::path& sp_path, const
 	constexpr const u32 min_iter = 5;
 	constexpr const u32 max_iter = 20;
 
-	u32 curr_iter = 0;
+	u32 curr_iter = 0;  // INFO: Needed only for debugging
 	for (u32 i = 0; i < max_iter; ++i) {
-		static f64 cv_spmm = 10;
+		static f64 cv_spmm = 10.0;
 		if (i >= min_iter && cv_spmm < 0.01) {
 			break;
 		}
@@ -213,7 +213,7 @@ static Benchmark bench_spmm_cusparse(const std::filesystem::path& sp_path, const
 		static f64 mean_spmm = 0.0;
 		static f64 variance_spmm = 0.0;
 
-		f64 gflops_spmm = calc_sparse_gflops(ms_spmm * 1e-3, ctx_spmm.h_csr.nnz, cols_res);
+		const f64 gflops_spmm = calc_sparse_gflops(ms_spmm * 1e-3, ctx_spmm.h_csr.nnz, cols_res);
 		gflops_spmm_vec.push_back(gflops_spmm);
 		cv_spmm = calc_cv(gflops_spmm, mean_spmm, variance_spmm, i + 1);
 
@@ -235,7 +235,7 @@ static Benchmark bench_spmm_cusparse(const std::filesystem::path& sp_path, const
 	std::vector<f64> gflops_cusparse_vec;
 	curr_iter = 0;
 	for (u32 i = 0; i < max_iter; ++i) {
-		static f64 cv_cusparse = 10;
+		static f64 cv_cusparse = 10.0;
 		if (i >= min_iter && cv_cusparse < 0.01) {
 			break;
 		}
@@ -248,7 +248,7 @@ static Benchmark bench_spmm_cusparse(const std::filesystem::path& sp_path, const
 		static f64 mean_cusparse = 0.0;
 		static f64 variance_cusparse = 0.0;
 
-		f64 gflops_cusparse = calc_sparse_gflops(ms_cusparse * 1e-3, ctx_spmm.h_csr.nnz, cols_res);
+		const f64 gflops_cusparse = calc_sparse_gflops(ms_cusparse * 1e-3, ctx_spmm.h_csr.nnz, cols_res);
 		gflops_cusparse_vec.push_back(gflops_cusparse);
 
 		cv_cusparse = calc_cv(gflops_cusparse, mean_cusparse, variance_cusparse, i + 1);
@@ -282,7 +282,7 @@ static Benchmark bench_spmm_cusparse(const std::filesystem::path& sp_path, const
 	};
 }
 
-static void bench_ispmm_cusparse(const std::filesystem::path& sp_path, const SpmmKernelType_t kernel_t)
+static Benchmark bench_ispmm_cusparse(const std::filesystem::path& sp_path, const SpmmKernelType_t kernel_t)
 {
 	ExecutionContext_t spmm_handle = NULL;
 	CHECK_SPMM(exec_ctx_create(&spmm_handle));
@@ -316,26 +316,83 @@ static void bench_ispmm_cusparse(const std::filesystem::path& sp_path, const Spm
 		comparef(ctx_ispmm.h_res[i], ctx_icusparse.h_res[i]);
 	}
 
-	f32 ms_spmm = time_kernel([&] {
+	warmup([&]() {
 		CHECK_SPMM(spmm(spmm_handle, ctx_ispmm.d_csc, ctx_ispmm.d_dn, ctx_ispmm.d_res, kernel_t, SPMM_KERNEL_INVERT));
 	});
 
-	f32 ms_cusparse = time_kernel([&] {
+	std::vector<f32> ms_spmm_vec;
+	std::vector<f64> gflops_spmm_vec;
+
+	constexpr const u32 min_iter = 5;
+	constexpr const u32 max_iter = 20;
+
+	u32 curr_iter = 0;  // INFO: Needed only for debugging
+	for (u32 i = 0; i < max_iter; ++i) {
+		static f64 cv_spmm = 10.0;
+		if (i >= min_iter && cv_spmm < 0.01) {
+			break;
+		}
+		f32 ms_spmm = time_kernel([&] {
+			CHECK_SPMM(spmm(spmm_handle, ctx_ispmm.d_csc, ctx_ispmm.d_dn, ctx_ispmm.d_res, kernel_t, SPMM_KERNEL_INVERT));
+		});
+		ms_spmm_vec.push_back(ms_spmm);
+
+		static f64 mean_spmm = 0.0;
+		static f64 variance_spmm = 0.0;
+
+		const f64 gflops_spmm = calc_sparse_gflops(ms_spmm * 1e-3, ctx_ispmm.h_csc.nnz, rows_res);
+		gflops_spmm_vec.push_back(gflops_spmm);
+		cv_spmm = calc_cv(gflops_spmm, mean_spmm, variance_spmm, i + 1);
+
+		++curr_iter;
+	}
+
+	assert(ms_spmm_vec.size() == curr_iter + 1);
+	assert(gflops_spmm_vec.size() == curr_iter + 1);
+
+	const f32 mean_ms_spmm = meanf32(ms_spmm_vec);
+	const f64 mean_gflops_spmm = meanf64(gflops_spmm_vec);
+
+	warmup([&]() {
 		CHECK_CUSPARSE(cusparseSpMM(cusparse_handle,
 			CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
 			&ctx_icusparse.alpha, ctx_icusparse.d_csr, ctx_icusparse.d_dn, &ctx_icusparse.beta, ctx_icusparse.d_res,
 			CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, ctx_icusparse.buffer));
 	});
 
-	const f64 gflops_spmm = calc_sparse_gflops(ms_spmm * 1e-3, ctx_ispmm.h_csc.nnz, rows_res);
-	const f64 gflops_cusparse = calc_sparse_gflops(ms_cusparse * 1e-3, ctx_ispmm.h_csc.nnz, rows_res);
+	std::vector<f32> ms_cusparse_vec;
+	std::vector<f64> gflops_cusparse_vec;
+	curr_iter = 0;
+	for (u32 i = 0; i < max_iter; ++i) {
+		static f64 cv_cusparse = 10.0;
+		if (i >= min_iter && cv_cusparse < 0.01) {
+			break;
+		}
+		f32 ms_cusparse = time_kernel([&] {
+			CHECK_CUSPARSE(cusparseSpMM(cusparse_handle,
+				CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
+				&ctx_icusparse.alpha, ctx_icusparse.d_csr, ctx_icusparse.d_dn, &ctx_icusparse.beta, ctx_icusparse.d_res,
+				CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, ctx_icusparse.buffer));
+		});
+		ms_cusparse_vec.push_back(ms_cusparse);
 
-	// std::cout << "Avg. time: " << custom_time << " | " << cusparse_time << " ms\nFlops: " << custom_flops << " | " << cusparse_flops << " GFLOPs/s\n";
-	// std::cout << std::format(
-	// 	"Avg. time: {:.6f} | {:.6f} s\n"
-	// 	"Flops: {:.6f} | {:.6f} GFLOPs/s\n",
-	// 	custom_time, cusparse_time, custom_flops, cusparse_flops);
+		static f64 mean_cusparse = 0.0;
+		static f64 variance_cusparse = 0.0;
+		const f64  gflops_cusparse = calc_sparse_gflops(ms_cusparse * 1e-3, ctx_ispmm.h_csc.nnz, rows_res);
+		gflops_cusparse_vec.push_back(gflops_cusparse);
 
+		cv_cusparse = calc_cv(gflops_cusparse, mean_cusparse, variance_cusparse, i + 1);
+
+		++curr_iter;
+	}
+
+	assert(ms_cusparse_vec.size() == curr_iter + 1);
+	assert(gflops_cusparse_vec.size() == curr_iter + 1);
+
+	const f32 mean_ms_cusparse = meanf32(ms_cusparse_vec);
+	const f64 mean_gflops_cusparse = meanf64(gflops_cusparse_vec);
+
+	std::cout << "Avg. time: " << mean_ms_spmm << " | " << mean_ms_cusparse << " ms\nFlops: " << mean_gflops_spmm << " | " << mean_gflops_cusparse << " GFLOPs/s\n";
 	CHECK_SPMM(exec_ctx_destroy(spmm_handle));
 
 	cudaFree(ctx_icusparse.buffer);
@@ -343,6 +400,14 @@ static void bench_ispmm_cusparse(const std::filesystem::path& sp_path, const Spm
 	CHECK_CUSPARSE(cusparseDestroyDnMat(ctx_icusparse.d_dn));
 	CHECK_CUSPARSE(cusparseDestroyDnMat(ctx_icusparse.d_res));
 	CHECK_CUSPARSE(cusparseDestroy(cusparse_handle));
+
+	return {
+		.rows = rows_res,
+		.cols = cols_res,
+		.nnz = ctx_ispmm.h_csc.nnz,
+		.time = { mean_ms_spmm, mean_ms_cusparse },
+		.flops = { mean_gflops_spmm, mean_gflops_cusparse }
+	};
 }
 
 static inline bool is_valid_smtx(const std::filesystem::path& path)
@@ -455,7 +520,7 @@ int main(void)
 	// 	}
 	// }
 	const auto bench = bench_spmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
-	// bench_ispmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
+	const auto ibench = bench_ispmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
 	// const std::filesystem::recursive_directory_iterator rdir_it("run/data/dlmc/transformer/");
 	// pretty_print(rdir_it, "rtx_spmm_nnzwise_coalesced.csv");
 	return 0;
