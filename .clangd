@@ -1,5 +1,6 @@
 CompileFlags:
   Remove:
+    - "-arch=*"
     - "-gencode*"
     - "--threads*"
     - "-G"

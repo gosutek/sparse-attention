@@ -1,5 +1,3 @@
-#include <cstdio>
-
 #include "allocator.h"
 #include "cu_helpers.cuh"
 #include "kernels/spmm.cuh"
@@ -83,25 +81,18 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t sp, DnMatDescr_t dn, DnMatDescr_t r
 	switch (kernel_type) {
 	case SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK:
 		{
-			constexpr u32 BM = 8;
-			constexpr u32 BK = BM;
+			constexpr const u32 TILE_SIZE = 8;
 
 			if (invert == SPMM_KERNEL_NO_INVERT) {
-				const u32 res_rows = sp->rows;
-				const u32 res_cols = dn->cols;
-
-				static_assert(BM <= 32);  // otherwise threads per block exceed max
-				dim3 grid(CEIL_DIVI(res_cols, BK), CEIL_DIVI(res_rows, BM));
-				dim3 block(BK, BM);
+				static_assert(TILE_SIZE <= 32);  // otherwise threads per block exceed max
+				const dim3 grid(CEIL_DIVI(dn->cols, TILE_SIZE), CEIL_DIVI(sp->rows, TILE_SIZE));
+				const dim3 block(TILE_SIZE, TILE_SIZE);
 
 				_k_spmm_naive_elemwise_gmem<<<grid, block>>>(sp->csr.row_ptr, sp->csr.col_idx, sp->val, dn->val, sp->rows, sp->cols, dn->cols, res->val);
 			} else {
-				const u32 res_rows = dn->rows;
-				const u32 res_cols = sp->cols;
-
-				static_assert(BM <= 32);
-				dim3 grid(CEIL_DIVI(res_cols, BK), CEIL_DIVI(res_rows, BM));
-				dim3 block(BK, BM);
+				static_assert(TILE_SIZE <= 32);
+				dim3 grid(CEIL_DIVI(sp->cols, TILE_SIZE), CEIL_DIVI(dn->rows, TILE_SIZE));
+				dim3 block(TILE_SIZE, TILE_SIZE);
 				_k_ispmm_naive_elemwise_gmem<<<grid, block>>>(dn->val, sp->csc.col_ptr, sp->csc.row_idx, sp->val, dn->rows, dn->cols, sp->cols, res->val);
 			}
 

@@ -1,6 +1,7 @@
 #include <cassert>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sys/ioctl.h>
 #include <unistd.h>
@@ -45,37 +46,29 @@ static inline f64 calc_sparse_gflops(const f32 secs, const u32 nnz, const u32 n)
 	return (2.0 * nnz * n * 1e-9) / secs;
 }
 
-//
-// void print_device_properties()
-// {
-// 	cudaDeviceProp dev_prop = {};
-// 	CHECK_CUDA(cudaGetDeviceProperties(&dev_prop, 0));
-//
-// 	std::cout << std::format(
-// 		"- {:30}: {}\n"
-// 		"- {:30}: {}.{}\n"
-// 		"- {:30}: {}\n"
-// 		"- {:30}: {}\n"
-// 		"- {:30}: {}\n"
-// 		"- {:30}: {}\n"
-// 		"- {:30}: {}\n"
-// 		"- {:30}: {} MB\n"
-// 		"- {:30}: {} KB\n"
-// 		"- {:30}: {} B\n"
-// 		"- {:30}: {}\n",
-// 		"Name", dev_prop.name,
-// 		"Compute Capability", dev_prop.major, dev_prop.minor,
-// 		"Max threads per block", dev_prop.maxThreadsPerBlock,
-// 		"Max threads per SM", dev_prop.maxThreadsPerMultiProcessor,
-// 		"Threads per warp", dev_prop.warpSize,
-// 		"Max regs per block", dev_prop.regsPerBlock,
-// 		"Max regs per SM", dev_prop.regsPerMultiprocessor,
-// 		"Total Global Memory", static_cast<u32>(dev_prop.totalGlobalMem / 1e6),
-// 		"Max shared memory per block", static_cast<u32>(dev_prop.sharedMemPerBlock / 1e3),
-// 		"Max shared memory per SM", dev_prop.sharedMemPerMultiprocessor,
-// 		"SM count", dev_prop.multiProcessorCount);
-// }
-//
+void print_device_properties()
+{
+	cudaDeviceProp dev_prop = {};
+	CHECK_CUDA(cudaGetDeviceProperties(&dev_prop, 0));
+
+	std::cout
+		<< "- " << std::left << std::setw(30) << "Name" << ": " << dev_prop.name << "\n"
+		<< "- " << std::left << std::setw(30) << "SM count" << ": " << dev_prop.multiProcessorCount << "\n"
+		<< "- " << std::left << std::setw(30) << "Total Global Memory" << ": " << static_cast<u32>(dev_prop.totalGlobalMem / 1e6) << " MB\n"
+		<< "- " << std::left << std::setw(30) << "L2 Cache Size" << ": " << static_cast<u32>(dev_prop.l2CacheSize / 1e6) << " MB\n"
+		<< "- " << std::left << std::setw(30) << "Compute Capability" << ": " << dev_prop.major << "." << dev_prop.minor << "\n"
+		<< "- " << std::left << std::setw(30) << "Shared memory per block" << ": " << static_cast<u32>(dev_prop.sharedMemPerBlock / 1e3) << " KB\n"
+		<< "- " << std::left << std::setw(30) << "Shared memory per SM" << ": " << static_cast<u32>(dev_prop.sharedMemPerMultiprocessor / 1e3) << " KB\n"
+		<< "- " << std::left << std::setw(30) << "Constant memory" << ": " << static_cast<u32>(dev_prop.totalConstMem / 1e3) << " KB\n"
+		<< "- " << std::left << std::setw(30) << "Warp size" << ": " << dev_prop.warpSize << "\n"
+		<< "- " << std::left << std::setw(30) << "Max threads per SM" << ": " << dev_prop.maxThreadsPerMultiProcessor << "\n"
+		<< "- " << std::left << std::setw(30) << "Max threads per block" << ": " << dev_prop.maxThreadsPerBlock << "\n"
+		<< "- " << std::left << std::setw(30) << "Max block dimensions" << ": " << dev_prop.maxThreadsDim[0] << " x " << dev_prop.maxThreadsDim[1] << " x " << dev_prop.maxThreadsDim[2] << "\n"
+		<< "- " << std::left << std::setw(30) << "Max grid dimensions" << ": " << dev_prop.maxGridSize[0] << " x " << dev_prop.maxGridSize[1] << " x " << dev_prop.maxGridSize[2] << "\n"
+		<< "- " << std::left << std::setw(30) << "Max regs per block" << ": " << dev_prop.regsPerBlock << "\n"
+		<< "- " << std::left << std::setw(30) << "Max regs per SM" << ": " << dev_prop.regsPerMultiprocessor << "\n";
+}
+
 // void print_benchmarks(const std::string op_name, const std::string contender_1, const std::string contender_2,
 // 	const std::string prunning_method, const std::string sparsity,
 // 	const Benchmark cusparse, const Benchmark custom)
@@ -220,8 +213,8 @@ static Benchmark bench_spmm_cusparse(const std::filesystem::path& sp_path, const
 		++curr_iter;
 	}
 
-	assert(ms_spmm_vec.size() == curr_iter + 1);
-	assert(gflops_spmm_vec.size() == curr_iter + 1);
+	assert(ms_spmm_vec.size() == curr_iter);
+	assert(gflops_spmm_vec.size() == curr_iter);
 
 	const f32 mean_ms_spmm = meanf32(ms_spmm_vec);
 	const f64 mean_gflops_spmm = meanf64(gflops_spmm_vec);
@@ -256,14 +249,11 @@ static Benchmark bench_spmm_cusparse(const std::filesystem::path& sp_path, const
 		++curr_iter;
 	}
 
-	assert(ms_cusparse_vec.size() == curr_iter + 1);
-	assert(gflops_cusparse_vec.size() == curr_iter + 1);
+	assert(ms_cusparse_vec.size() == curr_iter);
+	assert(gflops_cusparse_vec.size() == curr_iter);
 
 	const f32 mean_ms_cusparse = meanf32(ms_cusparse_vec);
 	const f64 mean_gflops_cusparse = meanf64(gflops_cusparse_vec);
-
-	std::cout << "Avg. time: " << mean_ms_spmm << " | " << mean_ms_cusparse
-			  << " ms\nFlops: " << mean_gflops_spmm << " | " << mean_gflops_cusparse << " GFLOPs/s\n";
 
 	CHECK_SPMM(exec_ctx_destroy(spmm_handle));
 
@@ -392,7 +382,6 @@ static Benchmark bench_ispmm_cusparse(const std::filesystem::path& sp_path, cons
 	const f32 mean_ms_cusparse = meanf32(ms_cusparse_vec);
 	const f64 mean_gflops_cusparse = meanf64(gflops_cusparse_vec);
 
-	std::cout << "Avg. time: " << mean_ms_spmm << " | " << mean_ms_cusparse << " ms\nFlops: " << mean_gflops_spmm << " | " << mean_gflops_cusparse << " GFLOPs/s\n";
 	CHECK_SPMM(exec_ctx_destroy(spmm_handle));
 
 	cudaFree(ctx_icusparse.buffer);
@@ -498,7 +487,7 @@ void pretty_print(const std::filesystem::recursive_directory_iterator& rdir_it, 
 		const std::string            prunning_method = p.parent_path().parent_path().stem().string();
 		f32                          progress = static_cast<f32>(i) / total;
 		spmm_log("Spmm-ing: " + p.stem().string(), progress);
-		Benchmark benchmark = bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_NNZWISE_COALESCED);
+		Benchmark benchmark = bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
 		file << benchmark.rows << "," << benchmark.cols << "," << benchmark.nnz << "," << prunning_method << ","
 			 << benchmark.time[0] << "," << benchmark.time[1] << "," << benchmark.flops[0] << "," << benchmark.flops[1] << "\n";
 
@@ -519,9 +508,12 @@ int main(void)
 	// 		bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_NO_INVERT);
 	// 	}
 	// }
-	const auto bench = bench_spmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
-	const auto ibench = bench_ispmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
-	// const std::filesystem::recursive_directory_iterator rdir_it("run/data/dlmc/transformer/");
-	// pretty_print(rdir_it, "rtx_spmm_nnzwise_coalesced.csv");
+	// const auto bench = bench_spmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
+	// std::cout << std::left << std::setw(15) << "[SPMM]: " << bench.time[0] << " ms | " << bench.flops[0] << " GFLOPs\n"
+	// 		  << std::left << std::setw(15) << "[CUSPARSE]: " << bench.time[1] << " ms | " << bench.flops[1] << " GFLOPS\n";
+	// const auto ibench = bench_ispmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
+	const std::filesystem::recursive_directory_iterator rdir_it("run/data/dlmc/transformer/");
+	pretty_print(rdir_it, "rtx_spmm_elemwise_naive_block.csv");
+	// print_device_properties();
 	return 0;
 }
