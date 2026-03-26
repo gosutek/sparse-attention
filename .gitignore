@@ -4,6 +4,7 @@ build/
 *.so
 *.log
 *.csv
+*.ncu-rep
 
 compile_commands.json
 CMakeCache.txt
