@@ -15,8 +15,7 @@
 
 struct Benchmark
 {
-	u32 rows;
-	u32 cols;
+	u32 m, k, n;
 	u32 nnz;
 	f64 time[2];
 	f64 flops[2];
@@ -264,8 +263,9 @@ static Benchmark bench_spmm_cusparse(const std::filesystem::path& sp_path, const
 	CHECK_CUSPARSE(cusparseDestroy(cusparse_handle));
 
 	return {
-		.rows = rows_res,
-		.cols = cols_res,
+		.m = ctx_spmm.h_csr.rows,
+		.k = ctx_spmm.h_csr.cols,
+		.n = cols_res,
 		.nnz = ctx_spmm.h_csr.nnz,
 		.time = { mean_ms_spmm, mean_ms_cusparse },
 		.flops = { mean_gflops_spmm, mean_gflops_cusparse }
@@ -337,8 +337,8 @@ static Benchmark bench_ispmm_cusparse(const std::filesystem::path& sp_path, cons
 		++curr_iter;
 	}
 
-	assert(ms_spmm_vec.size() == curr_iter + 1);
-	assert(gflops_spmm_vec.size() == curr_iter + 1);
+	assert(ms_spmm_vec.size() == curr_iter);
+	assert(gflops_spmm_vec.size() == curr_iter);
 
 	const f32 mean_ms_spmm = meanf32(ms_spmm_vec);
 	const f64 mean_gflops_spmm = meanf64(gflops_spmm_vec);
@@ -376,8 +376,8 @@ static Benchmark bench_ispmm_cusparse(const std::filesystem::path& sp_path, cons
 		++curr_iter;
 	}
 
-	assert(ms_cusparse_vec.size() == curr_iter + 1);
-	assert(gflops_cusparse_vec.size() == curr_iter + 1);
+	assert(ms_cusparse_vec.size() == curr_iter);
+	assert(gflops_cusparse_vec.size() == curr_iter);
 
 	const f32 mean_ms_cusparse = meanf32(ms_cusparse_vec);
 	const f64 mean_gflops_cusparse = meanf64(gflops_cusparse_vec);
@@ -391,8 +391,9 @@ static Benchmark bench_ispmm_cusparse(const std::filesystem::path& sp_path, cons
 	CHECK_CUSPARSE(cusparseDestroy(cusparse_handle));
 
 	return {
-		.rows = rows_res,
-		.cols = cols_res,
+		.m = rows_res,
+		.k = ctx_ispmm.h_csc.rows,
+		.n = ctx_ispmm.h_csc.cols,
 		.nnz = ctx_ispmm.h_csc.nnz,
 		.time = { mean_ms_spmm, mean_ms_cusparse },
 		.flops = { mean_gflops_spmm, mean_gflops_cusparse }
@@ -420,7 +421,7 @@ static inline i32 get_terminal_height()
 
 static void draw_bar(f32 progress, i32 width)
 {
-	i32 bar_width = width - 200;
+	i32 bar_width = width * 0.5;
 	i32 filled = static_cast<i32>(bar_width * progress);
 	i32 grey = bar_width - filled;
 	i32 percent = static_cast<i32>(progress * 100);
@@ -463,15 +464,10 @@ static void redraw_bar(float progress)
 	std::cout.flush();
 }
 
-static inline void push_to_csv(std::ofstream& csv_ifstream, const f64 a, const f64 b, const f64 c, const f64 d)
-{
-	csv_ifstream << a << "," << b << "," << c << "," << d << "\n";
-}
-
-void pretty_print(const std::filesystem::recursive_directory_iterator& rdir_it, const char* csv_filename)
+void pretty_print(const std::filesystem::path& dir, const char* csv_filename)
 {
 	std::vector<std::filesystem::path> dataset;
-	for (const std::filesystem::path& p : rdir_it) {
+	for (const std::filesystem::path& p : std::filesystem::recursive_directory_iterator(dir)) {
 		if (is_valid_smtx(p)) {
 			dataset.emplace_back(p);
 		}
@@ -479,16 +475,18 @@ void pretty_print(const std::filesystem::recursive_directory_iterator& rdir_it, 
 
 	const std::filesystem::path csv_out = std::filesystem::current_path() / csv_filename;
 	std::ofstream               file(csv_out, std::ios_base::out);
-	file << "rows,cols,nnz,prunning_method,custom_time,cusparse_time,custom_flops,cusparse_flops\n";
+	file << "m,k,n,nnz,sparsity,prunning_method,custom_time,cusparse_time,custom_flops,cusparse_flops\n";
 
 	const f32 total = static_cast<f32>(dataset.size());
 	for (u32 i = 0; i < total; ++i) {
 		const std::filesystem::path& p = dataset[i];
 		const std::string            prunning_method = p.parent_path().parent_path().stem().string();
+		const std::string            sparsity = p.parent_path().stem().string() + p.parent_path().extension().string();
 		f32                          progress = static_cast<f32>(i) / total;
 		spmm_log("Spmm-ing: " + p.stem().string(), progress);
-		Benchmark benchmark = bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
-		file << benchmark.rows << "," << benchmark.cols << "," << benchmark.nnz << "," << prunning_method << ","
+		Benchmark benchmark = bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM);
+		// Benchmark benchmark = bench_ispmm_cusparse(p, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
+		file << benchmark.m << "," << benchmark.k << "," << benchmark.n << "," << benchmark.nnz << "," << sparsity << "," << prunning_method << ","
 			 << benchmark.time[0] << "," << benchmark.time[1] << "," << benchmark.flops[0] << "," << benchmark.flops[1] << "\n";
 
 		redraw_bar(progress);
@@ -501,19 +499,16 @@ void pretty_print(const std::filesystem::recursive_directory_iterator& rdir_it, 
 
 int main(void)
 {
-	// const std::filesystem::directory_iterator dir_it("run/data/dlmc/transformer/l0_regularization/0.5/");
-	// for (const std::filesystem::path& p : dir_it) {
-	// 	if (!p.stem().string().ends_with("aux")) {
-	// 		std::cout << "Benchmarking: " << p.stem().string() << std::endl;
-	// 		bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK, SPMM_KERNEL_NO_INVERT);
-	// 	}
-	// }
-	// const auto bench = bench_spmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
+	// const auto bench = bench_spmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_encoder_layer_2_self_attention_multihead_attention_v.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
 	// std::cout << std::left << std::setw(15) << "[SPMM]: " << bench.time[0] << " ms | " << bench.flops[0] << " GFLOPs\n"
 	// 		  << std::left << std::setw(15) << "[CUSPARSE]: " << bench.time[1] << " ms | " << bench.flops[1] << " GFLOPS\n";
-	// const auto ibench = bench_ispmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_decoder_layer_0_self_attention_multihead_attention_q.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
-	const std::filesystem::recursive_directory_iterator rdir_it("run/data/dlmc/transformer/");
-	pretty_print(rdir_it, "rtx_spmm_elemwise_naive_block.csv");
+
+	const auto ibench = bench_spmm_cusparse("run/data/dlmc/transformer/random_pruning/0.5/body_encoder_layer_0_ffn_conv2_fully_connected.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM);
+	// const auto ibench = bench_spmm_cusparse("run/data/dlmc/transformer/random_pruning/0.5/body_encoder_layer_0_self_attention_multihead_attention_q_fully_connected.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM);
+
+	// const std::filesystem::path base_dir("run/data/dlmc/transformer/");
+	// pretty_print(base_dir, "rtx_spmm_elemwise_naive_smem.csv");
+
 	// print_device_properties();
 	return 0;
 }

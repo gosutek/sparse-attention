@@ -138,20 +138,20 @@ CusparseContext setup_icusparse(const cusparseHandle_t handle, const SpMatDescr_
 	CHECK_SPMM(dn_rm_get(d_res, &rows, &cols, &val));
 	std::vector<f32>     h_res(rows * cols, 0);
 	cusparseDnMatDescr_t cusparse_res = NULL;
-	CHECK_CUSPARSE(cusparseCreateDnMat(&cusparse_res, rows, cols, cols, val, CUDA_R_32F, CUSPARSE_ORDER_COL));
+	CHECK_CUSPARSE(cusparseCreateDnMat(&cusparse_res, cols, rows, cols, val, CUDA_R_32F, CUSPARSE_ORDER_COL));
 
 	u64 buffer_size;
 	CHECK_CUSPARSE(cusparseSpMM_bufferSize(handle,
 		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
 		&alpha, cusparse_csc, cusparse_dn, &beta, cusparse_res,
-		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, &buffer_size));
+		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, &buffer_size));
 
 	void* cusparse_buffer = nullptr;
 	CHECK_CUDA(cudaMalloc(&cusparse_buffer, buffer_size));
 	CHECK_CUSPARSE(cusparseSpMM_preprocess(handle,
 		CUSPARSE_OPERATION_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE,
 		&alpha, cusparse_csc, cusparse_dn, &beta, cusparse_res,
-		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG1, cusparse_buffer));
+		CUDA_R_32F, CUSPARSE_SPMM_CSR_ALG2, cusparse_buffer));
 
 	return {
 		.d_csr = cusparse_csc,

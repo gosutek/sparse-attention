@@ -78,19 +78,24 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t sp, DnMatDescr_t dn, DnMatDescr_t r
 		return SPMM_STATUS_NOT_INITIALIZED;
 	}
 
+	cudaDeviceProp dev_props;
+	CHECK_CUDA(cudaGetDeviceProperties(&dev_props, 0));
+
 	switch (kernel_type) {
 	case SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK:
 		{
-			constexpr const u32 TILE_SIZE = 8;
+			constexpr const u32 TILE_SIZE = 8;  // best perf
+			// constexpr const u32 TILE_SIZE = 16;
+			// constexpr const u32 TILE_SIZE = 32;  // should tank
 
 			if (invert == SPMM_KERNEL_NO_INVERT) {
-				static_assert(TILE_SIZE <= 32);  // otherwise threads per block exceed max
+				// static_assert(TILE_SIZE <= 32);  // otherwise threads per block exceed max
 				const dim3 grid(CEIL_DIVI(dn->cols, TILE_SIZE), CEIL_DIVI(sp->rows, TILE_SIZE));
 				const dim3 block(TILE_SIZE, TILE_SIZE);
 
 				_k_spmm_naive_elemwise_gmem<<<grid, block>>>(sp->csr.row_ptr, sp->csr.col_idx, sp->val, dn->val, sp->rows, sp->cols, dn->cols, res->val);
 			} else {
-				static_assert(TILE_SIZE <= 32);
+				// static_assert(TILE_SIZE <= 32);
 				dim3 grid(CEIL_DIVI(sp->cols, TILE_SIZE), CEIL_DIVI(dn->rows, TILE_SIZE));
 				dim3 block(TILE_SIZE, TILE_SIZE);
 				_k_ispmm_naive_elemwise_gmem<<<grid, block>>>(dn->val, sp->csc.col_ptr, sp->csc.row_idx, sp->val, dn->rows, dn->cols, sp->cols, res->val);
@@ -103,7 +108,7 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t sp, DnMatDescr_t dn, DnMatDescr_t r
 			if (invert == SPMM_KERNEL_NO_INVERT) {
 				const dim3 grid(dn->cols);
 				const dim3 block(sp->rows);
-				const u64  smem_bsize = sp->rows * sizeof *sp->val;
+				const u64  smem_bsize = dn->rows * sizeof *sp->val;
 				_k_spmm_naive_elemwise_smem<<<grid, block, smem_bsize>>>(sp->csr.row_ptr, sp->csr.col_idx, sp->val, dn->val, sp->rows, sp->cols, sp->cols, res->val);
 			} else {
 				const dim3 grid(dn->rows);
