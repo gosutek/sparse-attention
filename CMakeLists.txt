@@ -93,16 +93,3 @@ target_compile_options(cute_main PRIVATE
   -Wpedantic
   >
 )
-
-option(MEM_DEBUG "Enable sanitizers" OFF)
-
-if (MEM_DEBUG)
-  target_compile_options(cute_main PRIVATE
-    -fsanitize=address,undefined
-    -fno-omit-frame-pointer
-    -g
-  )
-  target_link_options(cute_main PRIVATE
-    -fsanitize=address,undefined
-  )
-endif()

@@ -168,7 +168,7 @@ SpmmStatus_t spmm(ExecCtx* ctx, SpMatDescr_t sp, DnMatDescr_t dn, DnMatDescr_t r
 			}
 			break;
 		}
-	case SPMM_KERNEL_TYPE_COLUMN_TILING_NNZWISE:
+	case SPMM_KERNEL_TYPE_NNZWISE_COLUMN_TILING:
 		{
 			const dim3 block(32);
 

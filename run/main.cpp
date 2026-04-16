@@ -400,9 +400,13 @@ static Benchmark bench_ispmm_cusparse(const std::filesystem::path& sp_path, cons
 	};
 }
 
+// Filters:
+//  1. must be ".smtx"
+//  2. must not start with "symbol" -> this is the vocab
+//  3. must not contain "ffn" -> these kernels are for attention not the ffn component
 static inline bool is_valid_smtx(const std::filesystem::path& path)
 {
-	return std::filesystem::is_regular_file(path) && std::filesystem::exists(path) && path.extension().string() == ".smtx" && !path.stem().string().starts_with("symbol");
+	return std::filesystem::is_regular_file(path) && std::filesystem::exists(path) && path.extension().string() == ".smtx" && !path.stem().string().starts_with("symbol") && path.stem().string().find("ffn") == std::string::npos;
 }
 
 static inline i32 get_terminal_width()
@@ -484,8 +488,8 @@ void pretty_print(const std::filesystem::path& dir, const char* csv_filename)
 		const std::string            sparsity = p.parent_path().stem().string() + p.parent_path().extension().string();
 		f32                          progress = static_cast<f32>(i) / total;
 		spmm_log("Spmm-ing: " + p.stem().string(), progress);
-		Benchmark benchmark = bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM);
-		// Benchmark benchmark = bench_ispmm_cusparse(p, SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
+		// Benchmark benchmark = bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_NNZWISE_COLUMN_TILING);
+		Benchmark benchmark = bench_ispmm_cusparse(p, SPMM_KERNEL_TYPE_NNZWISE_COLUMN_TILING);
 		file << benchmark.m << "," << benchmark.k << "," << benchmark.n << "," << benchmark.nnz << "," << sparsity << "," << prunning_method << ","
 			 << benchmark.time[0] << "," << benchmark.time[1] << "," << benchmark.flops[0] << "," << benchmark.flops[1] << "\n";
 
@@ -499,7 +503,7 @@ void pretty_print(const std::filesystem::path& dir, const char* csv_filename)
 
 int main(void)
 {
-	print_prompt_bytes("The");
+	// print_prompt_bytes("The");
 	// const auto bench = bench_spmm_cusparse("run/data/dlmc/transformer/l0_regularization/0.5/body_encoder_layer_2_self_attention_multihead_attention_v.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_BLOCK);
 	// std::cout << std::left << std::setw(15) << "[SPMM]: " << bench.time[0] << " ms | " << bench.flops[0] << " GFLOPs\n"
 	// 		  << std::left << std::setw(15) << "[CUSPARSE]: " << bench.time[1] << " ms | " << bench.flops[1] << " GFLOPS\n";
@@ -507,8 +511,8 @@ int main(void)
 	// const auto ibench = bench_spmm_cusparse("run/data/dlmc/transformer/random_pruning/0.5/body_encoder_layer_0_ffn_conv2_fully_connected.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM);
 	// const auto ibench = bench_spmm_cusparse("run/data/dlmc/transformer/random_pruning/0.5/body_encoder_layer_0_self_attention_multihead_attention_q_fully_connected.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM);
 
-	// const std::filesystem::path base_dir("run/data/dlmc/transformer/");
-	// pretty_print(base_dir, "rtx_spmm_elemwise_naive_smem.csv");
+	const std::filesystem::path base_dir("run/data/dlmc/transformer/");
+	pretty_print(base_dir, "rtx_ispmm_nnzwise_column_tiling.csv");
 
 	// print_device_properties();
 	return 0;
