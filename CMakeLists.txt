@@ -21,6 +21,7 @@ find_package(CUDAToolkit REQUIRED)
 
 add_library(cute STATIC
   src/matrix.c
+  src/tokenizer.c
   src/allocator.c
   src/helpers.c
 
