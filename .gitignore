@@ -16,4 +16,4 @@ cute
 .cache/
 run/data/
 test_data/
-gpt-2/
+gemma-4-E4B-it/
