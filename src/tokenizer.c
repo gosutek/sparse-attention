@@ -1,11 +1,12 @@
 #include "tokenizer.h"
 #include "spmm.h"
 
-void print_prompt_bytes(const char* c)
+void normalizer(const char* str)
 {
-	while (*c != '\0') {
-		printf("%c : %u\n", *c, *((const u8*)c));
-		++c;
+	const u8* b_str = (const u8*)str;
+	while (*b_str != '\0') {
+		if (*b_str == ' ') {
+			*b_str = '_';
+		}
 	}
-	printf("Hello%cthisis\n", (char)32);
 }

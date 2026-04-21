@@ -488,8 +488,8 @@ void pretty_print(const std::filesystem::path& dir, const char* csv_filename)
 		const std::string            sparsity = p.parent_path().stem().string() + p.parent_path().extension().string();
 		f32                          progress = static_cast<f32>(i) / total;
 		spmm_log("Spmm-ing: " + p.stem().string(), progress);
-		// Benchmark benchmark = bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_NNZWISE_COLUMN_TILING);
-		Benchmark benchmark = bench_ispmm_cusparse(p, SPMM_KERNEL_TYPE_NNZWISE_COLUMN_TILING);
+		Benchmark benchmark = bench_spmm_cusparse(p, SPMM_KERNEL_TYPE_NNZWISE_COLUMN_TILING);
+		// Benchmark benchmark = bench_ispmm_cusparse(p, SPMM_KERNEL_TYPE_NNZWISE_COLUMN_TILING);
 		file << benchmark.m << "," << benchmark.k << "," << benchmark.n << "," << benchmark.nnz << "," << sparsity << "," << prunning_method << ","
 			 << benchmark.time[0] << "," << benchmark.time[1] << "," << benchmark.flops[0] << "," << benchmark.flops[1] << "\n";
 
@@ -511,8 +511,8 @@ int main(void)
 	// const auto ibench = bench_spmm_cusparse("run/data/dlmc/transformer/random_pruning/0.5/body_encoder_layer_0_ffn_conv2_fully_connected.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM);
 	// const auto ibench = bench_spmm_cusparse("run/data/dlmc/transformer/random_pruning/0.5/body_encoder_layer_0_self_attention_multihead_attention_q_fully_connected.smtx", SPMM_KERNEL_TYPE_ELEMWISE_NAIVE_SMEM);
 
-	const std::filesystem::path base_dir("run/data/dlmc/transformer/");
-	pretty_print(base_dir, "rtx_ispmm_nnzwise_column_tiling.csv");
+	// const std::filesystem::path base_dir("run/data/dlmc/transformer/");
+	// pretty_print(base_dir, "a100_spmm_nnzwise_column_tiling.csv");
 
 	// print_device_properties();
 	return 0;
